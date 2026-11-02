@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f1">
+  <meta name="description" content="Swar-Sadhika निर्माण प्रगति एवं परीक्षण पैनल">
+  <title>Swar-Sadhika | Index Panel</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div class="brand-mark" aria-hidden="true">स्व</div>
+      <div class="hero-copy">
+        <p class="eyebrow">SWAR-SADHIKA · ANDROID PROJECT</p>
+        <h1>निर्माण एवं परीक्षण पैनल</h1>
+        <p class="subhead">ऐप की वास्तविक प्रगति, मॉड्यूल और परीक्षण स्थिति</p>
+      </div>
+      <button id="refreshButton" class="refresh-button" type="button" aria-label="प्रगति ताज़ा करें">↻ <span>ताज़ा करें</span></button>
+    </header>
+
+    <section class="notice" aria-live="polite">
+      <strong>ध्यान दें:</strong> यह GitHub Pages पर दिखने वाला प्रगति डैशबोर्ड है। यह स्वयं Android ऐप या APK नहीं है। Android ऐप के अंदर अलग Native Index Panel भी बनाया जा रहा है।
+    </section>
+
+    <section class="overview-grid" aria-label="समग्र स्थिति">
+      <article class="overview-card overall-card">
+        <div class="card-topline"><span>प्रमाणित सफलता</span><span class="status-dot neutral"></span></div>
+        <div class="big-number" id="overallPercent">0%</div>
+        <div class="progress-track"><div id="overallBar" class="progress-fill" style="width:0%"></div></div>
+        <p class="muted" id="overallNote">केवल वास्तविक परीक्षण में PASS हुए मॉड्यूल गिने जाएँगे।</p>
+      </article>
+      <article class="overview-card">
+        <span class="metric-label">कुल मॉड्यूल</span>
+        <div class="metric-number" id="totalCount">17</div>
+        <p class="muted">निर्धारित सुविधाएँ</p>
+      </article>
+      <article class="overview-card">
+        <span class="metric-label">PASS</span>
+        <div class="metric-number pass-text" id="passCount">0</div>
+        <p class="muted">प्रमाणित परीक्षण</p>
+      </article>
+      <article class="overview-card">
+        <span class="metric-label">जारी / शेष</span>
+        <div class="metric-number" id="remainingCount">17</div>
+        <p class="muted">काम या परीक्षण बाकी</p>
+      </article>
+    </section>
+
+    <section class="info-grid">
+      <article class="info-card">
+        <h2>वर्तमान निर्माण</h2>
+        <p><span class="muted">Build:</span> <strong id="buildLabel">0.1.0-index-panel</strong></p>
+        <p><span class="muted">अंतिम अपडेट:</span> <span id="lastUpdated">प्रारम्भिक स्रोत</span></p>
+      </article>
+      <article class="info-card">
+        <h2>अंतिम परीक्षण</h2>
+        <p id="lastTestNote">Android SDK, Gradle और वास्तविक Android डिवाइस पर परीक्षण अभी दर्ज नहीं है।</p>
+      </article>
+    </section>
+
+    <section class="modules-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">LIVE PROJECT CHECKLIST</p>
+          <h2>मॉड्यूल की स्थिति</h2>
+        </div>
+        <label class="filter-label" for="statusFilter">स्थिति फ़िल्टर
+          <select id="statusFilter">
+            <option value="ALL">सभी मॉड्यूल</option>
+            <option value="IN_PROGRESS">कार्य जारी</option>
+            <option value="PASS">PASS</option>
+            <option value="FAIL">FAIL</option>
+            <option value="BLOCKED">BLOCKED</option>
+            <option value="NOT_STARTED">शुरू नहीं</option>
+          </select>
+        </label>
+      </div>
+      <div id="moduleList" class="module-list" aria-live="polite">
+        <p class="loading">प्रगति डेटा पढ़ा जा रहा है…</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>नियम: बिना वास्तविक प्रमाण के किसी सुविधा को PASS नहीं दिखाया जाएगा।</p>
+      <p id="dataSource">डेटा स्रोत: progress.json</p>
+    </footer>
+  </main>
+</body>
+</html>
