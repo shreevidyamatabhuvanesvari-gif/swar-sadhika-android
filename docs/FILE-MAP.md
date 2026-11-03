@@ -110,7 +110,6 @@ The following are proposed additions. They do **not** exist at the audited basel
 |---|---|---|
 | `app/features/navigation.js` | Four-Index and Sub-Module navigation controller | Four-Index UI integration |
 | `app/features/dashboard.js` | Dashboard rendering from real runtime and development status sources | Dashboard integration |
-| `app/features/learning-notes.js` | Separate local Learning Notes create/list/delete Sub-Module | Learning Notes integration |
 | `app/features/app-settings.js` | User-facing PWA, update, storage and application settings | Settings Sub-Module |
 | `app/features/learning-notes.js` | Separate local Learning Notes Sub-Module | Learning Notes Sub-Module |
 | `app/core/device-capabilities.js` | Safe detection of browser APIs and device capabilities | Runtime capability dashboard |
@@ -120,7 +119,6 @@ The following are proposed additions. They do **not** exist at the audited basel
 | `package.json` | Declares native ES module semantics and repeatable npm test/validator scripts; no runtime dependency is added | Test execution |
 | `tests/part1.test.mjs` | Combined unit/contract suite for four Indexes, DOM IDs, imports, Devanagari helpers, language modes and storage schema declaration | Part 1 automated validation |
 | `tests/service-worker.test.mjs` | Existing Service Worker behavior suite, extended for App Shell v9 | PWA validation |
-| `docs/ANDROID-ACCEPTANCE.md` | Handset-specific test procedure and evidence record template | Android acceptance |
 
 The Part 1 automated checks are intentionally consolidated in `tests/part1.test.mjs` to keep the current small repository test harness simple. Keep `tests/service-worker.test.mjs` at its existing path. The schema test verifies the migration declaration; it does not replace a real upgrade test using pre-existing IndexedDB data.
 
