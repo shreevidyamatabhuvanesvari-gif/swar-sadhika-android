@@ -118,7 +118,8 @@ test("service worker shell contains Part 1 modules and isolates cache namespace"
     "app/features/app-settings.js", "app/features/learning-notes.js",
     "app/core/device-capabilities.js"
   ]) assert.ok(sw.includes(file), "service worker shell missing " + file);
-  assert.match(sw, /swar-sadhika-android-v9/);
+  assert.match(sw, /const CACHE_PREFIX = "swar-sadhika-android-";/);
+  assert.match(sw, /const CACHE_NAME = `\$\{CACHE_PREFIX\}v9`;/);
   assert.match(sw, /const old = names\.filter\(name =>[\s\S]*?LEGACY_CACHE_NAMES\.has\(name\)/);
   assert.match(sw, /old\.map\(name => caches\.delete\(name\)\)/);
 });
