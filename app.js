@@ -1,2 +1,1 @@
-import { bootSwarSadhika } from './app/main.js';
-bootSwarSadhika().catch(error=>{console.error('Swar-Sadhika start error:',error);const el=document.getElementById('connectionStatus');if(el)el.textContent='ऐप प्रारम्भ करने में त्रुटि';});
+import{bootSwarSadhika}from'./app/main.js?v=0.6.0';bootSwarSadhika().catch(e=>{console.error(e);const s=document.getElementById('connectionStatus');if(s)s.textContent='ऐप त्रुटि: '+e.message})
