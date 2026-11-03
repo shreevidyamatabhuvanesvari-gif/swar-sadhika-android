@@ -1,156 +1,171 @@
-# Swar-Sadhika — निर्माण एवं परीक्षण प्रगति रिकॉर्ड
+Swar-Sadhika — निर्माण एवं परीक्षण प्रगति रिकॉर्ड
 
-**Repository:** `swar-sadhika-android`  
-**रिकॉर्ड संस्करण:** 1  
-**रिकॉर्ड तिथि:** 3 नवंबर 2026  
-**समय-क्षेत्र:** Asia/Kolkata (IST)  
-**स्थिति:** Android निर्माण जारी; वास्तविक Android Build अभी प्रमाणित नहीं।
+Repository: "swar-sadhika-android"
+आधार ZIP: "swar-sadhika-android-main (5).zip"
+रिकॉर्ड तिथि: 3 नवंबर 2026
+समय-क्षेत्र: Asia/Kolkata (IST)
+रिकॉर्ड स्थिति: Android स्रोत-ढाँचा आंशिक रूप से मौजूद; Android Build और वास्तविक आवाज़/वीडियो सुविधाएँ अभी प्रमाणित नहीं।
 
-> यह फाइल प्रगति का लिखित रिकॉर्ड है। GitHub Pages वाला वेब Index Panel केवल प्रकाशित `progress.json` पढ़ता है। इस Markdown फाइल में लिखी स्थिति अपने-आप वेब Panel में नहीं जाती; दोनों रिकॉर्ड अपडेट करते समय साथ मिलाने होंगे।
+«यह रिकॉर्ड उपलब्ध ZIP और उपयोगकर्ता द्वारा भेजे गए Chrome स्क्रीनशॉट पर आधारित है। GitHub की लाइव स्थिति ZIP से अलग हो सकती है। किसी Commit या परीक्षण को तभी पूर्ण माना जाए जब उसका वास्तविक प्रमाण उपलब्ध हो।»
 
-## 1. परियोजना का स्वीकृत लक्ष्य
+1. उत्पाद का स्वीकृत उद्देश्य
 
-Swar-Sadhika एक वास्तविक Android ऐप होना है जो हिंदी और संस्कृत पाठ को स्पष्ट, मधुर, स्वाभाविक स्त्री-कृत्रिम आवाज़ में प्रस्तुत करे। मुख्य TTS और ऑडियो निर्माण स्थानीय डिवाइस पर चलें; कोई Paid API या बाहरी AI inference server न हो। पहली बार मॉडल प्राप्त करने के लिए इंटरनेट की अनुमति हो सकती है, लेकिन मॉडल और सभी आवश्यक संसाधन उपलब्ध होने के बाद मुख्य आवाज़ निर्माण ऑफलाइन काम करना चाहिए।
+Swar-Sadhika एक सुरक्षित, सुलभ और वास्तविक Android ऐप होगा। उपयोगकर्ता हिंदी और संस्कृत पाठ टाइप/पेस्ट कर सके और उसे स्पष्ट, मधुर, स्वाभाविक स्त्री-कृत्रिम आवाज़ में सुन सके। मंत्र/श्लोक मोड में उच्चारण, मात्रा, अवधि, लय, विराम और स्वर-उतार नियंत्रित हों।
 
-आगे के लक्ष्य: मंत्र/श्लोक का लयबद्ध पाठ, उपयोगकर्ता की वीडियो क्लिप, समकालिक captions, पाठ समाप्त होने तक वीडियो playback, वास्तविक audio के अनुसार lip-sync, भावानुसार body language और स्थानीय MP4 export।
+मुख्य TTS inference और ऑडियो निर्माण Android डिवाइस पर ही हों। कोई Paid API, Cloud TTS या बाहरी AI inference server न हो। मॉडल को पहली बार प्राप्त करने के लिए इंटरनेट की अनुमति हो सकती है; मॉडल और runtime उपलब्ध हो जाने के बाद मुख्य आवाज़ निर्माण ऑफलाइन चलना चाहिए।
 
-## 2. स्थिति और प्रमाण के नियम
+अगले लक्ष्य: उपयोगकर्ता की वीडियो क्लिप आयात करना, ऑडियो के साथ समकालिक captions दिखाना, पूरा पाठ समाप्त होने तक वीडियो चलाना, Avatar के होंठों का वास्तविक ऑडियो से तालमेल, भावानुसार body language और स्थानीय MP4 export।
 
-हर मॉड्यूल के लिए केवल ये मान्य स्थितियाँ हैं:
+2. स्थिति और प्रमाण के नियम
 
-- `NOT_STARTED` — काम शुरू नहीं हुआ।
-- `IN_PROGRESS` — काम चल रहा है; सुविधा पूर्ण नहीं।
-- `PASS` — निर्धारित acceptance test वास्तव में सफल हुआ और प्रमाण दर्ज है।
-- `FAIL` — परीक्षण चलाया गया और असफल हुआ; कारण दर्ज है।
-- `BLOCKED` — किसी आवश्यक निर्भरता या संसाधन के कारण परीक्षण/निर्माण रुका है।
+मान्य स्थितियाँ:
 
-`PASS` के लिए सभी बातें आवश्यक हैं: progress 100, परीक्षण का स्पष्ट वातावरण/डिवाइस और Android संस्करण, समय-क्षेत्र सहित ISO-8601 तारीख-समय, परीक्षण के कदम और परिणाम, तथा उपयुक्त प्रमाण (लॉग, स्क्रीनशॉट, ऑडियो/वीडियो नमूना या test report)। केवल GitHub पर फाइल मौजूद होना या source syntax जाँचना runtime PASS नहीं है। दर्ज प्रमाण की वास्तविकता की मानवीय समीक्षा भी आवश्यक है।
+- "NOT_STARTED" — काम शुरू नहीं हुआ।
+- "IN_PROGRESS" — काम चल रहा है; सुविधा पूरी नहीं।
+- "PASS" — निर्धारित acceptance test वास्तव में सफल हुआ और प्रमाण दर्ज है।
+- "FAIL" — परीक्षण चलाया गया और असफल हुआ; कारण दर्ज है।
+- "BLOCKED" — आवश्यक निर्भरता/संसाधन उपलब्ध न होने से काम रुका है।
 
-कुल प्रमाणित सफलता = `PASS` मॉड्यूलों की संख्या ÷ कुल 17 मॉड्यूल × 100। अलग-अलग मॉड्यूल की तैयारी प्रतिशत को प्रमाणित सफलता न समझें।
+"PASS" के लिए progress 100, स्पष्ट test environment/device, timezone सहित ISO-8601 परीक्षण समय, परीक्षण का विवरण/परिणाम और उपयुक्त प्रमाण (लॉग, screenshot, वास्तविक audio/video sample या test report) आवश्यक हैं। केवल फाइल जोड़ना, source code syntax जाँचना या Dashboard खोलना Android सुविधा का PASS नहीं है। दर्ज प्रमाण की मानवीय समीक्षा भी आवश्यक है।
 
-## 3. वर्तमान आधार-स्थिति
+प्रमाणित सफलता = वास्तविक प्रमाण सहित "PASS" मॉड्यूल ÷ कुल 17 मॉड्यूल × 100। अलग मॉड्यूल की तैयारी प्रतिशत प्रमाणित सफलता नहीं है।
 
-यह आधार-स्थिति उपयोगकर्ता द्वारा भेजी गई `swar-sadhika-android-main (4).zip` की निरीक्षण-जाँच और इसी बातचीत में उपयोगकर्ता द्वारा बाद में बताई गई Commit पुष्टियों पर आधारित है। ZIP में 19 वास्तविक फाइलें थीं। बाद में जोड़ी गई फाइलों के लिए ZIP snapshot से आगे की पुष्टि अलग से दी गई है।
+3. वर्तमान ZIP का वास्तविक विवरण
 
-### 3.1 सत्यापित वेब Index Panel
+ZIP में 24 वास्तविक फाइलें और 15 directory entries थीं। ZIP की कुल entries 39 थीं।
 
-- GitHub Pages पर वेब Index Panel उपयोगकर्ता के मोबाइल Chrome में खुला और उसका स्क्रीनशॉट मिला।
-- स्क्रीन पर 17 मॉड्यूल, 0 प्रमाणित PASS और 0% प्रमाणित सफलता दिखाई दी।
-- वेब Panel की मुख्य फाइलें: `index.html`, `styles.css`, `app.js`, `progress.json`।
-- यह वेब Dashboard है; यह Android APK नहीं है और स्वयं Android Build या फोन का ऑडियो परीक्षण नहीं करता।
-- Root `progress.json` और Android asset `app/src/main/assets/progress.json` में 17 मॉड्यूल की ID, नाम, क्रम, status और progress निरीक्षित ZIP में समान पाए गए।
+मुख्य फाइलें:
 
-### 3.2 Android स्रोत-ढाँचे की निरीक्षण स्थिति
+- वेब Dashboard: "index.html", "styles.css", "app.js", "progress.json"
+- Android Gradle: "settings.gradle.kts", "build.gradle.kts", "app/build.gradle.kts", "gradle.properties", "gradle/wrapper/gradle-wrapper.properties"
+- Gradle scripts: "gradlew", "gradlew.bat"
+- Android source: "app/src/main/AndroidManifest.xml", "MainActivity.kt", "data/ProgressModels.kt", "data/ProgressRepository.kt", "ui/IndexPanelScreen.kt"
+- Android asset: "app/src/main/assets/progress.json"
+- Validation/docs: ".gitignore", "tools/validate_progress.py", "docs/PROGRESS.md", "docs/TEST-PLAN.md", "README.md", "README-DASHBOARD.md", "DASHBOARD-PROGRESS.md"
 
-निरीक्षित ZIP में ये मुख्य फाइलें मौजूद थीं:
+पूरे paths के लिए Repository की ZIP सूची देखें; इस रिकॉर्ड में केवल संक्षिप्त नाम दिए गए हैं।
 
-- `settings.gradle.kts`
-- `build.gradle.kts`
-- `app/build.gradle.kts`
-- `gradle.properties`
-- `gradle/wrapper/gradle-wrapper.properties`
-- `app/src/main/AndroidManifest.xml`
-- `app/src/main/java/com/swarsadhika/android/MainActivity.kt`
-- `app/src/main/java/com/swarsadhika/android/data/ProgressModels.kt`
-- `app/src/main/java/com/swarsadhika/android/data/ProgressRepository.kt`
-- `app/src/main/java/com/swarsadhika/android/ui/IndexPanelScreen.kt`
-- `app/src/main/assets/progress.json`
-- `docs/TEST-PLAN.md`
+4. Chrome Web Index Panel की स्थिति
 
-इसका अर्थ है कि Android Native Index Panel का प्रारम्भिक source structure मौजूद है। **यह Android app के Build या installation का प्रमाण नहीं है।**
+उपयोगकर्ता के मोबाइल Chrome screenshots में GitHub Pages का वेब Index Panel सफलतापूर्वक खुला। स्क्रीन पर 17 मॉड्यूल और 0 प्रमाणित PASS दिखे। वेब पैनल की मुख्य फाइलें "index.html", "styles.css", "app.js", "progress.json" हैं।
 
-### 3.3 Wrapper की अपूर्णता
+वेब पैनल वास्तविक वेब Dashboard है, लेकिन यह Android APK नहीं है और स्वयं Android Gradle Build, फोन पर TTS inference, audio playback या video processing नहीं चलाता। यह प्रकाशित "progress.json" पढ़कर उसमें लिखी स्थिति दिखाता है।
 
-निरीक्षित ZIP में `gradle/wrapper/gradle-wrapper.properties` था, लेकिन ये wrapper launch files नहीं मिलीं:
+35% मान का स्पष्टीकरण
 
-- `gradlew`
-- `gradlew.bat`
-- `gradle/wrapper/gradle-wrapper.jar`
+"index_panel" मॉड्यूल का "progress: 35" JSON में स्थिर रूप से दर्ज है। यह GitHub commits, वास्तविक पूरे हुए कार्यों या स्वचालित परीक्षणों से गणना नहीं होता। इसलिए 35% को प्रमाणित/स्वचालित निर्माण-प्रगति नहीं माना जाएगा। इसे तब तक केवल पुराना मैनुअल तैयारी मान समझें जब तक measurable tasks और evidence के आधार पर इसे पुनर्गणित न किया जाए।
 
-इसलिए standard Gradle Wrapper command से Build चलाने के लिए wrapper files अभी जोड़ना/जनरेट करना और फिर Build जाँचना आवश्यक है।
+वेब पैनल का Chrome में खुलना केवल Web Dashboard rendering का प्रमाण है; इससे Android Native Index Panel का Build/Launch प्रमाणित नहीं होता।
 
-### 3.4 बाद की Commit पुष्टियाँ
+5. Android प्रोजेक्ट की वास्तविक स्थिति
 
-उपयोगकर्ता ने इस बातचीत में निम्नलिखित बदलाव पूरे होने की पुष्टि की:
+ZIP में Android Native Index Panel का शुरुआती source structure मौजूद है:
 
-1. Root `settings.gradle.kts` जोड़ी गई।
-2. Root `build.gradle.kts` को Android Gradle Plugin 8.13.2 और Kotlin/Compose Plugin 2.3.21 के साथ बदला गया।
-3. `gradle/wrapper/gradle-wrapper.properties` जोड़ी गई; इसमें Gradle 8.13 वितरण URL है।
-4. `app/build.gradle.kts` जोड़ी गई; namespace/applicationId `com.swarsadhika.android`, compile/target SDK 36, min SDK 24 और Java 17 सेटिंग है।
-5. Android assets में `app/src/main/assets/progress.json` जोड़ी गई।
-6. निरीक्षित ZIP में `MainActivity.kt` और `ProgressRepository.kt` दोनों मौजूद थे।
-7. `.gitignore` और `tools/validate_progress.py` की सामग्री इस बातचीत में दी गई; इस रिकॉर्ड के समय इनके GitHub Commit की पुष्टि उपलब्ध नहीं थी।
+- "MainActivity.kt" — Compose Content में "IndexPanelScreen()" खोलता है।
+- "IndexPanelScreen.kt" — स्थानीय प्रगति snapshot को स्क्रीन पर दिखाता है।
+- "ProgressModels.kt" — "FeatureState", "FeatureStatus", "ProgressSnapshot" data models परिभाषित करता है।
+- "ProgressRepository.kt" — "assets/progress.json" पढ़ने और रिकॉर्ड validate करने का कोड रखता है।
+- "app/src/main/assets/progress.json" — 17 मॉड्यूल का स्थानीय JSON डेटा।
 
-यदि GitHub की बाद की स्थिति इस रिकॉर्ड से अलग हो, तो GitHub पर मौजूद वास्तविक फाइलों और commit history को प्राथमिकता दें और इस रिकॉर्ड को सुधारें।
+ये स्रोत फाइलें एक शुरुआती Android Index Panel बनाती हैं; अभी इन्हें पूर्ण Play Store ऐप या सफल Android Build नहीं कहा जा सकता।
 
-## 4. 17 मॉड्यूल की वर्तमान स्थिति
+6. Gradle संरचना और ज्ञात Build blocker
 
-| क्रम | मॉड्यूल ID | मॉड्यूल | वर्तमान स्थिति | प्रमाणित प्रतिशत |
-|---:|---|---|---|---:|
-| 1 | `index_panel` | Index Panel एवं Progress Dashboard | IN_PROGRESS | 35% तैयारी; runtime PASS नहीं |
-| 2 | `android_launch` | Android App Launch | NOT_STARTED | 0% |
-| 3 | `local_model_loading` | Local TTS Model Loading | NOT_STARTED | 0% |
-| 4 | `hindi_female_tts` | Hindi Female TTS | NOT_STARTED | 0% |
-| 5 | `sanskrit_pronunciation` | Sanskrit Pronunciation | NOT_STARTED | 0% |
-| 6 | `chant_prosody` | Chant-style Prosody | NOT_STARTED | 0% |
-| 7 | `audio_generation_playback` | Audio Generation एवं Playback | NOT_STARTED | 0% |
-| 8 | `audio_save_share` | Audio Save एवं Share | NOT_STARTED | 0% |
-| 9 | `video_import` | Video Import एवं Preview | NOT_STARTED | 0% |
-| 10 | `caption_sync` | Caption Synchronization | NOT_STARTED | 0% |
-| 11 | `video_full_duration` | पूरा पाठ समाप्त होने तक Video Playback | NOT_STARTED | 0% |
-| 12 | `lip_sync` | Lip-sync | NOT_STARTED | 0% |
-| 13 | `body_language` | Body Language एवं Expressions | NOT_STARTED | 0% |
-| 14 | `mp4_export` | MP4 Export | NOT_STARTED | 0% |
-| 15 | `offline_operation` | Offline Operation | NOT_STARTED | 0% |
-| 16 | `privacy_permissions` | Privacy एवं Permissions | NOT_STARTED | 0% |
-| 17 | `android_build_install` | Android Build एवं Installation | NOT_STARTED | 0% |
+ZIP में मौजूद Build configuration:
 
-**गणना:** 0/17 मॉड्यूल वास्तविक प्रमाण सहित PASS हैं; इसलिए प्रमाणित सफलता 0% है। वेब पैनल का खुलना Android ऐप की सफलता नहीं माना गया है।
+- Android Gradle Plugin: "8.13.2"
+- Kotlin Android/Compose plugins: "2.3.21"
+- Gradle distribution URL: "gradle-8.13-bin.zip"
+- Java target: "17"
+- "compileSdk": "36"
+- "targetSdk": "36"
+- "minSdk": "24"
 
-## 5. हाल की निरीक्षण-जाँच
+ZIP में "gradlew", "gradlew.bat" और "gradle/wrapper/gradle-wrapper.properties" मौजूद हैं। लेकिन "gradle/wrapper/gradle-wrapper.jar" अनुपस्थित है। इसलिए Gradle Wrapper अभी अधूरा है और wrapper scripts से project build चलने का दावा नहीं किया जा सकता। Wrapper JAR को आधिकारिक Gradle 8.13 wrapper generation/distribution प्रक्रिया से प्राप्त करना होगा; उसे हाथ से लिखना नहीं है।
 
-| जाँच | परिणाम | सीमा/टिप्पणी |
-|---|---|---|
-| ZIP खोलना और फाइल-पथ पढ़ना | PASS | अपलोड की गई ZIP पर |
-| Root `progress.json` JSON parse | PASS | Syntax/structure जाँची गई |
-| Android asset JSON parse | PASS | Syntax/structure जाँची गई |
-| दोनों JSON के 17 IDs/क्रम/status/progress का मिलान | PASS | निरीक्षित ZIP पर |
-| Web `app.js` JavaScript syntax | PASS | Static syntax check; browser runtime प्रमाण नहीं |
-| Web Dashboard का मोबाइल Chrome में खुलना | PASS | उपयोगकर्ता के स्क्रीनशॉट से प्रमाणित |
-| Android Kotlin/Gradle full build | NOT TESTED | इस निरीक्षण में Android SDK/Gradle build नहीं चलाया गया |
-| Android डिवाइस पर स्थापना | NOT TESTED | APK उपलब्ध/स्थापित होने का प्रमाण नहीं |
-| स्थानीय TTS मॉडल loading | NOT TESTED | मॉडल और inference अभी एकीकृत नहीं |
-| वास्तविक Hindi female audio | NOT TESTED | कोई प्रमाणित ऑडियो नमूना नहीं |
-| Sanskrit chant-quality audio | NOT TESTED | कोई प्रमाणित ऑडियो नमूना नहीं |
-| Video, captions, lip-sync, body language, MP4 export | NOT TESTED | इन मॉड्यूलों का implementation/डिवाइस परीक्षण बाकी |
-| Offline operation | NOT TESTED | airplane-mode परीक्षण बाकी |
+इस audit runtime में Android SDK/ANDROID_HOME उपलब्ध नहीं था और इस ZIP का वास्तविक Android Gradle Build नहीं चलाया गया। अतः "assembleDebug", APK installation और Android device launch अभी "NOT TESTED" हैं।
 
-## 6. ज्ञात निर्भरताएँ और अगले तकनीकी काम
+7. AI Voice, Audio और Video की स्थिति
 
-1. Gradle Wrapper के executable और JAR जोड़ें/सत्यापित करें; फिर Gradle 8.13, AGP 8.13.2, Kotlin 2.3.21 और JDK 17 के साथ वास्तविक `assembleDebug` चलाएँ।
-2. Build errors आने पर पहले उन्हें ठीक करें; APK Build सफल होने से पहले Android Launch को PASS न करें।
-3. `ProgressRepository.kt` को `ProgressModels.kt`, `IndexPanelScreen.kt` और `app/src/main/assets/progress.json` के साथ बनाए रखें; compile और runtime load test करें।
-4. Root `progress.json` और Android asset JSON में 17 मॉड्यूल की संरचना/स्थिति एक साथ अपडेट करें।
-5. मौजूदा Manifest में इंटरनेट Permission नहीं है; Index Panel स्थानीय रूप से चल सकता है, लेकिन पहली बार मॉडल डाउनलोड की सुविधा जोड़ते समय केवल आवश्यक `INTERNET` permission और स्पष्ट privacy व्यवहार जोड़ें।
-6. Web validator और `tools/validate_progress.py` को अलग-अलग परीक्षण करें। वे डेटा रिकॉर्ड की संरचना जाँचते हैं, वास्तविक डिवाइस परीक्षण का विकल्प नहीं हैं।
-7. TTS मॉडल चुनने से पहले स्रोत, लाइसेंस, डाउनलोड आकार, Android CPU/RAM संगतता, हिंदी स्त्री-स्वर, संस्कृत उच्चारण और पूरी तरह स्थानीय inference जाँचें।
-8. मॉडल का वास्तविक audio output, sample rate, duration, non-empty WAV/PCM या समर्थित audio bytes और audible playback सत्यापित करें।
-9. इसके बाद video import/caption timing; फिर avatar lip-sync/body-language; फिर MP4 export विकसित करें।
-10. मॉडल एवं आवश्यक runtime डिवाइस पर उपलब्ध होने के बाद network बंद कर offline voice-generation test करें।
-11. Release signing secrets कभी GitHub में commit न करें। उपयोगकर्ता के स्क्रीनशॉट में Repository visibility `Public` दिखी थी, जबकि परियोजना की मूल माँग `Private` थी; visibility और GitHub Pages की योजना की समीक्षा करें।
+इस ZIP में कोई ONNX/TFLite TTS model, voice checkpoint, WAV/MP3 sample या inference engine model asset नहीं मिला। "app/build.gradle.kts" में Compose/UI dependencies हैं; कोई TTS/ONNX runtime या Media3 video dependency शामिल नहीं है।
 
-## 7. अगला काम — निश्चित क्रम
+इसलिए वर्तमान ZIP में निम्न सुविधाएँ अभी लागू/प्रमाणित नहीं हैं:
 
-**तत्काल अगला तकनीकी लक्ष्य:** Gradle Wrapper की पूरी संरचना (`gradlew`, `gradlew.bat`, `gradle-wrapper.jar`, `gradle-wrapper.properties`) सुनिश्चित करना; फिर वास्तविक Android Gradle Build चलाना। उसके बाद Native Index Panel launch और local JSON load की जाँच होगी।
+- स्थानीय Hindi female TTS model loading
+- वास्तविक हिंदी/संस्कृत audio generation
+- chant-style musical prosody
+- audio playback/save/share का वास्तविक कार्य
+- video import और preview
+- audio-synchronised captions
+- पूरे पाठ तक video duration/loop control
+- audio-based lip-sync और body language
+- MP4 export
+- model उपलब्ध होने के बाद offline voice generation
 
-TTS मॉडल का चयन और वास्तविक आवाज़ परीक्षण, Android Build के बाद प्राथमिक अगला milestone है। वीडियो और Avatar पर उससे पहले समय खर्च नहीं किया जाएगा।
+इनमें से किसी को भी डेमो स्क्रीन, स्थिर डेटा या placeholder के आधार पर PASS न किया जाए।
 
-## 8. रिकॉर्ड अपडेट करने का नियम
+8. 17 मॉड्यूल की वर्तमान स्थिति
 
-हर महत्वपूर्ण Commit या वास्तविक परीक्षण के बाद इस फाइल में तारीख/समय, बदली गई फाइलें, परीक्षण आदेश/परिवेश, परिणाम, प्रमाण और अगला blocker दर्ज करें। `progress.json` (वेब) और `app/src/main/assets/progress.json` (Android) में संबंधित मॉड्यूल की स्थिति भी साथ अपडेट करें।
+यह तालिका उपलब्ध ZIP के JSON records पर आधारित है; प्रतिशतों को वास्तविक परीक्षण सफलता न समझें।
 
-कोई सुविधा केवल कोड लिखने, फाइल जोड़ने, वेब पैनल खोलने या स्क्रीनशॉट में दिखाई देने से PASS नहीं होगी। वास्तविक acceptance test और प्रमाण आवश्यक हैं।
+क्रम| मॉड्यूल ID| मॉड्यूल| JSON स्थिति| JSON तैयारी मान| प्रमाणित PASS
+1| "index_panel"| Index Panel एवं Progress Dashboard| IN_PROGRESS| 35% (स्थिर मैनुअल मान)| नहीं
+2| "android_launch"| Android App Launch| NOT_STARTED| 0%| नहीं
+3| "local_model_loading"| Local TTS Model Loading| NOT_STARTED| 0%| नहीं
+4| "hindi_female_tts"| Hindi Female TTS| NOT_STARTED| 0%| नहीं
+5| "sanskrit_pronunciation"| Sanskrit Pronunciation| NOT_STARTED| 0%| नहीं
+6| "chant_prosody"| Chant-style Prosody| NOT_STARTED| 0%| नहीं
+7| "audio_generation_playback"| Audio Generation एवं Playback| NOT_STARTED| 0%| नहीं
+8| "audio_save_share"| Audio Save एवं Share| NOT_STARTED| 0%| नहीं
+9| "video_import"| Video Import एवं Preview| NOT_STARTED| 0%| नहीं
+10| "caption_sync"| Caption Synchronization| NOT_STARTED| 0%| नहीं
+11| "video_full_duration"| पूरा पाठ समाप्त होने तक Video Playback| NOT_STARTED| 0%| नहीं
+12| "lip_sync"| Lip-sync| NOT_STARTED| 0%| नहीं
+13| "body_language"| Body Language एवं Expressions| NOT_STARTED| 0%| नहीं
+14| "mp4_export"| MP4 Export| NOT_STARTED| 0%| नहीं
+15| "offline_operation"| Offline Operation| NOT_STARTED| 0%| नहीं
+16| "privacy_permissions"| Privacy एवं Permissions| NOT_STARTED| 0%| नहीं
+17| "android_build_install"| Android Build एवं Installation| NOT_STARTED| 0%| नहीं
+
+वर्तमान प्रमाणित सफलता: 0/17 = 0%.
+
+9. उपलब्ध निरीक्षण और परीक्षण परिणाम
+
+जाँच| परिणाम| सीमा
+ZIP extraction और 24 files की सूची| PASS| इसी ZIP snapshot पर
+Root "progress.json" JSON parse| PASS| डेटा संरचना मात्र
+Android asset "progress.json" JSON parse| PASS| डेटा संरचना मात्र
+दोनों JSON की 17 module IDs/क्रम/status/progress तुलना| PASS| ZIP snapshot पर
+Web "app.js" JavaScript syntax| PASS| Static syntax; browser behavior का पूर्ण परीक्षण नहीं
+Web Index Panel Chrome में खुलना| PASS| उपयोगकर्ता के screenshot से पुष्टि
+"tools/validate_progress.py" का वर्तमान JSON पर चलना| PASS| Validator केवल record structure/evidence fields जाँचता है
+Android Kotlin full compilation| NOT TESTED| Android SDK/Gradle Build नहीं चला
+Android APK Build| NOT TESTED| Wrapper JAR अनुपस्थित; SDK/build environment उपलब्ध नहीं
+Android installation/device launch| NOT TESTED| APK/device evidence उपलब्ध नहीं
+वास्तविक female TTS audio| NOT TESTED| Model/inference engine मौजूद नहीं
+Sanskrit chant audio| NOT TESTED| वास्तविक audio sample नहीं
+Video/captions/lip-sync/body language/MP4| NOT TESTED| कार्यान्वयन और डिवाइस परीक्षण बाकी
+Offline TTS| NOT TESTED| मॉडल और offline test नहीं
+
+10. आगे के काम का सुरक्षित क्रम
+
+1. Wrapper JAR को आधिकारिक Gradle 8.13 Wrapper प्रक्रिया से प्राप्त/जनरेट करें और JAR की provenance जाँचें।
+2. Android SDK और JDK 17 वाले वातावरण में "./gradlew assembleDebug" चलाएँ; हर वास्तविक compiler/build error ठीक करें।
+3. Android ऐप को डिवाइस/एम्युलेटर पर install और launch करें; स्थानीय JSON load, refresh और error state जाँचें।
+4. Web और Android progress data के बीच एकल authoritative source या नियंत्रित sync प्रक्रिया तय करें; 35% स्थिर मान हटाकर task/evidence-आधारित प्रगति लागू करें।
+5. TTS मॉडल चुनने से पहले license, female voice, Hindi/Sanskrit coverage, model size, device compatibility और offline inference की पुष्टि करें।
+6. पहले वास्तविक TTS audio bytes, duration, sample rate और सुनने योग्य playback जाँचें; तभी Hindi Female TTS को PASS पर विचार करें।
+7. इसके बाद संस्कृत उच्चारण और chant prosody लागू करें।
+8. उसके बाद video import, captions और audio timing synchronization करें।
+9. वास्तविक audio से lip-sync/viseme और body language pipeline जाँचें।
+10. MP4 export, offline behavior, permissions/privacy और अंतिम release APK/AAB का परीक्षण करें।
+
+11. रिकॉर्ड अपडेट करने का नियम
+
+हर महत्वपूर्ण Commit और परीक्षण के बाद इस फाइल तथा संबंधित "progress.json" रिकॉर्ड को अपडेट करें। हर प्रविष्टि में तारीख/समय (IST सहित), बदली गई फाइलें, test environment, परीक्षण का तरीका, वास्तविक परिणाम, प्रमाण का स्थान और अगला blocker दर्ज हो।
+
+Dashboard का रंग, स्क्रीन पर मॉड्यूल का दिखना, GitHub commit count या केवल फाइल मौजूद होना किसी सुविधा की सफलता नहीं है। PASS केवल वास्तविक acceptance test और समीक्षा योग्य प्रमाण पर आधारित होगा।
 
 ---
 
-**अंतिम सिद्धांत:** काम की प्रगति वास्तविक होनी चाहिए, डेमो/प्लेसहोल्डर को पूर्ण ऐप नहीं कहा जाएगा, और किसी भी असफलता या अप्रमाणित सुविधा को छिपाया नहीं जाएगा।
+अंतिम नियम: अधूरे स्रोत को पूर्ण ऐप नहीं कहा जाएगा। किसी Demo, Placeholder, स्थिर नमूने या केवल UI को वास्तविक AI TTS, ऑडियो, वीडियो या Lip-sync सुविधा बताकर प्रस्तुत नहीं किया जाएगा।
