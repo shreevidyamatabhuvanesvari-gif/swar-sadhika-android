@@ -1,20 +1,43 @@
-# Swar-Sadhika Web App — Implementation Status
+# Swar-Sadhika — Part 1 Implementation Progress
 
-## Browser foundation added
-The repository now contains a modular browser workspace with text editing, device speech preview, local media preview, IndexedDB notes/library, module status panel, PWA manifest and service-worker shell caching.
+**Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
+**Current milestone:** Part 1 — File-wise Source Cleanup & Four-Index Implementation  
+**Status:** Source integration prepared; automated CI and Android Chrome acceptance must be reported separately.
 
-## Important capability boundaries
-- Speech output currently uses the browser/OS Speech Synthesis API. It is not a trained female neural voice and cannot guarantee Sanskrit pronunciation.
-- Media selection only previews a local file; it does not learn singing style automatically.
-- Avatar is an illustrative CSS animation, not a photo avatar or phoneme-synchronized lip-sync.
-- PWA cache covers the app shell only. It does not cache a TTS model or provide offline neural inference.
-- MP4 export is not implemented.
+## Implemented in the current source change set
 
-## Next milestones
-1. Verify the app in Android Chrome and resolve any runtime/browser issues.
-2. Select and license-audit a local TTS model with Hindi/Sanskrit suitability.
-3. Integrate a browser-compatible inference runtime and test on the target phone.
-4. Implement chant prosody and phoneme/viseme timing.
-5. Add real avatar animation, captions, export and backup/restore.
+- Four primary Indexes and owned Sub-Module panels.
+- Navigation controller with active state and hash route.
+- Dashboard with live browser capability checks and separate project progress records.
+- Text Studio with Unicode normalization, preliminary Devanagari analysis and save/edit flow.
+- IndexedDB schema version 4 declaration adding Settings while preserving existing stores.
+- Library search, reopen/edit, delete confirmation and JSON backup/merge restore.
+- Separate personal Learning Notes.
+- Device Speech Synthesis Preview remains clearly distinct from Neural Voice/Singing.
+- Local Audio/Video preview with temporary object URL cleanup.
+- Local 9:16 Avatar photo remains in IndexedDB.
+- PWA App Shell cache v9 includes new modules and uses app-specific cache cleanup.
+- Automated tests cover four-Index DOM contracts, Sub-Module mapping, unique IDs, static import resolution, parser/language behavior, schema declarations and Service Worker behavior.
 
-Do not mark any capability PASS without device-level evidence.
+## Explicitly not implemented by Part 1
+
+- Neural Female Voice model and local inference.
+- Singing Voice Synthesis / Chant Prosody.
+- Automated Audio/Video Learning or model training.
+- Phoneme/Viseme Lip-Sync.
+- Body-language learning.
+- Timed captions and MP4 export.
+
+## Verification record
+
+| Verification | Status | Evidence |
+|---|---|---|
+| Source files committed | Pending current commit | To be filled after push |
+| JavaScript syntax and unit/integration tests | Pending current GitHub Actions run | To be filled after CI |
+| Progress JSON validator | Pending current GitHub Actions run | To be filled after CI |
+| Pages deployment | Pending current commit deployment | To be filled after Pages run |
+| Android Chrome runtime | UNVERIFIED | Requires target handset |
+| Existing IndexedDB v3 data migration | UNVERIFIED | Requires browser with existing v3 user data |
+| Offline PWA launch | UNVERIFIED | Requires target handset after successful online install |
+
+Do not change any verification status to PASS without the relevant run/device evidence.

@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Syntax, Service Worker and progress validation
+    name: Syntax, Part 1 contracts and Service Worker
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -38,18 +38,19 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do
             echo "Checking $file"
-            node --input-type=module --check < "$file"
+            node --check "$file"
           done < <(find . -type f -name '*.js' \
             -not -path './.git/*' \
             -not -path './.github/*' -print0)
 
-      - name: Run Service Worker behavior tests
-        run: node --test tests/*.test.mjs
+      - name: Run unit, integration and Service Worker tests
+        run: npm test
 
       - name: Validate JSON files
         run: |
           python -m json.tool progress.json > /dev/null
           python -m json.tool manifest.webmanifest > /dev/null
+          python -m json.tool package.json > /dev/null
 
       - name: Validate project progress record
-        run: python tools/validate_progress.py .
+        run: npm run validate:progress

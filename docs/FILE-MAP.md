@@ -110,20 +110,19 @@ The following are proposed additions. They do **not** exist at the audited basel
 |---|---|---|
 | `app/features/navigation.js` | Four-Index and Sub-Module navigation controller | Four-Index UI integration |
 | `app/features/dashboard.js` | Dashboard rendering from real runtime and development status sources | Dashboard integration |
+| `app/features/learning-notes.js` | Separate local Learning Notes create/list/delete Sub-Module | Learning Notes integration |
 | `app/features/app-settings.js` | User-facing PWA, update, storage and application settings | Settings Sub-Module |
+| `app/features/learning-notes.js` | Separate local Learning Notes Sub-Module | Learning Notes Sub-Module |
 | `app/core/device-capabilities.js` | Safe detection of browser APIs and device capabilities | Runtime capability dashboard |
 | `docs/FILE-MAP.md` | This document: repository ownership and file map | Architecture baseline |
 | `docs/ENGINE-INTERFACES.md` | Shared Engine, event, job, data and lifecycle contracts | Cross-part integration |
 | `docs/ANDROID-ACCEPTANCE.md` | Handset-specific Part 1 acceptance checklist and evidence record template | Device acceptance |
-| `tests/unit/devanagari-parser.test.mjs` | Unit tests for parser behavior and known limitations | Parser validation |
-| `tests/unit/language-modes.test.mjs` | Three language-mode and voice-routing tests | Language validation |
-| `tests/unit/text-normalization.test.mjs` | Unicode/newline normalization tests | Text validation |
-| `tests/integration/dom-contract.test.mjs` | DOM IDs, four Index targets/panels and uniqueness checks | UI integration |
-| `tests/integration/import-resolution.test.mjs` | Relative static import existence/resolution checks | Module integration |
-| `tests/integration/storage-migration.test.mjs` | Existing IndexedDB schema and migration/preservation tests | Storage migration |
-| `tests/device-acceptance/part1-android-checklist.md` | Test procedure/evidence checklist (not a substitute for actual handset execution) | Android acceptance |
+| `package.json` | Declares native ES module semantics and repeatable npm test/validator scripts; no runtime dependency is added | Test execution |
+| `tests/part1.test.mjs` | Combined unit/contract suite for four Indexes, DOM IDs, imports, Devanagari helpers, language modes and storage schema declaration | Part 1 automated validation |
+| `tests/service-worker.test.mjs` | Existing Service Worker behavior suite, extended for App Shell v9 | PWA validation |
+| `docs/ANDROID-ACCEPTANCE.md` | Handset-specific test procedure and evidence record template | Android acceptance |
 
-Test placement is additive. Keep `tests/service-worker.test.mjs` where it is; the planned folders do not require relocating existing tests.
+The Part 1 automated checks are intentionally consolidated in `tests/part1.test.mjs` to keep the current small repository test harness simple. Keep `tests/service-worker.test.mjs` at its existing path. The schema test verifies the migration declaration; it does not replace a real upgrade test using pre-existing IndexedDB data.
 
 ## 5. Part 1 file-change order
 

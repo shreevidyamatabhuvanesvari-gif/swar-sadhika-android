@@ -83,7 +83,7 @@ function createHarness({ fetchImpl = async () => new FakeResponse('network') } =
   };
 }
 
-const ACTIVE_CACHE = 'swar-sadhika-android-v8';
+const ACTIVE_CACHE = 'swar-sadhika-android-v9';
 
 test('install pre-caches the app shell and activates the new worker', async () => {
   const harness = createHarness();
@@ -91,8 +91,11 @@ test('install pre-caches the app shell and activates the new worker', async () =
   assert.equal(harness.skipWaitingCalled, true);
   assert.ok(harness.entries.has(ACTIVE_CACHE));
   const shell = harness.entries.get(ACTIVE_CACHE);
-  assert.ok(shell.has(`${APP_SCOPE}index.html?v=0.7.0`));
+  assert.ok(shell.has(`${APP_SCOPE}index.html?v=0.9.0`));
   assert.ok(shell.has(`${APP_SCOPE}progress.json`));
+  assert.ok(shell.has(`${APP_SCOPE}app/features/navigation.js?v=0.9.0`));
+  assert.ok(shell.has(`${APP_SCOPE}app/features/dashboard.js?v=0.9.0`));
+  assert.ok(shell.has(`${APP_SCOPE}app/features/app-settings.js?v=0.9.0`));
   assert.ok(!shell.has(`${APP_SCOPE}assets/user-avatar.webp`));
 });
 

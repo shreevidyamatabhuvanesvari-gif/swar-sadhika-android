@@ -1,50 +1,109 @@
-# Browser Language and Pronunciation Acceptance Tests
+# Part 1 — Foundation and Four-Index Test Plan
 
-## User-facing language selector
-1. Exactly one language selector is visible.
-2. It contains exactly three entries: वैदिक संस्कृत, सामान्य संस्कृत, हिंदी.
-3. No separate voice selector or list of browser-installed languages is rendered.
-4. The browser voice is chosen automatically from the compatible language family.
-5. If Sanskrit voice is unavailable, Hindi fallback is clearly identified in the status text.
-6. Changing language stops queued speech and refreshes the automatic voice route.
+## 1. Automated test execution
 
-## सर्वे pronunciation check
-1. Select सामान्य संस्कृत.
-2. Tap “सर्वे उच्चारण जाँचें”.
-3. If Sanskrit voice exists, hear its native reading.
-4. If only Hindi fallback exists, the TTS-only text is `सर्-वे`, while displayed source remains `सर्वे`.
-5. Record handset, Android/Chrome version, automatically selected voice, spoken result and an audio recording for review.
+The repository uses Node.js 22 and Python 3.12.
 
-## Vedic mode
-- Paste source with authentic Vedic accent marks where available.
-- Confirm the source retains those marks.
-- Do not treat normal Sanskrit TTS or Hindi fallback as verified Vedic recitation.
+```bash
+npm test
+npm run validate:progress
+```
 
-## PASS requirements
-Real target-device acoustic verification, timezone-aware timestamp, automatically selected voice/language, test steps and audible evidence. Source inspection alone does not prove pronunciation correctness.
+GitHub Actions runs JavaScript syntax checks, unit/integration tests, Service Worker behavior tests, JSON validation and the progress-record validator.
 
-## Service Worker cache-isolation tests
+## 2. Four-Index DOM and Navigation
 
-Automated checks run in GitHub Actions on every push and pull request to `main`:
+1. Exactly four primary Index buttons exist: workspace, voice, learning and avatar.
+2. Exactly four matching top-level Index panels exist.
+3. Each Sub-Module button has exactly one matching panel owned by the same Index.
+4. Sub-Module targets are unique within their Index.
+5. All HTML IDs are unique.
+6. Selecting an Index hides the other Index panels.
+7. Selecting a Sub-Module displays only its matching panel.
+8. The active Index and Sub-Module are exposed using button state/ARIA attributes.
+9. A valid hash route is restored after reload.
+10. No fifth primary Index or legacy five-view navigation remains.
 
-1. Install pre-caches the application shell in `swar-sadhika-android-v7`.
-2. Activate deletes only cache names with the `swar-sadhika-android-` prefix and the explicitly listed legacy cache names `swar-sadhika-web-v5/v6`.
-3. Unrelated same-origin app caches remain present.
-4. Cross-origin and same-origin requests outside this app's registration scope are not intercepted.
-5. Non-GET requests are not intercepted.
-6. Successful app GET responses are cached in the app-owned cache.
-7. `progress.json` refreshes from the network and falls back to the app cache when offline.
-8. Error and opaque responses are not cached.
+## 3. Text Studio and language modes
 
-## Android Chrome manual acceptance
+- Enter and paste Sanskrit/Hindi Devanagari text.
+- Verify Unicode NFC normalization and line-break handling.
+- Verify word, akshara, consonant, matra, conjunct, virama and punctuation counters.
+- Save a text record and reopen it from Library.
+- Edit a saved record without creating a duplicate.
+- Confirm source text is preserved when the device speech fallback is used.
+- Confirm the three language modes remain वैदिक संस्कृत, सामान्य संस्कृत and हिंदी.
+- Confirm Vedic mode does not claim verified accent rendering.
+- Confirm the browser/OS Speech Synthesis preview is labelled as a device preview, not Neural TTS or singing.
 
-These checks require the actual target handset and are not asserted by the GitHub runner:
+## 4. Library, Learning Notes and backup
 
-1. Open the deployed app in Android Chrome while online; wait for the app-ready status.
-2. Reload once and confirm the page is served normally after the new worker activates.
-3. In Chrome DevTools where available, inspect Application → Service Workers and Cache Storage. Confirm the active worker scope is the `/swar-sadhika-android/` path and the active cache is `swar-sadhika-android-v7`.
-4. If another GitHub Pages app has an existing Cache Storage cache on the same `github.io` origin, record its exact cache name before and after this app's activation. It must remain present unless it is one of this app's explicitly listed legacy cache names.
-5. Reload the app, switch the handset to airplane mode, and verify the cached shell opens. Check the Library separately; its IndexedDB persistence is outside this Service Worker cache test.
-6. Restore connectivity and reload. Confirm the app returns to online mode.
+- Search text and notes.
+- Reopen/edit a text record.
+- Delete a selected record only after confirmation.
+- Create, list and delete personal Learning Notes.
+- Export JSON Backup version 2.
+- Import a supported version 1 or version 2 backup.
+- Importing the same backup twice does not create duplicate records.
+- Existing local records are preserved during merge import.
+- Malformed backup is rejected before writes begin.
+- Avatar photo and original Gallery media are excluded from JSON backup.
 
-Do not mark offline operation or target-device acceptance PASS until these handset checks have been completed and recorded with device, Android/Chrome versions, timezone-aware timestamp and reviewable evidence.
+## 5. IndexedDB migration
+
+The current database baseline was version 3 with stores `texts`, `mediaNotes`, `learningNotes` and `avatarPhotos`. Part 1 raises the schema to version 4 and adds `settings`.
+
+Required device-level verification:
+
+1. Open an existing version 3 database containing records in all four stores.
+2. Load the new app and allow the version 4 upgrade.
+3. Confirm all existing records and Avatar photo remain accessible.
+4. Confirm the new settings store is created.
+5. Confirm another open tab does not silently delete or reset the database.
+6. Confirm quota and blocked-upgrade errors are surfaced clearly.
+
+The automated test checks the schema declaration; it does not replace a real IndexedDB migration test with pre-existing user data.
+
+## 6. Gallery Media Preview
+
+- Select supported local audio and play/pause/stop.
+- Select supported local video and preview where the browser codec supports it.
+- Select a second file and confirm the previous object URL is released.
+- Save notes without persisting/uploading the original media binary.
+- Confirm unsupported files receive a clear message.
+
+## 7. Personal Avatar and privacy
+
+- Select a user-provided image and display it in the 9:16 frame.
+- Reload and confirm the local image persists.
+- Remove the image and confirm the local record is deleted.
+- Confirm no personal photo is present in Git or App Shell cache.
+- Treat the speaking outline as a visual state only, not phoneme Lip-Sync.
+
+## 8. PWA, cache and offline shell
+
+- Manifest JSON is valid and scope/start URL remain relative to the GitHub Pages project path.
+- Service Worker registers under `/swar-sadhika-android/`.
+- App Shell cache is `swar-sadhika-android-v9`.
+- Required Part 1 modules are included in the shell.
+- Activation removes only app-owned caches and the explicitly recognized legacy caches `swar-sadhika-web-v5/v6`.
+- Unrelated same-origin app caches remain.
+- Cross-origin, out-of-scope and non-GET requests are not intercepted.
+- Successful app GETs are cached.
+- `progress.json` refreshes online and uses its cached response offline.
+- A cached shell is not evidence of offline model inference.
+
+## 9. Android Chrome manual acceptance
+
+Use [ANDROID-ACCEPTANCE.md](ANDROID-ACCEPTANCE.md). Record device model, Android/Chrome versions, local timezone-aware test time, commit SHA and evidence. GitHub CI does not run these handset tests.
+
+## 10. PASS policy
+
+- PASS requires the actual acceptance test and reviewable evidence.
+- FAIL means the test ran and failed.
+- BLOCKED means a required device/API/permission/model was unavailable.
+- IN_PROGRESS means implementation or verification is underway.
+- NOT_STARTED means work has not begun.
+- UNVERIFIED means source exists but runtime evidence is absent.
+
+A syntax check, static source assertion, green CI run or successful Pages deployment does not by itself prove all Part 1 features are accepted on Android.

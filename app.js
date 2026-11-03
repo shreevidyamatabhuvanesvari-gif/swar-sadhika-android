@@ -1,1 +1,6 @@
-import{bootSwarSadhika}from'./app/main.js?v=0.6.0';bootSwarSadhika().catch(e=>{console.error(e);const s=document.getElementById('connectionStatus');if(s)s.textContent='ऐप त्रुटि: '+e.message})
+import { bootSwarSadhika } from "./app/main.js?v=0.9.0";
+bootSwarSadhika().catch(error => {
+  console.error("Swar-Sadhika bootstrap failed:", error);
+  const status = document.getElementById("connectionStatus");
+  if (status) status.textContent = "App त्रुटि: " + error.message;
+});
