@@ -1,22 +1,23 @@
-# Browser Acceptance Test Plan
+# Browser Language and Pronunciation Acceptance Tests
 
-## First-load checks
-1. Open the GitHub Pages URL in Android Chrome.
-2. Confirm page, styles and all five navigation views load.
-3. Open browser console and confirm there are no module import errors.
-4. Confirm the Engine Status view reads `progress.json`.
-5. Confirm the PWA service worker registers over HTTPS.
+## Language selector
+1. Exactly three options appear: वैदिक संस्कृत, सामान्य संस्कृत, हिंदी.
+2. Hindi mode lists only voices whose language tag starts with `hi`.
+3. Sanskrit modes prefer voices whose language tag starts with `sa`.
+4. If no Sanskrit voice is installed, the UI explicitly labels the Hindi fallback and does not call it Vedic/Sanskrit voice.
+5. Changing language stops queued speech and refreshes the compatible voice list.
 
-## Feature checks
-- Text: edit, count and save a Sanskrit/Hindi passage; open Library and reload it.
-- Voice preview: list available device voices; speak, pause, resume and stop. Record actual voice name/language and pronunciation limitations.
-- Media: select a local audio/video file and confirm playback; verify no network upload occurs.
-- Notes: save media and learning notes; reopen Library and delete a record.
-- Avatar: verify only the illustrative mouth animation reacts while speech is active; do not call it phoneme lip-sync.
-- Offline shell: after first successful load, enable airplane mode and verify cached shell assets. Dynamic model inference is not included.
+## सर्वे pronunciation check
+1. Select सामान्य संस्कृत.
+2. Tap “सर्वे उच्चारण जाँचें”.
+3. If Sanskrit voice exists, hear its native reading.
+4. If only Hindi fallback exists, the TTS-only text is `सर्-वे`, while the displayed source remains `सर्वे`.
+5. Record the actual handset, Android/Chrome version, selected voice name, spoken result and an audio recording for review.
 
-## Before any PASS
-Record exact device, Android/Chrome version, date/time with timezone, test steps, observed result and evidence (screenshot/log/audio sample). Source presence or dashboard rendering alone is not a feature PASS.
+## Vedic mode
+- Paste a source with authentic Vedic accent marks when available.
+- Confirm the text retains its marks.
+- Do not treat normal Sanskrit TTS or Hindi fallback as verified Vedic recitation.
 
-## Not yet implemented
-Local neural female TTS, Sanskrit chant prosody, automatic media learning, synchronized captions, real avatar/lip-sync, body-language learning and MP4 export.
+## PASS requirements
+Real target-device acoustic verification, timezone-aware timestamp, selected voice/language, test steps and audible evidence. Static source inspection does not prove pronunciation correctness.

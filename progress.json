@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "buildLabel": "0.2.0-web-index-panel",
-  "lastUpdated": "3 नवंबर 2026 — Android परियोजना हटाकर Web-only दिशा निर्धारित",
-  "lastTestNote": "Web Studio source files, IndexedDB v2 migration, literal newline normalization and local library backup/import added. Android Chrome runtime tests remain pending.",
+  "buildLabel": "0.3.0-language-mode-pronunciation",
+  "lastUpdated": "3 नवंबर 2026 — तीन भाषा-मोड एवं Sanskrit pronunciation fallback",
+  "lastTestNote": "Three language modes, device voice filtering and a curated Sanskrit conjunct fallback for सर्वे have been added. Target-device acoustic verification remains pending; no Sanskrit voice or pronunciation PASS is claimed.",
   "features": [
     {
       "id": "index_panel",
@@ -31,7 +31,7 @@
       "name": "Hindi Female TTS",
       "status": "NOT_STARTED",
       "progress": 0,
-      "summary": "वास्तविक स्त्री-स्वर ऑडियो अभी उत्पन्न और सुना नहीं गया है।",
+      "summary": "भाषा-मोड के अनुसार डिवाइस की आवाज़ चुनी जाती है; प्रशिक्षित महिला Neural TTS अभी एकीकृत नहीं है।",
       "testEnvironment": "",
       "lastTestAt": null,
       "evidence": null,
@@ -40,13 +40,13 @@
     {
       "id": "sanskrit_pronunciation",
       "name": "Sanskrit Pronunciation",
-      "status": "NOT_STARTED",
-      "progress": 0,
-      "summary": "Devanagari पाठ का प्रारम्भिक वर्ण/मात्रा/पंक्ति विश्लेषण जोड़ा गया; यह अभी शास्त्रीय उच्चारण सत्यापन इंजन नहीं है।",
+      "status": "IN_PROGRESS",
+      "progress": 15,
+      "summary": "वैदिक संस्कृत, सामान्य संस्कृत और हिंदी के तीन भाषा-मोड जोड़े गए। संस्कृत voice उपलब्ध होने पर वही चुनी जाती है; अन्यथा सीमित हिंदी fallback में 'सर्वे' को 'सर्-वे' बोला जाता है।",
       "testEnvironment": "",
       "lastTestAt": null,
       "evidence": null,
-      "blocker": "संस्कृत परीक्षण-पाठ और उच्चारण मूल्यांकन बाकी।"
+      "blocker": "लक्षित Android Chrome पर वास्तविक ध्वनि-परीक्षण, Vedic svara support और व्यापक Sanskrit pronunciation lexicon की समीक्षा बाकी।"
     },
     {
       "id": "chant_prosody",

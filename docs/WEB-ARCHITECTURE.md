@@ -1,24 +1,22 @@
 # Swar-Sadhika Web Architecture
 
-## Runtime flow
+## Runtime
 `index.html` → `app.js` → `app/main.js` → feature modules and IndexedDB.
 
-## Modules
-- Text Studio: editing, character/word count and saving user text.
-- Voice Preview: Web Speech API only; output depends on voices installed by the browser/OS.
-- Media Lab: local audio/video preview with temporary object URLs; no upload.
-- Local Library: IndexedDB stores text and notes, not large media files.
-- Avatar Preview: illustrative CSS mouth animation only.
-- Status Board: reads `progress.json` and displays implementation status.
+## Language and pronunciation
+- Language selector contains exactly three modes: Vedic Sanskrit, General Sanskrit and Hindi.
+- Language tags: `sa-IN` for Sanskrit modes; `hi-IN` for Hindi.
+- Device voice list is filtered to the selected mode's language. For Sanskrit modes, a Hindi voice may be used only as an explicitly labelled fallback.
+- `app/core/pronunciation-engine.js` selects the speech path and prepares text.
+- `app/data/sanskrit-pronunciation-lexicon.js` contains fallback-only pronunciation spellings. The editor and saved source text are not modified.
+- Initial fallback dictionary entry: `सर्वे` → `सर्-वे`, to prevent a Hindi speech engine from dropping the consonant /r/ in this word.
+- Vedic accents are not generated automatically. Vedic svara recitation requires correctly marked source text and a voice/model trained to perform it.
 
-## Browser constraints
-- GitHub Pages is static hosting. It cannot run server-side model inference.
-- Local neural inference requires a compatible model, runtime (for example WebAssembly/WebGPU), model download/hosting strategy, memory budget and target-device validation.
-- Browser speech synthesis is not guaranteed to provide a female voice, Sanskrit pronunciation, offline operation or consistent output across devices.
-- MP4 export and true phoneme lip-sync require additional media-processing and timing components.
+## Browser voice limitations
+The Web Speech API accepts a BCP 47 language tag and a voice selected from the voices exposed by the current browser/OS. A language tag alone cannot install a voice or guarantee correct Sanskrit articulation. The Hindi fallback is only a phonetic preview, not a validated Sanskrit/Vedic TTS engine.
 
-## Local data
-IndexedDB is origin-scoped. Users should be given an export/backup feature before treating it as durable storage. Selected media is not uploaded; object URLs must be revoked when replaced or the view is disposed.
+## Local data and media
+IndexedDB stores text and notes. Selected media is previewed through temporary object URLs and is not uploaded. A JSON backup can be exported/imported.
 
-## Security
-Use HTTPS GitHub Pages, avoid remote scripts with unknown provenance, do not upload user media, and never store credentials in the repository.
+## PWA and privacy
+GitHub Pages is static hosting. Service-worker caching covers the application shell only; it does not bundle a speech model. HTTPS is required for service workers. Avoid remote scripts with unknown provenance and do not store credentials in the repository.
