@@ -1,26 +1,30 @@
-# Swar-Sadhika Web Index Panel
+# Swar-Sadhika Browser Studio
 
-यह repository GitHub Pages पर प्रकाशित होने वाला browser-based वेब पैनल है।
+यह repository GitHub Pages पर प्रकाशित browser-based Sanskrit text एवं chant workspace है।
 
-## प्रकाशित करना
+## Live App
 
-GitHub Pages को `main` branch के repository root से प्रकाशित करें। मुख्य वेब फाइलें:
+https://shreevidyamatabhuvanesvari-gif.github.io/swar-sadhika-android/
 
-- `index.html`
-- `styles.css`
-- `app.js`
-- `progress.json`
+## वर्तमान सुविधाएँ
 
-GitHub में **Settings → Pages** खोलकर पुष्टि करें कि Source `Deploy from a branch`, Branch `main` और Folder `/ (root)` है।
+- Sanskrit/Hindi पाठ लिखना और IndexedDB में सहेजना।
+- Browser/OS Speech Synthesis से voice preview।
+- स्थानीय Audio/Video file preview।
+- Media study और learning notes।
+- Local Library में सहेजी गई सामग्री देखना और हटाना।
+- प्रारम्भिक Avatar UI animation।
+- Module status panel।
+- PWA manifest और service-worker द्वारा app-shell caching।
 
-## प्रगति अपडेट
+## GitHub Pages सेटिंग
 
-`progress.json` में मॉड्यूल की स्थिति, परीक्षण परिवेश, timezone सहित समय और वास्तविक प्रमाण अपडेट करें। बिना प्रमाण किसी सुविधा को `PASS` न करें।
+Settings → Pages → Deploy from a branch → Branch `main` → Folder `/ (root)`।
 
-## संचालन
+## आवश्यक सीमा
 
-वेब पेज GitHub Pages URL से Chrome में खुलेगा। यह फिलहाल प्रगति डैशबोर्ड है; TTS, Audio/Video, Avatar और अन्य AI सुविधाएँ अलग से विकसित की जानी हैं।
+Voice Preview, प्रशिक्षित Neural Female TTS नहीं है। Avatar animation वास्तविक phoneme Lip-Sync नहीं है। Audio/Video file केवल device पर preview होती है; automatic singing-style learning उपलब्ध नहीं है। MP4 export और स्थानीय neural model inference अभी लागू नहीं हैं।
 
-## परियोजना सीमा
+## विकास अनुशासन
 
-इस repository में Android Native App, APK, Gradle या Play Store Build नहीं रखा जाएगा।
+किसी सुविधा को PASS तभी चिह्नित करें जब Android Chrome सहित लक्षित browser/device पर वास्तविक परीक्षण और समीक्षा योग्य प्रमाण उपलब्ध हो। इस परियोजना में Android APK, Gradle और Play Store Build शामिल नहीं हैं।
