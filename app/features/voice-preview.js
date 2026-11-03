@@ -32,7 +32,6 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
 
   const synth = window.speechSynthesis;
   let allVoices = [];
-  let selectedPath = null;
   let active = false;
 
   function currentMode() {
@@ -42,7 +41,6 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
   function refreshVoiceChoices() {
     const mode = currentMode();
     const resolution = resolveLanguageVoices(allVoices, mode.id);
-    selectedPath = resolution.path;
     const previous = select.value;
     select.replaceChildren();
 
@@ -52,18 +50,19 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
       speak.disabled = true;
       testButton.disabled = true;
     } else {
-      const defaultLabel = resolution.path === 'hindi-fallback'
+      const label = resolution.path === 'hindi-fallback'
         ? 'डिवाइस की हिंदी आवाज़ (ध्वनि-सहायक)'
         : 'डिवाइस की उपयुक्त आवाज़';
-      select.add(new Option(defaultLabel, ''));
-      resolution.voices.forEach((voice, index) => {
-        select.add(new Option(voice.name + ' · ' + voice.lang, String(index)));
-      });
+      select.add(new Option(label, ''));
+      resolution.voices.forEach((voice, index) =>
+        select.add(new Option(voice.name + ' · ' + voice.lang, String(index)))
+      );
       select.disabled = false;
       speak.disabled = false;
       testButton.disabled = false;
-      select.value = previous;
-      if (select.value !== previous) select.value = '';
+      if (previous !== '' && Number(previous) < resolution.voices.length) {
+        select.value = previous;
+      }
     }
 
     languageStatus.textContent = describeLanguagePath(mode.id, resolution.path) + ' ' + mode.hint;
@@ -133,9 +132,7 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
         : mode.id === 'vedic'
           ? 'वैदिक संस्कृत Preview चल रहा है। स्वर-चिह्नों का वास्तविक पाठ आवाज़ पर निर्भर करता है।'
           : 'चयनित भाषा की आवाज़ चल रही है।';
-      caption.textContent = isTest
-        ? 'उच्चारण जाँच: सर्वे'
-        : original;
+      caption.textContent = isTest ? 'उच्चारण जाँच: सर्वे' : original;
       updateControls();
     };
     utterance.onend = () => {
@@ -160,27 +157,18 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
     refreshVoiceChoices();
     status.textContent = 'भाषा मोड बदल गया। अब पाठ सुनें।';
   });
-
   select.addEventListener('change', () => {
     status.textContent = 'चयनित भाषा की आवाज़ तैयार है।';
   });
-
   speak.addEventListener('click', () => speakText(text.value));
   testButton.addEventListener('click', () => speakText('सर्वे', true));
-  pause.addEventListener('click', () => {
-    synth.pause();
-    updateControls();
-  });
-  resume.addEventListener('click', () => {
-    synth.resume();
-    updateControls();
-  });
+  pause.addEventListener('click', () => { synth.pause(); updateControls(); });
+  resume.addEventListener('click', () => { synth.resume(); updateControls(); });
   stop.addEventListener('click', () => {
     synth.cancel();
     finish();
     status.textContent = 'Preview रोक दिया गया।';
   });
-
   rate.addEventListener('input', () => {
     document.getElementById('rateValue').textContent = Number(rate.value).toFixed(2) + '×';
   });
@@ -188,11 +176,5 @@ export function initVoicePreview({ onSpeaking = () => {} } = {}) {
     document.getElementById('pitchValue').textContent = Number(pitch.value).toFixed(2);
   });
 
-  return {
-    stop() {
-      synth.cancel();
-      finish();
-    },
-    refreshVoices: loadVoices
-  };
+  return { stop() { synth.cancel(); finish(); }, refreshVoices: loadVoices };
 }

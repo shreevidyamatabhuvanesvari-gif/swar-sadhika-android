@@ -8,17 +8,14 @@ export function normalizeSanskritInput(value = '') {
     .replace(/\\r\\n/g, '\n')
     .replace(/\\n/g, '\n')
     .replace(/\\t/g, '\t')
-    .replace(/\\r/g, '\n')
+    .replace(/\r\n?/g, '\n')
     .normalize('NFC');
 }
 
 export function prepareSpeechText(sourceText, modeId, speechPath = 'native') {
   const text = normalizeSanskritInput(sourceText);
   if (modeId === 'hindi' || speechPath !== 'hindi-fallback') return text;
-
-  // Apply word-level phonetic safeguards only to fallback Hindi speech.
-  // Original Devanagari remains untouched in the editor and saved Library.
-  return text.replace(/[\\p{L}\\p{M}]+/gu, token =>
+  return text.replace(/[\p{L}\p{M}]+/gu, token =>
     SANSKRIT_PRONUNCIATION_LEXICON[token] || token
   );
 }
