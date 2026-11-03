@@ -1,73 +1,18 @@
-
-# ==========================================
-# Swar-Sadhika Android Project
-# ==========================================
-
-# Gradle generated files
-.gradle/
-.gradle-cache/
-.gradle-task-cache/
-.gradle-build/
-.gradle.kts/
-
-# Build output
-**/build/
-app/release/
-app/debug/
-out/
-
-# Kotlin generated caches
-.kotlin/
-
-# Android Studio local settings
-.idea/
-*.iml
-
-# Local Android SDK configuration
-local.properties
-
-# Android native build output
-.externalNativeBuild/
-.cxx/
-
-# Android generated packages and binaries
-*.apk
-*.aab
-*.ap_
-*.dex
-*.class
-*.hprof
-
-# Android captures and temporary output
-/captures/
-*.tmp
-*.temp
-
-# Signing keys and private credentials
-key.properties
-*.jks
-*.keystore
-*.p12
-*.pem
-*.key
+# Web development
+node_modules/
+dist/
+coverage/
 
 # Local environment secrets
 .env
 .env.*
 !.env.example
-
-# Service account credentials
 service-account*.json
-
-# JavaScript development dependencies
-node_modules/
-
-# Generated web build output
-dist/
-coverage/
 
 # Temporary and log files
 *.log
+*.tmp
+*.temp
 /tmp/
 
 # Operating system files
