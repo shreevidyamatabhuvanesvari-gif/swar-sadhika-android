@@ -1,24 +1,26 @@
-# Swar-Sadhika GitHub Pages Index Panel
+# Swar-Sadhika Web Index Panel
 
-This folder contains a **static web progress dashboard** for GitHub Pages. It is separate from the native Android Jetpack Compose Index Panel in the Android source project.
+यह repository GitHub Pages पर प्रकाशित होने वाला browser-based वेब पैनल है।
 
-## Publish
+## प्रकाशित करना
 
-Copy these files into the **root of the GitHub Pages publishing branch/folder**:
+GitHub Pages को `main` branch के repository root से प्रकाशित करें। मुख्य वेब फाइलें:
 
 - `index.html`
 - `styles.css`
 - `app.js`
 - `progress.json`
 
-`docs/DASHBOARD-PROGRESS.md` is a human-readable log and is not required by the website.
+GitHub में **Settings → Pages** खोलकर पुष्टि करें कि Source `Deploy from a branch`, Branch `main` और Folder `/ (root)` है।
 
-In GitHub, open **Settings → Pages** and confirm that Pages is publishing from the branch and folder where `index.html` is located. The dashboard URL must point to that published site.
+## प्रगति अपडेट
 
-## Update progress
+`progress.json` में मॉड्यूल की स्थिति, परीक्षण परिवेश, timezone सहित समय और वास्तविक प्रमाण अपडेट करें। बिना प्रमाण किसी सुविधा को `PASS` न करें।
 
-Edit `progress.json` and update the relevant module status, test environment, timestamp, evidence, and blocker. Do not mark a module `PASS` without actual test evidence.
+## संचालन
 
-## Important distinction
+वेब पेज GitHub Pages URL से Chrome में खुलेगा। यह फिलहाल प्रगति डैशबोर्ड है; TTS, Audio/Video, Avatar और अन्य AI सुविधाएँ अलग से विकसित की जानी हैं।
 
-GitHub Pages can host this HTML/CSS/JavaScript dashboard. It cannot run Kotlin/Jetpack Compose. The native Android Index Panel must be built and installed as an Android app separately.
+## परियोजना सीमा
+
+इस repository में Android Native App, APK, Gradle या Play Store Build नहीं रखा जाएगा।
