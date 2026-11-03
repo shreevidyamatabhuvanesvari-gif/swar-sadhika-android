@@ -1,23 +1,24 @@
 # Browser Language and Pronunciation Acceptance Tests
 
-## Language selector
-1. Exactly three options appear: वैदिक संस्कृत, सामान्य संस्कृत, हिंदी.
-2. Hindi mode lists only voices whose language tag starts with `hi`.
-3. Sanskrit modes prefer voices whose language tag starts with `sa`.
-4. If no Sanskrit voice is installed, the UI explicitly labels the Hindi fallback and does not call it Vedic/Sanskrit voice.
-5. Changing language stops queued speech and refreshes the compatible voice list.
+## User-facing language selector
+1. Exactly one language selector is visible.
+2. It contains exactly three entries: वैदिक संस्कृत, सामान्य संस्कृत, हिंदी.
+3. No separate voice selector or list of browser-installed languages is rendered.
+4. The browser voice is chosen automatically from the compatible language family.
+5. If Sanskrit voice is unavailable, Hindi fallback is clearly identified in the status text.
+6. Changing language stops queued speech and refreshes the automatic voice route.
 
 ## सर्वे pronunciation check
 1. Select सामान्य संस्कृत.
 2. Tap “सर्वे उच्चारण जाँचें”.
 3. If Sanskrit voice exists, hear its native reading.
-4. If only Hindi fallback exists, the TTS-only text is `सर्-वे`, while the displayed source remains `सर्वे`.
-5. Record the actual handset, Android/Chrome version, selected voice name, spoken result and an audio recording for review.
+4. If only Hindi fallback exists, the TTS-only text is `सर्-वे`, while displayed source remains `सर्वे`.
+5. Record handset, Android/Chrome version, automatically selected voice, spoken result and an audio recording for review.
 
 ## Vedic mode
-- Paste a source with authentic Vedic accent marks when available.
-- Confirm the text retains its marks.
+- Paste source with authentic Vedic accent marks where available.
+- Confirm the source retains those marks.
 - Do not treat normal Sanskrit TTS or Hindi fallback as verified Vedic recitation.
 
 ## PASS requirements
-Real target-device acoustic verification, timezone-aware timestamp, selected voice/language, test steps and audible evidence. Static source inspection does not prove pronunciation correctness.
+Real target-device acoustic verification, timezone-aware timestamp, automatically selected voice/language, test steps and audible evidence. Source inspection alone does not prove pronunciation correctness.
