@@ -93,7 +93,7 @@ test('install pre-caches the app shell and activates the new worker', async () =
   const shell = harness.entries.get(ACTIVE_CACHE);
   assert.ok(shell.has(`${APP_SCOPE}index.html?v=0.7.0`));
   assert.ok(shell.has(`${APP_SCOPE}progress.json`));
-  assert.ok(shell.has(`${APP_SCOPE}assets/user-avatar.webp`));
+  assert.ok(!shell.has(`${APP_SCOPE}assets/user-avatar.webp`));
 });
 
 test('activate removes only app-owned old caches and preserves unrelated apps', async () => {
