@@ -1,0 +1,55 @@
+name: Swar-Sadhika Quality Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Syntax, Service Worker and progress validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check JavaScript module syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            node --input-type=module --check < "$file"
+          done < <(find . -type f -name '*.js' \
+            -not -path './.git/*' \
+            -not -path './.github/*' -print0)
+
+      - name: Run Service Worker behavior tests
+        run: node --test tests/*.test.mjs
+
+      - name: Validate JSON files
+        run: |
+          python -m json.tool progress.json > /dev/null
+          python -m json.tool manifest.webmanifest > /dev/null
+
+      - name: Validate project progress record
+        run: python tools/validate_progress.py .
