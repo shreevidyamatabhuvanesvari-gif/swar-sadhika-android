@@ -2,9 +2,10 @@
 
 **Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
 **Current milestone:** Part 1 — File-wise Source Cleanup & Four-Index Implementation  
-**Status:** Source integration prepared; automated CI and Android Chrome acceptance must be reported separately.
+**Source integration commit:** `775de54df4e85189c18fcb15837652ae33e5e920`  
+**Automated test correction commit:** `3b867b11907a7b16ab2fadc62890142b1d90ace7`
 
-## Implemented in the current source change set
+## Implemented
 
 - Four primary Indexes and owned Sub-Module panels.
 - Navigation controller with active state and hash route.
@@ -19,6 +20,29 @@
 - PWA App Shell cache v9 includes new modules and uses app-specific cache cleanup.
 - Automated tests cover four-Index DOM contracts, Sub-Module mapping, unique IDs, static import resolution, parser/language behavior, schema declarations and Service Worker behavior.
 
+## Automated evidence
+
+| Check | Result | Evidence |
+|---|---|---|
+| JavaScript module syntax | PASS | Quality run 41709313457 |
+| Unit/DOM/import/Service Worker suite | PASS — 18/18 | Quality run 41709313457 |
+| JSON validation | PASS | Quality run 41709313457 |
+| Progress validator | PASS | Quality run 41709313457 |
+| GitHub Pages build/deployment | SUCCESS | Pages run 41709312249 |
+| Commit source tree | Verified | Commit 3b867b11907a7b16ab2fadc62890142b1d90ace7 |
+
+## Device acceptance still pending
+
+| Verification | Status | Why |
+|---|---|---|
+| Android Chrome four-Index runtime | UNVERIFIED | Requires target handset |
+| Existing IndexedDB v3 data migration | UNVERIFIED | Requires browser with pre-existing v3 user data |
+| Save/reopen/edit/restore on device | UNVERIFIED | Requires real IndexedDB browser test |
+| PWA install/reopen | UNVERIFIED | Requires target handset |
+| Offline PWA launch | UNVERIFIED | Requires online install followed by airplane-mode test |
+| Gallery media codecs | UNVERIFIED | Device/browser codec dependent |
+| Avatar photo persistence/removal | UNVERIFIED | Requires target handset |
+
 ## Explicitly not implemented by Part 1
 
 - Neural Female Voice model and local inference.
@@ -28,16 +52,4 @@
 - Body-language learning.
 - Timed captions and MP4 export.
 
-## Verification record
-
-| Verification | Status | Evidence |
-|---|---|---|
-| Source files committed | Pending current commit | To be filled after push |
-| JavaScript syntax and unit/integration tests | Pending current GitHub Actions run | To be filled after CI |
-| Progress JSON validator | Pending current GitHub Actions run | To be filled after CI |
-| Pages deployment | Pending current commit deployment | To be filled after Pages run |
-| Android Chrome runtime | UNVERIFIED | Requires target handset |
-| Existing IndexedDB v3 data migration | UNVERIFIED | Requires browser with existing v3 user data |
-| Offline PWA launch | UNVERIFIED | Requires target handset after successful online install |
-
-Do not change any verification status to PASS without the relevant run/device evidence.
+The Part 1 source and automated validation gates have passed. **Part 1 is not yet fully accepted as device-complete** until the Android Chrome and existing-data migration checks above are performed using [ANDROID-ACCEPTANCE.md](ANDROID-ACCEPTANCE.md).
