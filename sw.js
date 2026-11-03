@@ -2,7 +2,7 @@
 "use strict";
 
 const CACHE_PREFIX = "swar-sadhika-android-";
-const CACHE_NAME = `${CACHE_PREFIX}v7";
+const CACHE_NAME = `${CACHE_PREFIX}v7`;
 const LEGACY_CACHE_NAMES = new Set([
   "swar-sadhika-web-v5",
   "swar-sadhika-web-v6"
