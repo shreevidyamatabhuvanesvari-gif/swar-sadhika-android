@@ -1,0 +1,196 @@
+
+{
+  "schemaVersion": 1,
+  "buildLabel": "0.1.0-index-panel",
+  "lastUpdated": "3 नवंबर 2026 — Android Native Panel के लिए स्थानीय progress asset",
+  "lastTestNote": "यह स्थानीय प्रगति डेटा है। Android Gradle Build, वास्तविक फोन पर स्थापना और ऑडियो परीक्षण अभी प्रमाणित नहीं हैं।",
+  "features": [
+    {
+      "id": "index_panel",
+      "name": "Index Panel एवं Progress Dashboard",
+      "status": "IN_PROGRESS",
+      "progress": 35,
+      "summary": "Android Native Panel का प्रारम्भिक स्रोत और वेब प्रगति दृश्य तैयार; Android Build तथा डिवाइस परीक्षण बाकी।",
+      "testEnvironment": "Source review एवं GitHub Pages दृश्य; Android runtime नहीं",
+      "lastTestAt": null,
+      "evidence": "वेब पेज का static source तैयार; Android screenshot/test उपलब्ध नहीं",
+      "blocker": "Native Android Build और वास्तविक डिवाइस परीक्षण बाकी।"
+    },
+    {
+      "id": "android_launch",
+      "name": "Android App Launch",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "Android ऐप का पहला Launch परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "APK Build और डिवाइस स्थापना बाकी।"
+    },
+    {
+      "id": "local_model_loading",
+      "name": "Local TTS Model Loading",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "स्थानीय मॉडल चयन और लोडिंग सत्यापित नहीं।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "मॉडल स्रोत, लाइसेंस और मॉडल फाइलें जाँचनी हैं।"
+    },
+    {
+      "id": "hindi_female_tts",
+      "name": "Hindi Female TTS",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "वास्तविक स्त्री-स्वर ऑडियो अभी उत्पन्न और सुना नहीं गया।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "स्थानीय TTS एकीकरण बाकी।"
+    },
+    {
+      "id": "sanskrit_pronunciation",
+      "name": "Sanskrit Pronunciation",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "संस्कृत उच्चारण का ऑडियो परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "संस्कृत टेस्ट सेट और वास्तविक ऑडियो परीक्षण बाकी।"
+    },
+    {
+      "id": "chant_prosody",
+      "name": "Chant-style Prosody",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "लय, मात्रा, विराम और स्वर-उतार की जाँच बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "Prosody नियंत्रण और मॉडल एकीकरण बाकी।"
+    },
+    {
+      "id": "audio_generation_playback",
+      "name": "Audio Generation एवं Playback",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "वास्तविक ऑडियो बाइट्स, अवधि और Playback जाँचना बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "TTS इंजन एकीकरण बाकी।"
+    },
+    {
+      "id": "audio_save_share",
+      "name": "Audio Save एवं Share",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "ऑडियो सेव और साझा करने का परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "ऑडियो आउटपुट मॉड्यूल बाकी।"
+    },
+    {
+      "id": "video_import",
+      "name": "Video Import एवं Preview",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "सुरक्षित Android Photo Picker और Preview बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "वीडियो मॉड्यूल बाकी।"
+    },
+    {
+      "id": "caption_sync",
+      "name": "Caption Synchronization",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "ऑडियो के साथ टेक्स्ट और पंक्ति Highlight का परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "ऑडियो टाइमस्टैम्प और Caption renderer बाकी।"
+    },
+    {
+      "id": "video_full_duration",
+      "name": "पूरा पाठ समाप्त होने तक Video Playback",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "पूर्ण पाठ अवधि तक वीडियो Loop/Freeze परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "वीडियो टाइमलाइन मॉड्यूल बाकी।"
+    },
+    {
+      "id": "lip_sync",
+      "name": "Lip-sync",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "वास्तविक ऑडियो से Viseme alignment जाँचना बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "Avatar और phoneme/viseme pipeline चयन बाकी।"
+    },
+    {
+      "id": "body_language",
+      "name": "Body Language एवं Expressions",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "भाव, सिर और शरीर की गति का परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "Animated Avatar और gesture timeline बाकी।"
+    },
+    {
+      "id": "mp4_export",
+      "name": "MP4 Export",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "अंतिम MP4 फाइल और Playback जाँचना बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "स्थानीय video composition pipeline बाकी।"
+    },
+    {
+      "id": "offline_operation",
+      "name": "Offline Operation",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "मॉडल उपलब्ध होने के बाद airplane-mode परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "स्थानीय मॉडल एकीकरण बाकी।"
+    },
+    {
+      "id": "privacy_permissions",
+      "name": "Privacy एवं Permissions",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "न्यूनतम Permissions और स्थानीय डेटा व्यवहार की जाँच बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "Permission audit बाकी।"
+    },
+    {
+      "id": "android_build_install",
+      "name": "Android Build एवं Installation",
+      "status": "NOT_STARTED",
+      "progress": 0,
+      "summary": "Signed APK और वास्तविक फोन पर Installation परीक्षण बाकी।",
+      "testEnvironment": "",
+      "lastTestAt": null,
+      "evidence": null,
+      "blocker": "Android SDK/Gradle Build और Signing Configuration बाकी।"
+    }
+  ]
+}
