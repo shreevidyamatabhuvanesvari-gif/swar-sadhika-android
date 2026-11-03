@@ -1,32 +1,50 @@
-# Swar-Sadhika Web App
+# Swar-Sadhika — Browser Chant Studio
 
-Swar-Sadhika अब केवल browser-based वेब परियोजना है। इसका संचालन GitHub Pages लिंक से Android Chrome या अन्य आधुनिक ब्राउज़र में किया जाएगा।
+Live: https://shreevidyamatabhuvanesvari-gif.github.io/swar-sadhika-android/
 
-## Live site
+यह GitHub Pages पर चलने वाला browser-first व्यक्तिगत Sanskrit text एवं chant workspace है। Android APK, Gradle और Play Store इस परियोजना के दायरे में नहीं हैं।
 
-https://shreevidyamatabhuvanesvari-gif.github.io/swar-sadhika-android/
+## अभी उपलब्ध ब्राउज़र सुविधाएँ
+- Index Panel के पाँच अनुभाग: पाठ एवं स्वर, Audio/Video, Library, Avatar Preview और Engine Status।
+- Sanskrit/Hindi पाठ संपादित करना और IndexedDB में सुरक्षित रखना।
+- Browser Speech Synthesis से डिवाइस-आधारित voice preview; यह प्रशिक्षित Female Neural TTS मॉडल नहीं है।
+- उपयोगकर्ता द्वारा चुनी गई Audio/Video फाइल का local preview; फाइल सर्वर पर upload नहीं होती।
+- Media study notes और learning notes को IndexedDB में सुरक्षित रखना।
+- सीमित UI avatar mouth animation; phoneme synchronization नहीं।
+- PWA manifest और service-worker shell caching का प्रारम्भिक ढाँचा।
 
-## Repository
+## अभी उपलब्ध नहीं
+- स्थानीय neural female TTS model / inference
+- संस्कृत के लिए प्रमाणित phoneme और chant prosody engine
+- स्वतः audio/video से singing-style learning
+- word/phoneme aligned captions
+- वास्तविक photo avatar और phoneme-synchronized lip-sync
+- body-language learning
+- MP4 export
+- मॉडल-आधारित पूर्ण offline generation
 
-https://github.com/shreevidyamatabhuvanesvari-gif/swar-sadhika-android
+## तकनीकी संरचना
+- `index.html`: browser app entry
+- `styles.css`: responsive UI
+- `app.js`: ES module bootstrap
+- `app/main.js`: module wiring and navigation
+- `app/core/storage.js`: IndexedDB wrapper
+- `app/core/status-board.js`: progress registry view
+- `app/features/`: text, voice preview, media, library and avatar modules
+- `progress.json`: project status, not runtime AI model
+- `manifest.webmanifest`, `sw.js`: installable/offline shell scaffolding
 
-## Current web entry points
+## Data and privacy
+Text and notes are stored in this browser's IndexedDB. Clearing browser site data may erase them. Selected media files are previewed via temporary object URLs and are not uploaded. Do not store sensitive material on a shared device.
 
-- `index.html` — GitHub Pages का मुख्य पेज
-- `styles.css` — मोबाइल-अनुकूल वेब UI
-- `app.js` — Progress Panel का browser JavaScript
-- `progress.json` — मॉड्यूल की स्थिति और परीक्षण रिकॉर्ड
+## Deploy
+GitHub Pages should publish the repository root from `main`. Open the Live URL in Chrome. Service-worker/offline behavior requires HTTPS and may take one reload after first visit.
 
-## उद्देश्य
+## Next engineering milestones
+1. Select a permissively licensed browser-compatible TTS model and verify Hindi/Sanskrit coverage, model size and Android Chrome inference.
+2. Integrate local inference and prove audible audio output on target mobile devices.
+3. Add phoneme/viseme timing and real caption synchronization.
+4. Implement real avatar rendering, body motion and media export.
+5. Add backup/export/import for IndexedDB content and perform offline/privacy tests.
 
-ब्राउज़र में संस्कृत/Hindi पाठ, स्थानीय स्त्री-स्वर TTS, Chant Prosody, Audio/Video, captions, Avatar Lip-Sync और offline संचालन की सुविधाएँ क्रमशः विकसित करना।
-
-**वर्तमान सीमा:** प्रकाशित साइट अभी मुख्यतः प्रगति डैशबोर्ड है। वास्तविक TTS, गायन, वीडियो, Lip-Sync और MP4 export सुविधाएँ अभी विकसित/प्रमाणित नहीं हैं।
-
-## विकास नियम
-
-- Android APK, Gradle, Android Studio या Play Store Build इस परियोजना का हिस्सा नहीं हैं।
-- मुख्य संचालन GitHub Pages और Chrome में रहेगा।
-- पहले browser में वास्तविक TTS inference और सुनाई देने वाला audio output प्रमाणित किया जाएगा।
-- किसी सुविधा को वास्तविक परीक्षण और साक्ष्य के बिना PASS नहीं दिखाया जाएगा।
-- बाहरी Paid AI API या अलग server पर निर्भरता प्राथमिक समाधान नहीं होगी।
+A module must not be marked PASS without a real browser/device test and reviewable evidence.

@@ -1,34 +1,20 @@
-# Swar-Sadhika Web App — Project Status
+# Swar-Sadhika Web App — Implementation Status
 
-**प्रकाशन:** GitHub Pages  
-**मुख्य URL:** https://shreevidyamatabhuvanesvari-gif.github.io/swar-sadhika-android/  
-**संचालन:** Android Chrome सहित आधुनिक browser
+## Browser foundation added
+The repository now contains a modular browser workspace with text editing, device speech preview, local media preview, IndexedDB notes/library, module status panel, PWA manifest and service-worker shell caching.
 
-## स्वीकृत दायरा
+## Important capability boundaries
+- Speech output currently uses the browser/OS Speech Synthesis API. It is not a trained female neural voice and cannot guarantee Sanskrit pronunciation.
+- Media selection only previews a local file; it does not learn singing style automatically.
+- Avatar is an illustrative CSS animation, not a photo avatar or phoneme-synchronized lip-sync.
+- PWA cache covers the app shell only. It does not cache a TTS model or provide offline neural inference.
+- MP4 export is not implemented.
 
-यह परियोजना browser-based web app है। Android Native source, APK, Gradle build और Play Store वितरण इसके दायरे में नहीं हैं।
+## Next milestones
+1. Verify the app in Android Chrome and resolve any runtime/browser issues.
+2. Select and license-audit a local TTS model with Hindi/Sanskrit suitability.
+3. Integrate a browser-compatible inference runtime and test on the target phone.
+4. Implement chant prosody and phoneme/viseme timing.
+5. Add real avatar animation, captions, export and backup/restore.
 
-## वर्तमान वेब फाइलें
-
-- `index.html` — वेब प्रवेश पृष्ठ
-- `styles.css` — responsive UI
-- `app.js` — progress dashboard व्यवहार
-- `progress.json` — 15 browser-oriented मॉड्यूल का status data
-- `tools/validate_progress.py` — progress JSON की read-only जाँच
-
-## वास्तविक वर्तमान स्थिति
-
-GitHub Pages का प्रगति डैशबोर्ड उपलब्ध है। यह अभी पूर्ण chant studio नहीं है। वर्तमान स्रोत में वास्तविक स्थानीय Hindi female TTS model/inference, Sanskrit chant prosody, audio generation, video import, synchronized captions, Avatar lip-sync, body-language engine और MP4 export लागू/प्रमाणित नहीं हैं।
-
-## आगे की प्राथमिकता
-
-1. Chrome में प्रकाशित वेब पैनल की कार्यक्षमता और मोबाइल layout जाँचना।
-2. Browser में चल सकने वाले स्थानीय TTS मॉडल, उसके लाइसेंस, आकार और WebAssembly/WebGPU compatibility का आकलन।
-3. वास्तविक स्थानीय inference और सुनाई देने वाला audio output लागू करके परीक्षण करना।
-4. संस्कृत उच्चारण और chant prosody विकसित करना।
-5. Audio/Video, captions, lip-sync, body language और MP4 export क्रमशः जोड़ना।
-6. Offline operation और browser privacy की जाँच करना।
-
-## सफलता का नियम
-
-किसी सुविधा को PASS तभी माना जाएगा जब वास्तविक browser/device परीक्षण, वातावरण, timezone सहित समय और समीक्षा योग्य प्रमाण दर्ज हों। केवल UI, स्थिर JSON या source code मौजूद होना सफलता का प्रमाण नहीं है।
+Do not mark any capability PASS without device-level evidence.
