@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f5f1">
-  <meta name="description" content="Swar-Sadhika निर्माण प्रगति एवं परीक्षण पैनल">
-  <title>Swar-Sadhika | Index Panel</title>
+  <meta name="description" content="Swar-Sadhika Web App निर्माण प्रगति एवं परीक्षण पैनल">
+  <title>Swar-Sadhika | Web Index Panel</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./app.js" defer></script>
 </head>
@@ -14,15 +14,15 @@
     <header class="hero">
       <div class="brand-mark" aria-hidden="true">स्व</div>
       <div class="hero-copy">
-        <p class="eyebrow">SWAR-SADHIKA · ANDROID PROJECT</p>
-        <h1>निर्माण एवं परीक्षण पैनल</h1>
-        <p class="subhead">ऐप की वास्तविक प्रगति, मॉड्यूल और परीक्षण स्थिति</p>
+        <p class="eyebrow">SWAR-SADHIKA · WEB APP</p>
+        <h1>वेब ऐप — निर्माण एवं परीक्षण पैनल</h1>
+        <p class="subhead">GitHub Pages से Chrome में संचालित होने वाली परियोजना की स्थिति</p>
       </div>
       <button id="refreshButton" class="refresh-button" type="button" aria-label="प्रगति ताज़ा करें">↻ <span>ताज़ा करें</span></button>
     </header>
 
     <section class="notice" aria-live="polite">
-      <strong>ध्यान दें:</strong> यह GitHub Pages पर दिखने वाला प्रगति डैशबोर्ड है। यह स्वयं Android ऐप या APK नहीं है। Android ऐप के अंदर अलग Native Index Panel भी बनाया जा रहा है।
+      <strong>परियोजना का स्वरूप:</strong> यह GitHub Pages पर चलने वाला browser-based वेब पैनल है। वास्तविक TTS, संस्कृत गायन, Audio/Video और Avatar सुविधाएँ अलग-अलग विकसित और परीक्षण की जाएँगी।
     </section>
 
     <section class="overview-grid" aria-label="समग्र स्थिति">
@@ -34,8 +34,8 @@
       </article>
       <article class="overview-card">
         <span class="metric-label">कुल मॉड्यूल</span>
-        <div class="metric-number" id="totalCount">17</div>
-        <p class="muted">निर्धारित सुविधाएँ</p>
+        <div class="metric-number" id="totalCount">15</div>
+        <p class="muted">निर्धारित वेब सुविधाएँ</p>
       </article>
       <article class="overview-card">
         <span class="metric-label">PASS</span>
@@ -44,7 +44,7 @@
       </article>
       <article class="overview-card">
         <span class="metric-label">जारी / शेष</span>
-        <div class="metric-number" id="remainingCount">17</div>
+        <div class="metric-number" id="remainingCount">15</div>
         <p class="muted">काम या परीक्षण बाकी</p>
       </article>
     </section>
@@ -52,19 +52,19 @@
     <section class="info-grid">
       <article class="info-card">
         <h2>वर्तमान निर्माण</h2>
-        <p><span class="muted">Build:</span> <strong id="buildLabel">0.1.0-index-panel</strong></p>
-        <p><span class="muted">अंतिम अपडेट:</span> <span id="lastUpdated">प्रारम्भिक स्रोत</span></p>
+        <p><span class="muted">Build:</span> <strong id="buildLabel">0.2.0-web-index-panel</strong></p>
+        <p><span class="muted">अंतिम अपडेट:</span> <span id="lastUpdated">प्रारम्भिक वेब संस्करण</span></p>
       </article>
       <article class="info-card">
         <h2>अंतिम परीक्षण</h2>
-        <p id="lastTestNote">Android SDK, Gradle और वास्तविक Android डिवाइस पर परीक्षण अभी दर्ज नहीं है।</p>
+        <p id="lastTestNote">Browser में वास्तविक TTS और Media सुविधाओं का परीक्षण अभी बाकी है।</p>
       </article>
     </section>
 
     <section class="modules-section">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">LIVE PROJECT CHECKLIST</p>
+          <p class="eyebrow">WEB PROJECT CHECKLIST</p>
           <h2>मॉड्यूल की स्थिति</h2>
         </div>
         <label class="filter-label" for="statusFilter">स्थिति फ़िल्टर
