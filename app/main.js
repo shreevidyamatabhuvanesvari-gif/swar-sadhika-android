@@ -5,6 +5,8 @@ import { avatarIndex } from "./indexes/index-4-avatar-video.js?v=20261104-langua
 import { renderIndex } from "./indexes/shared.js?v=20261104-language-three-v3";
 import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js?v=20261104-language-three-v3";
 import { populateLanguageSelect, speakText, stopSpeech } from "./core/speech.js?v=20261104-language-three-v3";
+import { createCoordinatedEnginesPart2 } from "./engines/synchronization/chant-session-controller-part2.js?v=20261104-engines-part2-v1";
+import { createSvaraFemaleSpeechEnginePart2 } from "./engines/singing/female-voice-engine-part2.js?v=20261104-svara-female-part2-v1";
 
 const indexes = [workspaceIndex, voiceIndex, learningIndex, avatarIndex];
 const root = document.getElementById("index-root");
@@ -13,6 +15,17 @@ let activeIndex = "workspace";
 const activeModules = Object.fromEntries(indexes.map(item => [item.id, item.modules[0].id]));
 let currentObjectUrls = [];
 let avatarPlaybackActive = false;
+const coordinatedEnginesPart2 = createCoordinatedEnginesPart2();
+const svaraFemaleSpeechPart2 = createSvaraFemaleSpeechEnginePart2();
+let svaraFemaleAudioUrlPart2 = null;
+window.swarSadhikaEnginesPart2 = Object.freeze({
+  getStatus: coordinatedEnginesPart2.getStatus,
+  registerSingingProvider: coordinatedEnginesPart2.registerSingingProvider,
+  registerAvatarRenderer: coordinatedEnginesPart2.registerAvatarRenderer,
+  play: coordinatedEnginesPart2.play,
+  stop: coordinatedEnginesPart2.stop
+});
+window.swarSadhikaSpeechPart2 = Object.freeze({ getStatus: svaraFemaleSpeechPart2.getStatus, loadModel: svaraFemaleSpeechPart2.loadModel, generate: svaraFemaleSpeechPart2.generate, unload: svaraFemaleSpeechPart2.unload });
 
 function notify(message) {
   toast.textContent = message;
@@ -228,6 +241,52 @@ async function loadLatestSavedText() {
   if (status) status.textContent = "Text Studio का सबसे नया सुरक्षित पाठ लोड हुआ।";
 }
 
+async function playCoordinatedAvatarPart2(text, stage, video, status) {
+  stopSpeech();
+  avatarPlaybackActive = true;
+  const fullscreenPromise = typeof stage.requestFullscreen === "function"
+    ? stage.requestFullscreen({ navigationUI: "hide" }).then(() => true).catch(() => false)
+    : Promise.resolve(false);
+  const videoPromise = video && !video.hidden
+    ? video.play().then(() => true).catch(() => false)
+    : Promise.resolve(true);
+  const fullscreenOk = await fullscreenPromise;
+  if (fullscreenOk) stage.classList.add("is-playing");
+  else if (status) status.textContent = "Fullscreen अनुमति उपलब्ध नहीं हुई; समन्वित Audio 9:16 Stage में चलेगा।";
+  const videoOk = await videoPromise;
+  if (!videoOk && status) status.textContent = "Video Clip चल नहीं सकी; Generated Audio जारी रहेगा।";
+  try {
+    await coordinatedEnginesPart2.play(text, {
+      languageMode: document.getElementById("avatar-language-select")?.value || "sanskrit",
+      stage,
+      onStatus: detail => {
+        if (!status) return;
+        if (detail.state === "GENERATING_AUDIO") status.textContent = "स्थानीय Singing Provider से Audio तैयार हो रहा है…";
+        else if (detail.state === "AUDIO_READY") status.textContent = detail.hasPhonemeAlignment
+          ? "Audio तैयार है; Phoneme/Viseme Timeline उपलब्ध है। Renderer की वास्तविक Rig गुणवत्ता अलग से सत्यापित होगी।"
+          : "Audio तैयार है; इस Output में Phoneme Alignment उपलब्ध नहीं है, इसलिए Lip-Sync निष्क्रिय है।";
+        else if (detail.state === "PLAYING") status.textContent = detail.viseme && detail.viseme !== "rest"
+          ? "Generated Audio चल रहा है · Viseme: " + detail.viseme
+          : "Generated Audio चल रहा है।";
+        else if (detail.state === "COMPLETED") status.textContent = "Generated Audio पूरा हुआ।";
+        else if (detail.state === "ERROR") status.textContent = "Engine Error: " + detail.message;
+      }
+    });
+  } catch (error) {
+    if (status) status.textContent = "Coordinated Engine Playback विफल: " + error.message;
+  } finally {
+    avatarPlaybackActive = false;
+    stage.classList.remove("is-playing");
+    if (video && !video.hidden) {
+      video.pause();
+      try { video.currentTime = 0; } catch {}
+    }
+    if (document.fullscreenElement === stage) {
+      try { await document.exitFullscreen(); } catch {}
+    }
+  }
+}
+
 async function playAvatarFullscreen() {
   const text = document.getElementById("avatar-chant-text")?.value.trim();
   const stage = document.getElementById("avatar-stage");
@@ -260,7 +319,7 @@ async function playAvatarFullscreen() {
   }
   const videoOk = await videoPromise;
   if (!videoOk && status) status.textContent = "Video Codec/Playback उपलब्ध नहीं हुआ; आवाज़ जारी रहेगी। MP4 या WebM Clip आज़माएँ।";
-  if (status && videoOk) status.textContent = "पाठ चल रहा है। Video Clip बिना रुके Loop होगी और पाठ पूरा होने पर रुकेगी।";
+  if (status && videoOk) status.textContent = "Device Speech TTS Preview चल रहा है। यह neural singing model नहीं है और phoneme-synchronized Lip-Sync उपलब्ध नहीं है।";
   try {
     await speechPromise;
     if (status) status.textContent = "पाठ पूरा हुआ। Video Clip रोक दी गई।";
@@ -283,6 +342,7 @@ function stopAvatarPlayback(message = "Playback रोक दिया गया
   if (!avatarPlaybackActive) return;
   avatarPlaybackActive = false;
   stopSpeech();
+  coordinatedEnginesPart2.stop("Avatar playback stopped by user");
   const stage = document.getElementById("avatar-stage");
   const video = document.getElementById("avatar-stage-video");
   if (stage) stage.classList.remove("is-playing");
@@ -457,6 +517,82 @@ async function saveAvatarVideo() {
   notify("Avatar Video Clip सुरक्षित हुई।");
 }
 
+async function loadSvaraFemaleModelPart2() {
+  const status = document.getElementById("svara-female-status");
+  if (!status) return;
+  try {
+    status.textContent = "WebGPU और स्थानीय Storage की जाँच हो रही है…";
+    const storage = await navigator.storage?.estimate?.();
+    if (storage && Number.isFinite(storage.quota) && Number.isFinite(storage.usage)) {
+      const free = Math.max(0, storage.quota - storage.usage);
+      const required = 2.2 * 1024 * 1024 * 1024;
+      if (free < required) {
+        status.textContent = "स्थानीय Storage अपर्याप्त है। उपलब्ध अनुमानित खाली स्थान " + (free / 1073741824).toFixed(2) + " GB है; लगभग 2.2 GB खाली स्थान चाहिए।";
+        return;
+      }
+    }
+    let persistence = null;
+    try { persistence = await navigator.storage?.persist?.(); } catch {}
+    await svaraFemaleSpeechPart2.loadModel({
+      onStatus: detail => {
+        if (detail.state === "CHECKING_WEBGPU") status.textContent = "WebGPU जाँचा जा रहा है…";
+        else if (detail.state === "LOADING_MODEL") status.textContent = "Svāra q4f16 मॉडल और SNAC Codec डाउनलोड/लोड हो रहे हैं (~1.95 GB + Codec)। इस प्रक्रिया में पर्याप्त खाली Storage और WebGPU आवश्यक हैं…";
+        else if (detail.state === "MODEL_READY") status.textContent = "Svāra Female Speech Model लोड हुआ। Browser Storage Persistent: " + (persistence === true ? "हाँ" : "अप्रमाणित/अनुमति नहीं मिली") + "। यह Speech TTS है, Musical Singing नहीं।";
+        else if (detail.state === "ERROR") status.textContent = "Model Load विफल: " + detail.message;
+      }
+    });
+    status.textContent = "Svāra Female Speech Model तैयार है। Sanskrit/Hindi Female Speech TTS उपलब्ध है; वैदिक स्वराघात और संगीतात्मक गायन इसमें शामिल नहीं हैं।";
+  } catch (error) {
+    status.textContent = "Svāra Model Load विफल: " + error.message;
+  }
+}
+
+async function generateSvaraFemaleSpeechPart2() {
+  const input = document.getElementById("voice-preview-text");
+  const languageMode = document.getElementById("tts-language-select")?.value || "sanskrit";
+  const status = document.getElementById("svara-female-status");
+  const audio = document.getElementById("svara-female-audio");
+  const download = document.getElementById("svara-female-download");
+  const text = input?.value.trim();
+  if (!text) return notify("Svāra Speech के लिए पाठ लिखें।");
+  if (!audio || !status) return;
+  try {
+    status.textContent = "Svāra स्थानीय Female Speech Audio तैयार कर रहा है…";
+    const result = await svaraFemaleSpeechPart2.generate(text, {
+      languageMode,
+      onStatus: detail => {
+        if (detail.state === "GENERATING") status.textContent = "स्थानीय WebGPU Inference चल रहा है…";
+        if (detail.state === "ERROR") status.textContent = "Inference विफल: " + detail.message;
+      }
+    });
+    if (svaraFemaleAudioUrlPart2) URL.revokeObjectURL(svaraFemaleAudioUrlPart2);
+    svaraFemaleAudioUrlPart2 = URL.createObjectURL(result.audio);
+    audio.src = svaraFemaleAudioUrlPart2;
+    audio.hidden = false;
+    audio.load();
+    if (download) {
+      download.href = svaraFemaleAudioUrlPart2;
+      download.download = "swar-sadhika-svara-female-speech.wav";
+      download.hidden = false;
+    }
+    status.textContent = "Female Speech WAV तैयार है · " + result.voice + " · " + (result.sampleRate / 1000) + " kHz · " + (result.audio.size / 1024).toFixed(1) + " KB। यह Speech/Recitation है, Singing या Vedic Accent Output नहीं।";
+  } catch (error) {
+    status.textContent = "Svāra Inference विफल: " + error.message;
+  }
+}
+
+function unloadSvaraFemaleModelPart2() {
+  svaraFemaleSpeechPart2.unload();
+  const audio = document.getElementById("svara-female-audio");
+  const download = document.getElementById("svara-female-download");
+  if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); audio.hidden = true; }
+  if (download) download.hidden = true;
+  if (svaraFemaleAudioUrlPart2) URL.revokeObjectURL(svaraFemaleAudioUrlPart2);
+  svaraFemaleAudioUrlPart2 = null;
+  const status = document.getElementById("svara-female-status");
+  if (status) status.textContent = "Worker बंद किया गया और GPU/Worker memory release के लिए process terminate किया गया। Downloaded model cache को browser storage में रहने दिया गया।";
+}
+
 async function speakVoicePreview() {
   const text = document.getElementById("voice-preview-text")?.value.trim();
   const status = document.getElementById("voice-preview-status");
@@ -538,6 +674,9 @@ async function handleAction(action, button) {
     case "save-learning": await saveSimpleRecord("learning","brain-entry-title","brain-entry-body","brain-status"); break;
     case "load-youtube": await loadYoutube(); break;
     case "clear-youtube": document.getElementById("youtube-frame-wrap").textContent = "YouTube अध्ययन Player यहाँ खुलेगा।"; document.getElementById("youtube-status").textContent = "Player साफ किया गया।"; if (document.getElementById("youtube-external-link")) document.getElementById("youtube-external-link").hidden = true; break;
+    case "load-svara-female-model": await loadSvaraFemaleModelPart2(); break;
+    case "generate-svara-female": await generateSvaraFemaleSpeechPart2(); break;
+    case "unload-svara-female-model": unloadSvaraFemaleModelPart2(); break;
     case "speak-voice-preview": await speakVoicePreview(); break;
     case "speak-recitation": await speakRecitation(); break;
     case "stop-voice-preview": stopSpeech(); document.getElementById("voice-preview-status").textContent = "Voice Preview रोक दिया गया।"; break;
