@@ -1,187 +1,456 @@
-/* Swar-Sadhika Android — main bootstrap.
-   Button behavior belongs in one module per button:
-   assets/js/buttons/button-<id>.js
-   assets/js/buttons/action-<action>.js
-   assets/js/buttons/route-<route>.js
-   Each button module exports onClick({ event, button, app }).
-   Form controls use assets/js/controls/control-<id>.js and export onChange/onInput.
-   This file contains only startup, module discovery, and module dispatch. */
+/* Swar-Sadhika Android — main application controller.
+ * Page-level navigation modules are separate files:
+ *   assets/js/pages/page-tts.js
+ *   assets/js/pages/page-nano-server.js
+ *   assets/js/pages/page-avatar.js
+ *   assets/js/pages/page-nano-brain.js
+ *   assets/js/pages/page-file-check.js
+ *
+ * This file handles the shared index panel and its remaining controls:
+ * local media selection, gallery selection/removal, and fullscreen.
+ * TTS, avatar-page, diagnostics-page and Nano page logic belong to their
+ * respective page modules; they are intentionally not implemented here.
+ */
 (() => {
   "use strict";
 
-  const APP_VERSION = "2.1.0";
-  const BUTTON_MODULE_BASE = "./assets/js/buttons/";
-  const CONTROL_MODULE_BASE = "./assets/js/controls/";
-  const PAGE_REGISTRY_URL = "./modules/registry.json";
-  const bindings = new WeakMap();
-  const bindingRecords = new Set();
-  const moduleCache = new Map();
-  const sharedState = new Map();
+  const APP_VERSION = "2.2.0";
+  const PAGE_BASE = "./assets/js/pages/";
+  const PAGE_MODULES = Object.freeze({
+    "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
+    "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
+    "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" },
+    "nano-brain": { id: "nano-brain", file: "page-nano-brain.js", root: "view-nano-brain", view: "view-nano-brain" },
+    "diagnostics": { id: "file-check", file: "page-file-check.js", root: "view-diagnostics", view: "view-diagnostics" }
+  });
 
-  const pageRegistry = { loaded: false, error: "", entries: new Map() };
+  const views = Object.freeze({
+    "index": "view-index",
+    "nano-server": "view-nano-server",
+    "avatar": "view-avatar",
+    "nano-brain": "view-nano-brain",
+    "diagnostics": "view-diagnostics"
+  });
 
-  function isSafeModuleKey(value) {
-    return typeof value === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(value);
+  const state = {
+    media: [],
+    activeMediaId: null,
+    mediaSequence: 0,
+    activePage: null,
+    pageInstances: new Map(),
+    pagePromises: new Map(),
+    registry: { loaded: false, error: "", entries: new Map() },
+    shared: new Map()
+  };
+
+  function byId(id) {
+    return document.getElementById(id);
   }
 
-  function moduleKeyFromButton(button) {
-    const custom = button.dataset.buttonModule;
-    if (custom) return isSafeModuleKey(custom) ? custom : null;
-    if (button.dataset.action) {
-      const action = button.dataset.action;
-      return isSafeModuleKey(action) ? "action-" + action : null;
+  function setText(id, value) {
+    const node = byId(id);
+    if (node) node.textContent = String(value);
+  }
+
+  function setHidden(id, hidden) {
+    const node = byId(id);
+    if (node) node.classList.toggle("hidden", Boolean(hidden));
+  }
+
+  function setCurrentNavigation(key) {
+    document.querySelectorAll(".nav button").forEach(button => {
+      const isCurrent = button.dataset.route === key ||
+        (key === "tts" && button.dataset.action === "jump-text");
+      if (isCurrent) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+  }
+
+  function showView(viewId) {
+    const target = byId(viewId);
+    if (!target) return false;
+    document.querySelectorAll("main > .view").forEach(view => {
+      view.hidden = view !== target;
+    });
+    return true;
+  }
+
+  function pageStatusTarget(page) {
+    if (page.id === "tts") return byId("tts-status");
+    if (page.id === "avatar") return byId("avatar-status");
+    if (page.id === "file-check") return byId("registry-status");
+    const root = byId(page.root);
+    return root ? root.querySelector(".status") : null;
+  }
+
+  function showPageModulePending(page, error) {
+    const target = pageStatusTarget(page);
+    const message = "इस पेज की स्वतंत्र JavaScript फ़ाइल अभी उपलब्ध नहीं है: " + page.file +
+      (error ? " (" + error + ")" : "");
+    if (target) {
+      target.classList.add("warn");
+      target.textContent = message;
     }
-    if (button.dataset.route) {
-      const route = button.dataset.route;
-      return isSafeModuleKey(route) ? "route-" + route : null;
-    }
-    if (button.dataset.mediaId || button.classList.contains("gallery-item")) return "gallery-item";
-    if (button.id) return isSafeModuleKey(button.id) ? "button-" + button.id : null;
-    return null;
-  }
-
-  function moduleKeyFromControl(control) {
-    const custom = control.dataset.controlModule;
-    if (custom) return isSafeModuleKey(custom) ? custom : null;
-    if (control.id) return isSafeModuleKey(control.id) ? "control-" + control.id : null;
-    return null;
-  }
-
-  function reportModuleError(element, message) {
-    element.dataset.moduleState = "unavailable";
-    element.setAttribute("aria-description", "इस नियंत्रण की अलग JavaScript मॉड्यूल फ़ाइल अभी उपलब्ध नहीं है।");
     console.warn("[Swar-Sadhika] " + message);
   }
 
-  function reportHandlerError(message, error) {
-    console.error("[Swar-Sadhika] " + message, error);
-    app.emit("handler:error", { message, error });
-  }
-
-  function invoke(handler, context, label) {
-    try {
-      const result = handler(context);
-      if (result && typeof result.then === "function") {
-        result.catch(error => reportHandlerError(label + " module failed", error));
-      }
-    } catch (error) {
-      reportHandlerError(label + " module failed", error);
-    }
-  }
-
-  function moduleUrl(base, key) {
-    if (!isSafeModuleKey(key)) throw new TypeError("अमान्य मॉड्यूल नाम।");
-    return new URL(base + key + ".js", document.baseURI).href;
-  }
-
-  function importOnce(url) {
-    if (!moduleCache.has(url)) {
-      moduleCache.set(url, import(url).catch(error => {
-        moduleCache.delete(url);
-        throw error;
-      }));
-    }
-    return moduleCache.get(url);
-  }
-
-  function createContext(element, event, kind) {
+  function createPageContext(page, root) {
     return Object.freeze({
       app,
-      root: document,
-      element,
-      button: kind === "button" ? element : null,
-      control: kind === "control" ? element : null,
-      event: event || null,
-      kind
+      page,
+      root,
+      document,
+      navigate,
+      emit: app.emit,
+      on: app.on,
+      state: app.state
     });
   }
 
-  async function bindButton(button) {
-    if (bindings.has(button)) return;
-    const key = moduleKeyFromButton(button);
-    if (!key) return;
-
-    const record = { element: button, kind: "button", key, module: null, error: null, promise: null };
-    bindings.set(button, record);
-    bindingRecords.add(record);
-
-    button.addEventListener("click", event => {
-      if (!record.module || typeof record.module.onClick !== "function") {
-        event.preventDefault();
-        if (record.error) reportModuleError(button, "Button module \"" + key + "\" लोड नहीं हुआ।");
-        return;
+  async function unmountActivePage() {
+    const active = state.activePage;
+    if (!active) return;
+    state.activePage = null;
+    const instance = state.pageInstances.get(active.id);
+    if (instance && typeof instance.unmount === "function") {
+      try {
+        await instance.unmount();
+      } catch (error) {
+        console.error("[Swar-Sadhika] Page cleanup failed: " + active.id, error);
       }
-      invoke(record.module.onClick, createContext(button, event, "button"), key);
+    }
+  }
+
+  async function loadPageModule(page) {
+    const root = byId(page.root);
+    if (!root) {
+      showPageModulePending(page, "HTML page container नहीं मिला");
+      return;
+    }
+
+    const cachedInstance = state.pageInstances.get(page.id);
+    if (cachedInstance) {
+      state.activePage = page;
+      if (typeof cachedInstance.onShow === "function") {
+        try {
+          await cachedInstance.onShow(createPageContext(page, root));
+        } catch (error) {
+          showPageModulePending(page, error.message);
+        }
+      }
+      return;
+    }
+
+    if (state.pagePromises.has(page.id)) {
+      await state.pagePromises.get(page.id);
+      return;
+    }
+
+    const task = (async () => {
+      try {
+        const url = new URL(PAGE_BASE + page.file, document.baseURI);
+        const module = await import(url.href);
+        if (typeof module.mount !== "function") {
+          throw new TypeError("Page module में mount(context) export आवश्यक है।");
+        }
+
+        const result = await module.mount(createPageContext(page, root));
+        const instance = {
+          module,
+          unmount: typeof result === "function"
+            ? result
+            : result && typeof result.unmount === "function"
+              ? result.unmount.bind(result)
+              : null,
+          onShow: result && typeof result.onShow === "function" ? result.onShow.bind(result) : null
+        };
+        state.pageInstances.set(page.id, instance);
+        state.activePage = page;
+      } catch (error) {
+        showPageModulePending(page, error && error.message ? error.message : "मॉड्यूल लोड विफल");
+      } finally {
+        state.pagePromises.delete(page.id);
+      }
+    })();
+
+    state.pagePromises.set(page.id, task);
+    await task;
+  }
+
+  async function navigate(key) {
+    const page = PAGE_MODULES[key];
+    const viewId = key === "jump-text" ? "view-index" : views[key];
+
+    if (!viewId || !showView(viewId)) {
+      console.warn("[Swar-Sadhika] Unknown page route: " + key);
+      return;
+    }
+
+    await unmountActivePage();
+
+    if (page) {
+      setCurrentNavigation(page.id);
+      await loadPageModule(page);
+      if (page.id === "tts") {
+        const textSection = byId("text-section");
+        if (textSection) textSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else {
+      setCurrentNavigation(key);
+    }
+  }
+
+  function createMediaCard(item) {
+    const gallery = byId("gallery");
+    if (!gallery) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn gallery-item";
+    button.dataset.mediaId = item.id;
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-label", "पूर्वावलोकन चुनें: " + item.file.name);
+    button.title = item.file.name;
+
+    if (item.kind === "image") {
+      const thumbnail = document.createElement("img");
+      thumbnail.src = item.url;
+      thumbnail.alt = "";
+      thumbnail.width = 42;
+      thumbnail.height = 56;
+      thumbnail.loading = "lazy";
+      button.appendChild(thumbnail);
+    } else {
+      const marker = document.createElement("span");
+      marker.textContent = "▶ VIDEO";
+      button.appendChild(marker);
+    }
+
+    const label = document.createElement("span");
+    label.textContent = item.file.name.length > 18
+      ? item.file.name.slice(0, 15) + "…"
+      : item.file.name;
+    button.appendChild(label);
+    gallery.appendChild(button);
+  }
+
+  function releaseMediaUrl(item) {
+    if (item && item.url) {
+      URL.revokeObjectURL(item.url);
+      item.url = "";
+    }
+  }
+
+  function selectMedia(id) {
+    const item = state.media.find(entry => entry.id === id);
+    if (!item) return;
+
+    state.activeMediaId = item.id;
+    const image = byId("stage-image");
+    const video = byId("stage-video");
+
+    if (item.kind === "video") {
+      if (image) image.removeAttribute("src");
+      setHidden("stage-image", true);
+      if (video) {
+        video.pause();
+        video.src = item.url;
+        video.load();
+      }
+      setHidden("stage-video", false);
+    } else {
+      if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
+      setHidden("stage-video", true);
+      if (image) image.src = item.url;
+      setHidden("stage-image", false);
+    }
+
+    setHidden("stage-empty", true);
+    if (byId("remove-media")) byId("remove-media").disabled = false;
+    setText("media-status", item.file.name + (item.kind === "video" ? " · वीडियो चयनित" : " · फोटो चयनित"));
+
+    document.querySelectorAll(".gallery-item").forEach(button => {
+      button.setAttribute("aria-pressed", button.dataset.mediaId === id ? "true" : "false");
+    });
+  }
+
+  function addMedia(files) {
+    const added = [];
+
+    Array.from(files || []).forEach(file => {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      if (!isImage && !isVideo) return;
+
+      try {
+        const item = {
+          id: "media-" + (++state.mediaSequence),
+          file,
+          url: URL.createObjectURL(file),
+          kind: isVideo ? "video" : "image"
+        };
+        state.media.push(item);
+        added.push(item);
+        createMediaCard(item);
+      } catch (error) {
+        console.error("[Swar-Sadhika] Local media preview failed", error);
+      }
     });
 
-    record.promise = importOnce(moduleUrl(BUTTON_MODULE_BASE, key))
-      .then(async module => {
-        if (typeof module.onClick !== "function" && typeof module.default !== "function") {
-          throw new TypeError("Button module में onClick(context) या default function export होना चाहिए।");
-        }
-        record.module = {
-          onClick: module.onClick || module.default,
-          onMount: module.onMount,
-          onUnmount: module.onUnmount
-        };
-        button.dataset.moduleState = "ready";
-        if (typeof record.module.onMount === "function") {
-          await record.module.onMount(createContext(button, null, "button"));
-        }
-      })
-      .catch(error => {
-        record.error = error;
-        reportModuleError(button, "Button module अनुपलब्ध: " + key + ".js");
-      });
+    if (added.length) {
+      selectMedia(added[0].id);
+      setText("media-status", added.length + " मीडिया फाइलें स्थानीय गैलरी में जोड़ी गईं।");
+    } else {
+      setText("media-status", "कोई मान्य फोटो या वीडियो फाइल नहीं मिली।");
+    }
+
+    const input = byId("media-input");
+    if (input) input.value = "";
   }
 
-  async function bindControl(control) {
-    if (bindings.has(control)) return;
-    const key = moduleKeyFromControl(control);
-    if (!key) return;
+  function removeSelectedMedia() {
+    const index = state.media.findIndex(item => item.id === state.activeMediaId);
+    if (index < 0) return;
 
-    const record = { element: control, kind: "control", key, module: null, error: null, promise: null };
-    bindings.set(control, record);
-    bindingRecords.add(record);
+    const removed = state.media.splice(index, 1)[0];
+    releaseMediaUrl(removed);
 
-    record.promise = importOnce(moduleUrl(CONTROL_MODULE_BASE, key))
-      .then(async module => {
-        if (typeof module.onChange !== "function" && typeof module.onInput !== "function") {
-          throw new TypeError("Control module में onChange(context) या onInput(context) export होना चाहिए।");
-        }
-        record.module = {
-          onChange: module.onChange,
-          onInput: module.onInput,
-          onMount: module.onMount,
-          onUnmount: module.onUnmount
-        };
-        control.dataset.moduleState = "ready";
-        if (typeof record.module.onChange === "function") {
-          control.addEventListener("change", event => {
-            invoke(record.module.onChange, createContext(control, event, "control"), key);
-          });
-        }
-        if (typeof record.module.onInput === "function") {
-          control.addEventListener("input", event => {
-            invoke(record.module.onInput, createContext(control, event, "control"), key);
-          });
-        }
-        if (typeof record.module.onMount === "function") {
-          await record.module.onMount(createContext(control, null, "control"));
-        }
-      })
-      .catch(error => {
-        record.error = error;
-        reportModuleError(control, "Control module अनुपलब्ध: " + key + ".js");
-      });
+    const card = document.querySelector('.gallery-item[data-media-id="' + removed.id + '"]');
+    if (card) card.remove();
+
+    state.activeMediaId = null;
+    if (state.media.length) {
+      selectMedia(state.media[Math.min(index, state.media.length - 1)].id);
+    } else {
+      clearMediaStage();
+    }
   }
 
-  function scanNode(node) {
-    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.matches("button")) bindButton(node);
-    if (node.matches("input, select, textarea")) bindControl(node);
-    node.querySelectorAll("button").forEach(bindButton);
-    node.querySelectorAll("input, select, textarea").forEach(bindControl);
+  function clearMediaStage() {
+    const image = byId("stage-image");
+    const video = byId("stage-video");
+    if (video) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    if (image) image.removeAttribute("src");
+    setHidden("stage-image", true);
+    setHidden("stage-video", true);
+    setHidden("stage-empty", false);
+    if (byId("remove-media")) byId("remove-media").disabled = true;
+    setText("media-status", "अभी कोई मीडिया चयनित नहीं है।");
+  }
+
+  async function requestMediaFullscreen() {
+    const stage = byId("media-stage");
+    if (!stage) return;
+
+    try {
+      if (document.fullscreenElement === stage) {
+        await document.exitFullscreen();
+      } else if (typeof stage.requestFullscreen === "function") {
+        await stage.requestFullscreen();
+      } else if (typeof stage.webkitRequestFullscreen === "function") {
+        stage.webkitRequestFullscreen();
+      } else {
+        const video = byId("stage-video");
+        if (video && !video.classList.contains("hidden") && typeof video.webkitEnterFullscreen === "function") {
+          video.webkitEnterFullscreen();
+        } else {
+          setText("media-status", "इस ब्राउज़र में Fullscreen API उपलब्ध नहीं है।");
+        }
+      }
+    } catch (error) {
+      setText("media-status", "Fullscreen शुरू नहीं हो सका: " +
+        (error && error.message ? error.message : "ब्राउज़र अनुमति उपलब्ध नहीं है।"));
+    }
+  }
+
+  function bindIndexControls() {
+    const mediaInput = byId("media-input");
+    if (mediaInput) {
+      mediaInput.addEventListener("change", event => addMedia(event.target.files));
+    }
+
+    const gallery = byId("gallery");
+    if (gallery) {
+      gallery.addEventListener("click", event => {
+        const card = event.target.closest("[data-media-id]");
+        if (card && gallery.contains(card)) selectMedia(card.dataset.mediaId);
+      });
+    }
+
+    const removeButton = byId("remove-media");
+    if (removeButton) removeButton.addEventListener("click", removeSelectedMedia);
+
+    const fullscreenButton = byId("fullscreen-btn");
+    if (fullscreenButton) fullscreenButton.addEventListener("click", requestMediaFullscreen);
+  }
+
+  function safeRegistryPath(path) {
+    return typeof path === "string" &&
+      /^modules\/[a-z0-9_./-]+\.js$/i.test(path) &&
+      !path.split("/").includes("..");
+  }
+
+  async function loadRegistry() {
+    const status = byId("registry-status");
+    try {
+      const response = await fetch(new URL("./modules/registry.json", document.baseURI), { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(response.status === 404
+          ? "modules/registry.json अभी Repository में उपलब्ध नहीं है।"
+          : "Registry HTTP " + response.status + " त्रुटि।");
+      }
+
+      const data = await response.json();
+      const entries = Array.isArray(data) ? data : data && data.modules;
+      if (!Array.isArray(entries)) throw new TypeError("Registry JSON में modules array नहीं मिली।");
+
+      entries.forEach(entry => {
+        const id = entry && String(entry.id || "").trim();
+        const title = entry && String(entry.title || entry.name || "").trim();
+        const file = entry && (entry.file || entry.path);
+        if (!id || !/^[a-z0-9][a-z0-9_-]*$/i.test(id) || !title || !safeRegistryPath(file)) return;
+        if (entry.enabled === false || String(entry.status || "").toLowerCase() === "placeholder") return;
+        state.registry.entries.set(id, { id, title, file, description: String(entry.description || "") });
+      });
+
+      state.registry.loaded = true;
+      if (status) {
+        status.className = "status";
+        status.textContent = state.registry.entries.size + " अतिरिक्त पेज मॉड्यूल Registry में मिले।";
+      }
+    } catch (error) {
+      state.registry.error = error && error.message ? error.message : "Registry उपलब्ध नहीं है।";
+      if (status) {
+        status.className = "status warn";
+        status.textContent = state.registry.error +
+          " मुख्य इंडेक्स के मीडिया नियंत्रण इससे स्वतंत्र हैं।";
+      }
+    }
+  }
+
+  async function loadRegisteredModule(id, root, extraContext) {
+    if (!state.registry.loaded) await loadRegistry();
+    const entry = state.registry.entries.get(id);
+    if (!entry) throw new Error("यह मॉड्यूल सक्रिय Registry में उपलब्ध नहीं है: " + id);
+
+    const module = await import(new URL(entry.file, document.baseURI).href);
+    if (typeof module.mount !== "function") {
+      throw new TypeError("Registry मॉड्यूल में mount(context) export आवश्यक है।");
+    }
+
+    return module.mount(Object.assign({
+      app,
+      root: root || document,
+      module: entry
+    }, extraContext || {}));
   }
 
   function emit(eventName, detail) {
@@ -192,111 +461,65 @@
   }
 
   function on(eventName, callback) {
-    if (typeof callback !== "function") throw new TypeError("Event listener function आवश्यक है।");
-    const eventType = "swar-sadhika:" + eventName;
+    if (typeof callback !== "function") throw new TypeError("Callback function आवश्यक है।");
+    const type = "swar-sadhika:" + eventName;
     const listener = event => callback(event.detail, event);
-    document.addEventListener(eventType, listener);
-    return () => document.removeEventListener(eventType, listener);
-  }
-
-  async function loadPageRegistry() {
-    const status = document.getElementById("registry-status");
-    try {
-      const response = await fetch(new URL(PAGE_REGISTRY_URL, document.baseURI), { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(response.status === 404
-          ? "modules/registry.json अभी Repository में उपलब्ध नहीं है।"
-          : "Registry पढ़ने में HTTP " + response.status + " त्रुटि आई।");
-      }
-      const data = await response.json();
-      const records = Array.isArray(data) ? data : data && data.modules;
-      if (!Array.isArray(records)) throw new TypeError("Registry JSON में modules array नहीं मिली।");
-
-      records.forEach(record => {
-        const id = record && String(record.id || "").trim();
-        const title = record && String(record.title || record.name || "").trim();
-        const file = record && (record.file || record.path);
-        const safePath = typeof file === "string" &&
-          /^modules\/[a-z0-9_./-]+\.js$/i.test(file) && !file.split("/").includes("..");
-
-        if (!id || !isSafeModuleKey(id) || !title || !safePath) {
-          pageRegistry.entries.set("invalid-" + pageRegistry.entries.size, {
-            invalid: true,
-            title: "अमान्य Registry रिकॉर्ड"
-          });
-          return;
-        }
-        if (record.enabled === false || String(record.status || "").toLowerCase() === "placeholder") return;
-        pageRegistry.entries.set(id, { id, title, file, description: String(record.description || "") });
-      });
-
-      pageRegistry.loaded = true;
-      if (status) {
-        status.className = "status";
-        status.textContent = pageRegistry.entries.size + " Registry रिकॉर्ड पढ़े गए। पेज मॉड्यूल अलग-अलग import होंगे।";
-      }
-    } catch (error) {
-      pageRegistry.error = error && error.message ? error.message : "Registry उपलब्ध नहीं है।";
-      if (status) {
-        status.className = "status warn";
-        status.textContent = pageRegistry.error + " स्वतंत्र button modules इससे अलग हैं।";
-      }
-    }
-  }
-
-  async function loadPageModule(id, mountRoot, extraContext) {
-    if (!pageRegistry.loaded) await loadPageRegistry();
-    const entry = pageRegistry.entries.get(id);
-    if (!entry || entry.invalid) throw new Error("माँगा गया page module Registry में उपलब्ध नहीं है: " + id);
-
-    const module = await import(new URL(entry.file, document.baseURI).href);
-    if (typeof module.mount !== "function") throw new TypeError("Page module में mount(context) export आवश्यक है।");
-
-    return module.mount(Object.assign({
-      app,
-      root: mountRoot || document,
-      module: entry
-    }, extraContext || {}));
+    document.addEventListener(type, listener);
+    return () => document.removeEventListener(type, listener);
   }
 
   const app = Object.freeze({
     version: APP_VERSION,
     root: document,
+    navigate,
     emit,
     on,
-    loadPageRegistry,
-    loadPageModule,
-    getPageRegistry: () => Array.from(pageRegistry.entries.values()),
+    loadRegistry,
+    loadRegisteredModule,
+    getRegistry: () => Array.from(state.registry.entries.values()),
     state: Object.freeze({
-      get: key => sharedState.get(key),
-      set: (key, value) => sharedState.set(key, value),
-      has: key => sharedState.has(key),
-      delete: key => sharedState.delete(key)
+      get: key => state.shared.get(key),
+      set: (key, value) => state.shared.set(key, value),
+      has: key => state.shared.has(key),
+      delete: key => state.shared.delete(key)
     })
   });
 
-  function start() {
-    document.querySelectorAll("button").forEach(bindButton);
-    document.querySelectorAll("input, select, textarea").forEach(bindControl);
-    loadPageRegistry();
+  function bindNavigation() {
+    const nav = document.querySelector(".nav");
+    if (!nav) return;
 
-    if (typeof MutationObserver === "function" && document.documentElement) {
-      const observer = new MutationObserver(records => {
-        records.forEach(record => record.addedNodes.forEach(scanNode));
-      });
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-      app.on("app:stop-observing", () => observer.disconnect());
-    }
+    nav.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button || !nav.contains(button)) return;
+
+      if (button.dataset.action === "jump-text") {
+        navigate("jump-text");
+      } else if (button.dataset.route) {
+        navigate(button.dataset.route);
+      }
+    });
+  }
+
+  async function start() {
+    bindNavigation();
+    bindIndexControls();
+    loadRegistry();
+    await navigate("index");
 
     window.addEventListener("pagehide", () => {
-      bindingRecords.forEach(record => {
-        const cleanup = record.module && record.module.onUnmount;
-        if (typeof cleanup === "function") {
-          invoke(cleanup, createContext(record.element, null, record.kind), record.key);
+      state.media.forEach(releaseMediaUrl);
+      state.pageInstances.forEach(instance => {
+        if (typeof instance.unmount === "function") {
+          try {
+            const result = instance.unmount();
+            if (result && typeof result.catch === "function") result.catch(error => console.error(error));
+          } catch (error) {
+            console.error("[Swar-Sadhika] Page cleanup failed", error);
+          }
         }
       });
-      bindingRecords.clear();
-      sharedState.clear();
+      state.shared.clear();
     }, { once: true });
 
     window.dispatchEvent(new CustomEvent("swar-sadhika:ready", {
