@@ -1,8 +1,9 @@
 /* Swar-Sadhika — TTS page module.
- * Uses only the device/browser SpeechSynthesis voices.
- * A future local synthesis engine can be integrated through this page module
- * without changing index.html or the main app entry point.
+ * UI and line sequencing live here; speech backends are owned by tts-engine.js.
+ * This page uses only the local Native TTS backend currently registered there.
  */
+import { createTtsEngine } from "../tts/tts-engine.js";
+
 export async function mount(context) {
   if (!context || !context.root || !context.document) {
     throw new TypeError("TTS module को root और document context आवश्यक है।");
@@ -10,9 +11,8 @@ export async function mount(context) {
 
   const root = context.root;
   const doc = context.document;
-  const win = doc.defaultView || window;
-  const synthesis = win.speechSynthesis;
-  const Utterance = win.SpeechSynthesisUtterance;
+  const win = doc.defaultView || (typeof window !== "undefined" ? window : null);
+  if (!win) throw new Error("TTS के लिए Browser Window उपलब्ध नहीं है।");
   const byId = id => doc.getElementById(id);
 
   const ui = {
@@ -32,23 +32,27 @@ export async function mount(context) {
   const missing = Object.entries(ui)
     .filter(([key, value]) => !value && !["overlay", "line"].includes(key))
     .map(([key]) => key);
-
   if (missing.length) {
     throw new Error("TTS interface में आवश्यक तत्व अनुपस्थित हैं: " + missing.join(", "));
   }
 
+  const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
     voices: [],
+    voiceEntries: [],
     generation: 0,
     lines: [],
     index: 0,
     active: false,
+    speechInFlight: false,
+    engineReady: false,
     userPaused: false,
     navigationPaused: false,
     waitingForNext: false,
     timer: null,
     destroyed: false,
-    voiceListener: null
+    voiceRefreshSequence: 0,
+    unsubscribeVoices: null
   };
 
   const FEMALE_HINTS = [
@@ -58,9 +62,9 @@ export async function mount(context) {
   ];
   const MALE_HINTS = ["male", "man", "david", "mark", "george"];
 
-  function setStatus(message, warning) {
+  function setStatus(message, warning = false) {
     if (!ui.status) return;
-    ui.status.textContent = message;
+    ui.status.textContent = String(message);
     ui.status.classList.toggle("warn", Boolean(warning));
   }
 
@@ -70,7 +74,7 @@ export async function mount(context) {
   }
 
   function isDevanagari(value) {
-    return Array.from(value).some(character => {
+    return Array.from(String(value)).some(character => {
       const code = character.codePointAt(0);
       return code >= 0x0900 && code <= 0x097f;
     });
@@ -107,7 +111,6 @@ export async function mount(context) {
         number: (match[0].match(/[०-९0-9]{1,4}/u) || [""])[0]
       };
     }
-
     return { text: line, removed: false, number: "" };
   }
 
@@ -116,20 +119,18 @@ export async function mount(context) {
   }
 
   function voiceGenderHint(voice) {
-    const name = String(voice.name || "").toLowerCase();
+    const name = String(voice && voice.name || "").toLowerCase();
     if (FEMALE_HINTS.some(hint => name.includes(hint))) return "female";
     if (MALE_HINTS.some(hint => name.includes(hint))) return "male";
     return "unknown";
   }
 
   function scoreVoice(voice, textValue) {
-    const language = String(voice.lang || "").toLowerCase();
+    const language = String(voice && voice.lang || "").toLowerCase();
     const gender = voiceGenderHint(voice);
     let score = 0;
-
     if (gender === "female") score += 120;
     if (gender === "male") score -= 80;
-
     if (isDevanagari(textValue)) {
       if (language === "hi-in") score += 70;
       else if (language.startsWith("hi")) score += 58;
@@ -138,81 +139,37 @@ export async function mount(context) {
     } else if (language.startsWith("en-in")) {
       score += 35;
     }
-
-    if (voice.localService) score += 12;
-    if (voice.default) score += 3;
+    if (voice && voice.localService === true) score += 12;
+    if (voice && voice.default) score += 3;
     return score;
   }
 
-  function refreshVoices() {
-    if (!synthesis || typeof synthesis.getVoices !== "function") {
-      setStatus("इस ब्राउज़र में Speech Synthesis उपलब्ध नहीं है। Android Chrome और system TTS सुविधा की जाँच करें।", true);
-      return;
-    }
-
-    const previous = ui.voice.value;
-    state.voices = synthesis.getVoices().slice();
-
-    const auto = {
-      value: "auto",
-      label: "स्वचालित — संभावित स्त्री-स्वर को प्राथमिकता"
-    };
-
-    ui.voice.replaceChildren();
-    const autoOption = doc.createElement("option");
-    autoOption.value = auto.value;
-    autoOption.textContent = auto.label;
-    ui.voice.appendChild(autoOption);
-
-    state.voices
-      .map((voice, index) => ({ voice, index }))
-      .sort((a, b) => scoreVoice(b.voice, ui.input.value) - scoreVoice(a.voice, ui.input.value))
-      .forEach(({ voice, index }) => {
-        const option = doc.createElement("option");
-        const gender = voiceGenderHint(voice);
-        const genderText = gender === "female"
-          ? " · संभावित स्त्री-स्वर"
-          : gender === "male" ? " · पुरुष-स्वर नाम" : "";
-        const serviceText = voice.localService ? " · डिवाइस" : "";
-        option.value = String(index);
-        option.textContent = voice.name + " (" + voice.lang + ")" + genderText + serviceText;
-        ui.voice.appendChild(option);
-      });
-
-    const previousStillExists = previous !== "auto" &&
-      state.voices.some((voice, index) => String(index) === previous);
-    ui.voice.value = previousStillExists ? previous : "auto";
-
-    if (!state.voices.length) {
-      setStatus("डिवाइस से कोई Speech voice उपलब्ध नहीं हुई। Android की Text-to-Speech settings में Hindi या अन्य उपयुक्त voice install करें।", true);
-      return;
-    }
-
-    const selected = chooseVoice(ui.input.value);
-    if (selected && voiceGenderHint(selected) === "female") {
-      setStatus("संभावित स्त्री-स्वर उपलब्ध है: " + selected.name + "। आवाज़ की वास्तविक मधुरता और उच्चारण डिवाइस पर निर्भर करेंगे।");
-    } else {
-      setStatus("डिवाइस की " + state.voices.length + " आवाज़ें उपलब्ध हैं। स्पष्ट स्त्री-स्वर की पहचान नाम से नहीं हो सकी; स्वचालित चयन भाषा और उपलब्धता के आधार पर होगा।", true);
-    }
+  function createVoiceEntries(voices) {
+    const usedKeys = new Map();
+    return voices.map((voice, index) => {
+      const base = String(voice.voiceURI || (String(voice.name || "voice") + "|" + String(voice.lang || "")));
+      const duplicateCount = usedKeys.get(base) || 0;
+      usedKeys.set(base, duplicateCount + 1);
+      return { voice, index, key: duplicateCount ? base + "#" + duplicateCount : base };
+    }).sort((a, b) => scoreVoice(b.voice, ui.input.value) - scoreVoice(a.voice, ui.input.value));
   }
 
   function chooseVoice(textValue) {
-    if (!state.voices.length) return null;
-    const selected = ui.voice.value;
-    if (selected && selected !== "auto") {
-      return state.voices[Number(selected)] || null;
+    if (!state.voiceEntries.length) return null;
+    const selectedKey = ui.voice.value;
+    if (selectedKey && selectedKey !== "auto") {
+      const selected = state.voiceEntries.find(entry => entry.key === selectedKey);
+      return selected ? selected.voice : null;
     }
-    return state.voices
-      .slice()
-      .sort((a, b) => scoreVoice(b, textValue) - scoreVoice(a, textValue))[0] || null;
-  }
-
-  function speechSupported() {
-    return Boolean(synthesis && typeof synthesis.speak === "function" && typeof Utterance === "function");
+    const sorted = state.voiceEntries.slice().sort((a, b) =>
+      scoreVoice(b.voice, textValue) - scoreVoice(a.voice, textValue)
+    );
+    return sorted.length ? sorted[0].voice : null;
   }
 
   function updateButtons() {
-    ui.speak.disabled = state.active;
+    const canSpeak = state.engineReady && state.voiceEntries.length > 0 && !state.destroyed;
+    ui.speak.disabled = state.active || !canSpeak;
     ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
     ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
     ui.stop.disabled = !state.active;
@@ -225,9 +182,10 @@ export async function mount(context) {
     }
   }
 
-  function finish(message, warning) {
+  function finish(message, warning = false) {
     clearNextTimer();
     state.active = false;
+    state.speechInFlight = false;
     state.userPaused = false;
     state.navigationPaused = false;
     state.waitingForNext = false;
@@ -242,25 +200,28 @@ export async function mount(context) {
     clearNextTimer();
     state.timer = win.setTimeout(() => {
       state.timer = null;
-      if (generation !== state.generation || !state.active) return;
-      if (state.navigationPaused) {
+      if (generation !== state.generation || !state.active || state.destroyed) return;
+      if (state.navigationPaused || state.userPaused) {
         state.waitingForNext = true;
         return;
       }
-      speakNext(generation);
+      void speakNext(generation);
     }, 100);
   }
 
-  function speakNext(generation) {
+  async function speakNext(generation) {
     if (generation !== state.generation || !state.active || state.destroyed) return;
-
-    if (state.index >= state.lines.length) {
-      finish("सभी " + state.lines.length + " पंक्तियों का पाठ पूरा हो गया।");
+    if (state.navigationPaused || state.userPaused) {
+      state.waitingForNext = true;
       return;
     }
-
-    if (!speechSupported()) {
-      finish("इस डिवाइस पर Speech Synthesis उपलब्ध नहीं है।", true);
+    if (state.index >= state.lines.length) {
+      const total = state.lines.length;
+      finish("सभी " + total + " पंक्तियों का पाठ पूरा हो गया।");
+      return;
+    }
+    if (!state.engineReady) {
+      finish("TTS Engine अभी तैयार नहीं है।", true);
       return;
     }
 
@@ -274,60 +235,65 @@ export async function mount(context) {
       scheduleNext(generation);
       return;
     }
-
-    const utterance = new Utterance(speechText);
-    const language = voice && voice.lang ? voice.lang : (isDevanagari(line) ? "hi-IN" : "en-IN");
-
-    if (voice) utterance.voice = voice;
-    utterance.lang = language;
-    utterance.rate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
-    utterance.volume = 1;
-
-    // A slight pitch lift is only a tonal preference, not a female-voice synthesizer.
-    utterance.pitch = voice && voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
-
-    // Display the original line unchanged; only the spoken copy omits its trailing verse index.
-    setLine(line);
-    const numberNotice = prepared.removed
-      ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।"
-      : "";
-    const specialNotice = hasVedicMarks(line)
-      ? " · वैदिक स्वर-चिह्न भेजे जा रहे हैं; उनका सही वैदिक गायन voice engine पर निर्भर है।"
-      : "";
-    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
-      (voice ? voice.name : "डिवाइस की default voice") + numberNotice + specialNotice);
-
-    utterance.onend = () => {
-      if (generation !== state.generation || !state.active) return;
-      state.index += 1;
-      scheduleNext(generation);
-    };
-
-    utterance.onerror = event => {
-      if (generation !== state.generation || !state.active) return;
-      const error = event && event.error ? event.error : "अज्ञात TTS त्रुटि";
-      if (error === "interrupted" || error === "canceled") return;
-      finish("पंक्ति " + (state.index + 1) + " पढ़ते समय TTS त्रुटि: " + error, true);
-    };
-
-    try {
-      synthesis.speak(utterance);
-    } catch (error) {
-      finish("TTS शुरू नहीं हो सका: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-    }
-  }
-
-  function startReading() {
-    if (!speechSupported()) {
-      setStatus("Speech Synthesis API उपलब्ध नहीं है। Android में system Text-to-Speech voice install/enable करें।", true);
+    if (!voice) {
+      finish("इस पाठ के लिए कोई उपलब्ध स्थानीय Voice चयनित नहीं है। Android की Text-to-Speech settings जाँचें।", true);
       return;
     }
 
-    const lines = ui.input.value
-      .split(/\r?\n/u)
-      .map(line => line.trim())
-      .filter(Boolean);
+    const language = voice.lang || (isDevanagari(line) ? "hi-IN" : "en-IN");
+    const rate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
+    const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+    const numberNotice = prepared.removed ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।" : "";
+    const specialNotice = hasVedicMarks(line)
+      ? " · वैदिक चिह्न मूल पाठ में सुरक्षित हैं; इस Native Voice से शुद्ध वैदिक स्वराघात प्रमाणित नहीं है।"
+      : "";
 
+    setLine(line);
+    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
+      voice.name + " (स्थानीय Native Voice)" + numberNotice + specialNotice);
+    state.speechInFlight = true;
+    updateButtons();
+
+    try {
+      const result = await engine.speak(speechText, {
+        voice,
+        lang: language,
+        rate,
+        pitch,
+        volume: 1,
+        replace: false
+      });
+      if (generation !== state.generation || !state.active || state.destroyed) return;
+      state.speechInFlight = false;
+      if (result && result.status === "cancelled") {
+        finish("वाचन रद्द हो गया।", true);
+        return;
+      }
+      state.index += 1;
+      if (state.navigationPaused || state.userPaused) {
+        state.waitingForNext = true;
+        updateButtons();
+      } else {
+        scheduleNext(generation);
+      }
+    } catch (error) {
+      if (generation !== state.generation || state.destroyed) return;
+      state.speechInFlight = false;
+      const message = error && error.message ? error.message : "अज्ञात TTS त्रुटि";
+      finish("पंक्ति " + (state.index + 1) + " पढ़ते समय TTS त्रुटि: " + message, true);
+    }
+  }
+
+  async function startReading() {
+    if (!state.engineReady) {
+      setStatus("Native TTS Engine उपलब्ध नहीं है। Browser और Android TTS सुविधा जाँचें।", true);
+      return;
+    }
+    if (!state.voiceEntries.length) {
+      setStatus("कोई सत्यापित स्थानीय Voice उपलब्ध नहीं है। Android की Text-to-Speech settings में स्थानीय Hindi voice install/enable करें।", true);
+      return;
+    }
+    const lines = ui.input.value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean);
     if (!lines.length) {
       setStatus("पहले पाठ लिखें। प्रत्येक नई पंक्ति क्रम से पढ़ी जाएगी।", true);
       ui.input.focus();
@@ -337,43 +303,80 @@ export async function mount(context) {
     state.generation += 1;
     const generation = state.generation;
     clearNextTimer();
-    synthesis.cancel();
+    try {
+      await engine.cancel();
+    } catch (error) {
+      finish("पिछला वाचन सुरक्षित रूप से रोक नहीं सका: " + (error && error.message ? error.message : "TTS त्रुटि"), true);
+      return;
+    }
+    if (generation !== state.generation || state.destroyed) return;
 
     state.lines = lines;
     state.index = 0;
     state.active = true;
+    state.speechInFlight = false;
     state.userPaused = false;
     state.navigationPaused = false;
     state.waitingForNext = false;
     updateButtons();
-    speakNext(generation);
+    void speakNext(generation);
   }
 
-  function pauseReading() {
-    if (!state.active || state.userPaused || state.navigationPaused || !speechSupported()) return;
+  async function pauseReading() {
+    if (!state.active || state.userPaused || state.navigationPaused) return;
     state.userPaused = true;
-    synthesis.pause();
+    if (state.timer !== null) {
+      clearNextTimer();
+      state.waitingForNext = true;
+    }
+    if (state.speechInFlight) {
+      const paused = await engine.pause();
+      if (!paused && state.active && state.speechInFlight) {
+        state.userPaused = false;
+        setStatus("इस समय Native TTS को Pause नहीं कर सका।", true);
+        updateButtons();
+        return;
+      }
+    }
     setStatus("पाठ रोक दिया गया है। जारी रखने के लिए “फिर शुरू करें” दबाएँ।");
     updateButtons();
   }
 
-  function resumeReading() {
-    if (!state.active || (!state.userPaused && !state.navigationPaused) || !speechSupported()) return;
+  async function resumeReading() {
+    if (!state.active || (!state.userPaused && !state.navigationPaused)) return;
+    const wasSpeechInFlight = state.speechInFlight;
     state.userPaused = false;
     state.navigationPaused = false;
-    synthesis.resume();
-    setStatus("पाठ फिर से जारी है।");
-    updateButtons();
     if (state.waitingForNext) {
       state.waitingForNext = false;
-      speakNext(state.generation);
+      setStatus("पाठ फिर से जारी है।");
+      updateButtons();
+      await speakNext(state.generation);
+      return;
     }
+    if (wasSpeechInFlight) {
+      const resumed = await engine.resume();
+      if (!resumed && state.active && state.speechInFlight) {
+        state.userPaused = true;
+        setStatus("Native TTS वाचन को फिर शुरू नहीं कर सका।", true);
+        updateButtons();
+        return;
+      }
+    }
+    setStatus("पाठ फिर से जारी है।");
+    updateButtons();
   }
 
-  function stopReading() {
+  async function stopReading() {
     state.generation += 1;
-    if (synthesis && typeof synthesis.cancel === "function") synthesis.cancel();
+    clearNextTimer();
     finish("पाठ समाप्त कर दिया गया।");
+    try {
+      await engine.cancel();
+    } catch (error) {
+      setStatus("वाचन समाप्त हुआ, लेकिन Backend ने Cancel त्रुटि दी: " +
+        (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+    }
   }
 
   function onRateInput() {
@@ -383,54 +386,115 @@ export async function mount(context) {
   function onVoiceChange() {
     const voice = chooseVoice(ui.input.value);
     if (!voice) {
-      setStatus("कोई उपयुक्त voice उपलब्ध नहीं है।", true);
+      setStatus("कोई उपयुक्त स्थानीय Voice उपलब्ध नहीं है।", true);
       return;
     }
     const gender = voiceGenderHint(voice);
     const note = gender === "female"
-      ? "संभावित स्त्री-स्वर चुना गया: "
-      : "चुनी हुई आवाज़: ";
-    setStatus(note + voice.name + " (" + voice.lang + ")।");
+      ? "संभावित स्त्री-स्वर चुना गया; नाम-आधारित पहचान की पुष्टि वास्तविक श्रवण से करनी होगी: "
+      : "स्थानीय Voice चुनी गई: ";
+    setStatus(note + voice.name + " (" + voice.lang + ")। Pitch परिवर्तन वास्तविक महिला Voice की गारंटी नहीं है।");
   }
 
-  function onVoicesChanged() {
-    const currentValue = ui.voice.value;
-    refreshVoices();
-    if (currentValue && currentValue !== "auto" &&
-        state.voices.some((voice, index) => String(index) === currentValue)) {
-      ui.voice.value = currentValue;
+  async function refreshVoices() {
+    const request = ++state.voiceRefreshSequence;
+    const previousKey = ui.voice.value;
+    try {
+      const voices = await engine.getVoices({ backendId: "native" });
+      if (state.destroyed || request !== state.voiceRefreshSequence) return;
+      state.voices = voices.filter(voice => voice && voice.localService === true);
+      state.voiceEntries = createVoiceEntries(state.voices);
+      ui.voice.replaceChildren();
+
+      const autoOption = doc.createElement("option");
+      autoOption.value = "auto";
+      autoOption.textContent = "स्वचालित — स्थानीय उपयुक्त Voice और संभावित स्त्री-स्वर को प्राथमिकता";
+      ui.voice.appendChild(autoOption);
+
+      state.voiceEntries.forEach(entry => {
+        const voice = entry.voice;
+        const gender = voiceGenderHint(voice);
+        const genderText = gender === "female" ? " · संभावित स्त्री-स्वर" :
+          gender === "male" ? " · पुरुष-स्वर नाम" : "";
+        const option = doc.createElement("option");
+        option.value = entry.key;
+        option.textContent = String(voice.name || "स्थानीय Voice") + " (" + String(voice.lang || "भाषा अज्ञात") + ")" + genderText + " · डिवाइस";
+        ui.voice.appendChild(option);
+      });
+
+      const previousStillExists = previousKey && previousKey !== "auto" &&
+        state.voiceEntries.some(entry => entry.key === previousKey);
+      ui.voice.value = previousStillExists ? previousKey : "auto";
+      updateButtons();
+
+      if (!state.engineReady) return;
+      if (!state.voiceEntries.length) {
+        setStatus("Speech Synthesis उपलब्ध है, लेकिन कोई सत्यापित localService=true Voice नहीं मिली। Android TTS settings में स्थानीय Hindi voice install/enable करें।", true);
+        return;
+      }
+      const selected = chooseVoice(ui.input.value);
+      if (selected && voiceGenderHint(selected) === "female") {
+        setStatus("संभावित स्त्री-स्वर वाली स्थानीय Voice उपलब्ध है: " + selected.name + "। वास्तविक मधुरता और उच्चारण का श्रवण परीक्षण आवश्यक है।");
+      } else {
+        setStatus("" + state.voiceEntries.length + " स्थानीय Speech Voices उपलब्ध हैं। नाम से स्पष्ट स्त्री-स्वर की पहचान नहीं हुई; स्वचालित चयन भाषा और उपलब्धता पर आधारित है।", true);
+      }
+    } catch (error) {
+      if (state.destroyed || request !== state.voiceRefreshSequence) return;
+      state.voices = [];
+      state.voiceEntries = [];
+      updateButtons();
+      setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
     }
   }
 
-  function onHide() {
-    if (!state.active || state.userPaused || state.navigationPaused) return;
+  async function onHide() {
+    if (!state.active || state.userPaused || state.navigationPaused || state.destroyed) return;
     state.navigationPaused = true;
     if (state.timer !== null) {
       clearNextTimer();
       state.waitingForNext = true;
     }
-    if (speechSupported()) synthesis.pause();
+    if (state.speechInFlight) {
+      const paused = await engine.pause();
+      if (!paused && state.speechInFlight) {
+        setStatus("दूसरे पेज पर जाने पर Native TTS Pause नहीं हो सका। वाचन की स्थिति जाँचें।", true);
+      }
+    }
     setStatus("दूसरे पेज पर जाने के कारण TTS अस्थायी रूप से रुका है। वापस आने पर जारी किया जा सकता है।");
     updateButtons();
   }
 
-  function onShow() {
-    if (!state.active || !state.navigationPaused) return;
+  async function onShow() {
+    if (!state.active || !state.navigationPaused || state.destroyed) return;
     state.navigationPaused = false;
-    if (speechSupported()) synthesis.resume();
     if (state.waitingForNext) {
       state.waitingForNext = false;
-      speakNext(state.generation);
+      setStatus("TTS पेज फिर खुला है; पाठ जारी है।");
+      updateButtons();
+      await speakNext(state.generation);
+      return;
+    }
+    if (state.speechInFlight) {
+      const resumed = await engine.resume();
+      if (!resumed && state.speechInFlight) {
+        state.navigationPaused = true;
+        setStatus("TTS पेज खुला है, लेकिन Native TTS फिर शुरू नहीं हुआ। “फिर शुरू करें” दबाएँ।", true);
+        updateButtons();
+        return;
+      }
     }
     setStatus("TTS पेज फिर खुला है; पाठ जारी है।");
     updateButtons();
   }
 
-  function unmount() {
+  async function unmount() {
+    if (state.destroyed) return;
     state.destroyed = true;
     state.generation += 1;
+    state.voiceRefreshSequence += 1;
     clearNextTimer();
-    if (synthesis && typeof synthesis.cancel === "function") synthesis.cancel();
+    state.active = false;
+    state.speechInFlight = false;
 
     ui.speak.removeEventListener("click", startReading);
     ui.pause.removeEventListener("click", pauseReading);
@@ -439,15 +503,16 @@ export async function mount(context) {
     ui.rate.removeEventListener("input", onRateInput);
     ui.voice.removeEventListener("change", onVoiceChange);
 
-    if (synthesis && state.voiceListener && typeof synthesis.removeEventListener === "function") {
-      synthesis.removeEventListener("voiceschanged", state.voiceListener);
-    }
-
-    state.voiceListener = null;
-    state.active = false;
-    state.lines = [];
+    if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
+    state.unsubscribeVoices = null;
     setLine("");
     updateButtons();
+    try { await engine.dispose(); }
+    catch (error) {
+      if (win.console && typeof win.console.error === "function") {
+        win.console.error("[Swar-Sadhika] TTS Engine cleanup failed", error);
+      }
+    }
   }
 
   ui.speak.addEventListener("click", startReading);
@@ -456,29 +521,32 @@ export async function mount(context) {
   ui.stop.addEventListener("click", stopReading);
   ui.rate.addEventListener("input", onRateInput);
   ui.voice.addEventListener("change", onVoiceChange);
-
   onRateInput();
   updateButtons();
 
-  if (speechSupported()) {
-    refreshVoices();
-    state.voiceListener = onVoicesChanged;
-    if (typeof synthesis.addEventListener === "function") {
-      synthesis.addEventListener("voiceschanged", state.voiceListener);
-    } else {
-      synthesis.onvoiceschanged = state.voiceListener;
+  state.unsubscribeVoices = engine.on("voiceschanged", () => {
+    void refreshVoices();
+  });
+
+  try {
+    const initialized = await engine.initialize({ backendId: "native" });
+    if (state.destroyed) {
+      await engine.dispose();
+      return Object.freeze({ onShow, onHide, unmount });
     }
-  } else {
-    setStatus("इस ब्राउज़र/डिवाइस में native Speech Synthesis उपलब्ध नहीं है। समर्थित Android Chrome और installed TTS voice आवश्यक है।", true);
-    ui.speak.disabled = true;
-    ui.pause.disabled = true;
-    ui.resume.disabled = true;
-    ui.stop.disabled = true;
+    state.engineReady = Boolean(initialized && initialized.ready);
+    if (!state.engineReady) {
+      setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें。", true);
+      updateButtons();
+    } else {
+      await refreshVoices();
+    }
+  } catch (error) {
+    state.engineReady = false;
+    setStatus("TTS Engine initialize नहीं हो सका: " +
+      (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+    updateButtons();
   }
 
-  return Object.freeze({
-    onShow,
-    onHide,
-    unmount
-  });
+  return Object.freeze({ onShow, onHide, unmount });
 }
