@@ -37,6 +37,7 @@
     activeMediaId: null,
     mediaSequence: 0,
     activePage: null,
+    navigationSequence: 0,
     pageInstances: new Map(),
     pagePromises: new Map(),
     registry: { loaded: false, error: "", entries: new Map() },
@@ -107,93 +108,151 @@
     });
   }
 
-  async function unmountActivePage() {
+  function runPageHook(instance, hookName, context, pageId) {
+    const hook = instance && instance[hookName];
+    if (typeof hook !== "function") return Promise.resolve();
+
+    const previous = instance.lifecycle || Promise.resolve();
+    const task = previous.then(() => hook(context));
+    instance.lifecycle = task.catch(error => {
+      console.error("[Swar-Sadhika] Page " + hookName + " failed: " + pageId, error);
+    });
+    return task;
+  }
+
+  async function hideActivePage(nextPageId) {
     const active = state.activePage;
-    if (!active) return;
+    if (!active || active.id === nextPageId) return;
+
     state.activePage = null;
     const instance = state.pageInstances.get(active.id);
-    if (instance && typeof instance.unmount === "function") {
-      try {
-        await instance.unmount();
-      } catch (error) {
-        console.error("[Swar-Sadhika] Page cleanup failed: " + active.id, error);
-      }
+    if (!instance) return;
+
+    try {
+      await runPageHook(
+        instance,
+        "onHide",
+        createPageContext(active, byId(active.root)),
+        active.id
+      );
+    } catch (error) {
+      console.error("[Swar-Sadhika] Page hide failed: " + active.id, error);
     }
   }
 
-  async function loadPageModule(page) {
+  function normalizePageInstance(module, result) {
+    const returnedObject = result && typeof result === "object" ? result : null;
+    const pickHook = name => {
+      if (returnedObject && typeof returnedObject[name] === "function") {
+        return returnedObject[name].bind(returnedObject);
+      }
+      if (typeof module[name] === "function") return module[name].bind(module);
+      return null;
+    };
+
+    return {
+      module,
+      unmount: typeof result === "function" ? result : pickHook("unmount"),
+      onShow: pickHook("onShow"),
+      onHide: pickHook("onHide"),
+      lifecycle: Promise.resolve(),
+      activated: false
+    };
+  }
+
+  async function loadPageModule(page, navigationSequence) {
     const root = byId(page.root);
     if (!root) {
-      showPageModulePending(page, "HTML page container नहीं मिला");
-      return;
-    }
-
-    const cachedInstance = state.pageInstances.get(page.id);
-    if (cachedInstance) {
-      state.activePage = page;
-      if (typeof cachedInstance.onShow === "function") {
-        try {
-          await cachedInstance.onShow(createPageContext(page, root));
-        } catch (error) {
-          showPageModulePending(page, error.message);
-        }
+      if (navigationSequence === state.navigationSequence) {
+        showPageModulePending(page, "HTML page container नहीं मिला");
       }
       return;
     }
 
-    if (state.pagePromises.has(page.id)) {
-      await state.pagePromises.get(page.id);
-      return;
-    }
+    let instance = state.pageInstances.get(page.id);
+    if (!instance) {
+      let pending = state.pagePromises.get(page.id);
 
-    const task = (async () => {
+      if (!pending) {
+        const task = (async () => {
+          const url = new URL(PAGE_BASE + page.file, document.baseURI);
+          const module = await import(url.href);
+          if (typeof module.mount !== "function") {
+            throw new TypeError("Page module में mount(context) export आवश्यक है।");
+          }
+
+          const result = await module.mount(createPageContext(page, root));
+          const mountedInstance = normalizePageInstance(module, result);
+          state.pageInstances.set(page.id, mountedInstance);
+          return mountedInstance;
+        })();
+
+        state.pagePromises.set(page.id, task);
+        task.then(
+          () => {
+            if (state.pagePromises.get(page.id) === task) state.pagePromises.delete(page.id);
+          },
+          () => {
+            if (state.pagePromises.get(page.id) === task) state.pagePromises.delete(page.id);
+          }
+        );
+        pending = task;
+      }
+
       try {
-        const url = new URL(PAGE_BASE + page.file, document.baseURI);
-        const module = await import(url.href);
-        if (typeof module.mount !== "function") {
-          throw new TypeError("Page module में mount(context) export आवश्यक है।");
-        }
-
-        const result = await module.mount(createPageContext(page, root));
-        const instance = {
-          module,
-          unmount: typeof result === "function"
-            ? result
-            : result && typeof result.unmount === "function"
-              ? result.unmount.bind(result)
-              : null,
-          onShow: result && typeof result.onShow === "function" ? result.onShow.bind(result) : null
-        };
-        state.pageInstances.set(page.id, instance);
-        state.activePage = page;
+        instance = await pending;
       } catch (error) {
-        showPageModulePending(page, error && error.message ? error.message : "मॉड्यूल लोड विफल");
-      } finally {
-        state.pagePromises.delete(page.id);
+        if (navigationSequence === state.navigationSequence) {
+          showPageModulePending(
+            page,
+            error && error.message ? error.message : "मॉड्यूल लोड विफल"
+          );
+        }
+        return;
       }
-    })();
+    }
 
-    state.pagePromises.set(page.id, task);
-    await task;
+    if (navigationSequence !== state.navigationSequence || !instance) return;
+
+    state.activePage = page;
+    if (instance.activated) {
+      try {
+        await runPageHook(
+          instance,
+          "onShow",
+          createPageContext(page, root),
+          page.id
+        );
+      } catch (error) {
+        showPageModulePending(page, error && error.message ? error.message : "पेज सक्रिय नहीं हो सका");
+      }
+    } else {
+      instance.activated = true;
+    }
   }
 
   async function navigate(key) {
     const page = PAGE_MODULES[key];
     const viewId = key === "jump-text" ? "view-index" : views[key];
 
-    if (!viewId || !showView(viewId)) {
+    if (!viewId || !byId(viewId)) {
       console.warn("[Swar-Sadhika] Unknown page route: " + key);
       return;
     }
 
-    await unmountActivePage();
+    const navigationSequence = ++state.navigationSequence;
+    await hideActivePage(page ? page.id : null);
+    if (navigationSequence !== state.navigationSequence) return;
+    if (!showView(viewId)) return;
 
     if (page) {
-      setCurrentNavigation(page.id);
-      await loadPageModule(page);
-      if (page.id === "tts") {
+      setCurrentNavigation(page.id === "tts" ? "tts" : key);
+      await loadPageModule(page, navigationSequence);
+      if (navigationSequence === state.navigationSequence && page.id === "tts") {
         const textSection = byId("text-section");
-        if (textSection) textSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (textSection) {
+          textSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       }
     } else {
       setCurrentNavigation(key);
@@ -510,14 +569,13 @@
     window.addEventListener("pagehide", () => {
       state.media.forEach(releaseMediaUrl);
       state.pageInstances.forEach(instance => {
-        if (typeof instance.unmount === "function") {
-          try {
-            const result = instance.unmount();
-            if (result && typeof result.catch === "function") result.catch(error => console.error(error));
-          } catch (error) {
-            console.error("[Swar-Sadhika] Page cleanup failed", error);
-          }
-        }
+        const cleanup = Promise.resolve(instance.lifecycle)
+          .catch(() => undefined)
+          .then(() => {
+            if (typeof instance.unmount === "function") return instance.unmount();
+            return undefined;
+          });
+        cleanup.catch(error => console.error("[Swar-Sadhika] Page cleanup failed", error));
       });
       state.shared.clear();
     }, { once: true });
