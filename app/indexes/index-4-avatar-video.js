@@ -16,6 +16,8 @@ export const avatarIndex = {
     moduleEntry("lip-sync","Lip-Sync","Audio-Synchronized Lip-Sync","Audio Clock के अनुसार समयबद्ध Mouth State और Frame-wise Viseme Rendering।",enginePanel("Real Lip-Sync","Pause, Resume, Seek, Long Audio, Drift Measurement और वास्तविक Lip-Sync Video आवश्यक।"),{engine:"A5"}),
     moduleEntry("facial-expression","Facial Expression","Facial Expression एवं Eye Movement","समर्थित Expression, Blink, Eye और Head Motion Controls।",enginePanel("Expression Rig","Blendshape/Rig Mapping और वास्तविक Render Test के बिना Expression Capability को PASS नहीं किया जाएगा।"),{engine:"A9"}),
     moduleEntry("body-language","Body Language","Body Language एवं Motion Retargeting","Pose Landmarks से Motion Profile और Avatar Rig में Retargeting।",enginePanel("Pose-to-Rig Retargeting","स्थिर Photo को Full Body Rig नहीं माना जाएगा। Pose Data, Joint Constraints और Rendered Motion आवश्यक।"),{engine:"A6 · A7 · A8"}),
-
+    moduleEntry("caption","Caption एवं Text Synchronization","Caption एवं Text Synchronization","Audio Timeline के साथ उपलब्ध Word/Line Timing के अनुसार Caption Track तैयार करने का कार्य-पटल।",enginePanel("Caption Track","Caption Timing, Audio Seek और Playback Highlight का वास्तविक Output तथा Timing Test आवश्यक।"),{engine:"A10"}),
+    moduleEntry("video-composition","Video Composition","Video Timeline एवं Composition","Avatar, Audio, Lip-Sync, Body Motion और Captions को एक Timeline में संयोजित करने का कार्य-पटल।",enginePanel("Video Composer","Rendered Frames, Audio Integration, Frame Rate और Timeline Validation आवश्यक।"),{engine:"A11"}),
+    moduleEntry("video-export","Video Export","Video Encoding एवं Export","समर्थित Codec/Container में वास्तविक Video File बनाने, Mux करने और Validate करने का कार्य-पटल।",enginePanel("Video Encoder एवं Muxer","वास्तविक Encoded File, Container/Codec Inspection और Android Playback Evidence आवश्यक।"),{engine:"A12"})
   ]
 };
