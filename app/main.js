@@ -1,10 +1,10 @@
-import { workspaceIndex } from "./indexes/index-1-workspace.js?v=20261104-avatar-cache-v2";
-import { voiceIndex } from "./indexes/index-2-voice-chant.js?v=20261104-avatar-cache-v2";
-import { learningIndex } from "./indexes/index-3-learning.js?v=20261104-avatar-cache-v2";
-import { avatarIndex } from "./indexes/index-4-avatar-video.js?v=20261104-avatar-cache-v2";
-import { renderIndex } from "./indexes/shared.js?v=20261104-avatar-cache-v2";
-import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js?v=20261104-avatar-cache-v2";
-import { getSpeechVoices, populateVoiceSelect, speakText, stopSpeech } from "./core/speech.js?v=20261104-avatar-cache-v2";
+import { workspaceIndex } from "./indexes/index-1-workspace.js?v=20261104-language-three-v3";
+import { voiceIndex } from "./indexes/index-2-voice-chant.js?v=20261104-language-three-v3";
+import { learningIndex } from "./indexes/index-3-learning.js?v=20261104-language-three-v3";
+import { avatarIndex } from "./indexes/index-4-avatar-video.js?v=20261104-language-three-v3";
+import { renderIndex } from "./indexes/shared.js?v=20261104-language-three-v3";
+import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js?v=20261104-language-three-v3";
+import { populateLanguageSelect, speakText, stopSpeech } from "./core/speech.js?v=20261104-language-three-v3";
 
 const indexes = [workspaceIndex, voiceIndex, learningIndex, avatarIndex];
 const root = document.getElementById("index-root");
@@ -108,14 +108,13 @@ async function onPanelRendered() {
   if (activeIndex === "learning") await showRecords("memory-records", ["learning"]);
   if (activeIndex === "avatar") await showRecords("caption-records", ["caption"]);
   if (activeIndex === "avatar") await restoreAvatarMedia();
-  populateSpeechVoiceControls();
+  populateSpeechLanguageControls();
 }
 
-function populateSpeechVoiceControls() {
-  const voices = getSpeechVoices();
-  ["tts-voice-select", "recitation-voice-select", "avatar-voice-select"].forEach(id => {
+function populateSpeechLanguageControls() {
+  ["tts-language-select", "recitation-language-select", "avatar-language-select"].forEach(id => {
     const select = document.getElementById(id);
-    if (select) populateVoiceSelect(select, voices, "hi-IN");
+    if (select) populateLanguageSelect(select, "sanskrit");
   });
 }
 
@@ -249,7 +248,7 @@ async function playAvatarFullscreen() {
     ? video.play().then(() => true).catch(() => false)
     : Promise.resolve(true);
   const speechPromise = speakText(text, {
-    voiceURI: document.getElementById("avatar-voice-select")?.value || "",
+    languageMode: document.getElementById("avatar-language-select")?.value || "sanskrit",
     rate: Number(document.getElementById("avatar-tts-rate")?.value || 0.9),
     pitch: Number(document.getElementById("avatar-tts-pitch")?.value || 1.05)
   });
@@ -469,7 +468,7 @@ async function speakVoicePreview() {
   try {
     if (status) status.textContent = "Android/Chrome में उपलब्ध System Voice से Preview चल रहा है…";
     await speakText(text, {
-      voiceURI: document.getElementById("tts-voice-select")?.value || "",
+      languageMode: document.getElementById("tts-language-select")?.value || "sanskrit",
       rate: Number(document.getElementById("tts-rate")?.value || 0.9),
       pitch: Number(document.getElementById("tts-pitch")?.value || 1.05)
     });
@@ -486,7 +485,7 @@ async function speakRecitation() {
   try {
     if (status) status.textContent = "Device की उपलब्ध Speech Voice से पाठ चल रहा है…";
     await speakText(text, {
-      voiceURI: document.getElementById("recitation-voice-select")?.value || "",
+      languageMode: document.getElementById("recitation-language-select")?.value || "sanskrit",
       rate: Number(document.getElementById("recitation-rate")?.value || 0.9),
       pitch: Number(document.getElementById("recitation-pitch")?.value || 1.05)
     });
@@ -498,7 +497,7 @@ async function speakRecitation() {
 async function deleteRecordAction(id) {
   if (!id) return;
   if (!confirm("क्या इसी स्थानीय Record को हटाना है?")) return;
-  const { deleteRecord } = await import("./core/local-store.js?v=20261104-avatar-cache-v2");
+  const { deleteRecord } = await import("./core/local-store.js?v=20261104-language-three-v3");
   await deleteRecord(id);
   await onPanelRendered();
   notify("चयनित Record हटाया गया।");
@@ -598,7 +597,7 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 if ("speechSynthesis" in window) {
-  window.speechSynthesis.addEventListener?.("voiceschanged", populateSpeechVoiceControls);
+  window.speechSynthesis.addEventListener?.("voiceschanged", populateSpeechLanguageControls);
 }
 
 async function boot() {
