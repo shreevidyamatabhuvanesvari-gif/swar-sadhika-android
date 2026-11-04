@@ -1,4 +1,4 @@
-import { moduleEntry } from "./shared.js?v=20261104-avatar-cache-v2";
+import { moduleEntry } from "./shared.js?v=20261104-language-three-v3";
 
 const pending = (title, text) => `<section class="card"><div class="heading-row"><h3>${title}</h3><span class="state-tag state-not-started">NOT_STARTED</span></div><p>${text}</p><p class="muted">संबंधित Engine के वास्तविक Analysis Output और Confidence Evidence के बाद ही इसे पूर्ण माना जाएगा।</p></section>`;
 
