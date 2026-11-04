@@ -1,4 +1,4 @@
-import { moduleEntry } from "./shared.js?v=20261104-avatar-cache-v2";
+import { moduleEntry } from "./shared.js?v=20261104-language-three-v3";
 
 const enginePanel = (title, body) => `<section class="card"><div class="heading-row"><h3>${title}</h3><span class="state-tag state-not-started">NOT_STARTED</span></div><p>${body}</p><p class="muted">इस क्षमता का PASS वास्तविक Output, Timing/Quality Tests और Android Chrome Evidence से ही तय होगा।</p></section>`;
 
@@ -12,7 +12,7 @@ export const avatarIndex = {
           <div><label class="field-label" for="avatar-video-file">Avatar के साथ चलने वाली Video Clip चुनें</label><input id="avatar-video-file" class="field" type="file" accept="video/*"><button class="button button-soft" data-action="save-avatar-video">Video Clip सुरक्षित करें</button><p id="avatar-video-status" class="status-line">MP4/WebM जैसी Browser-supported Clip चुनें। अधिकतम 100 MB।</p></div>
         </div>
         <div class="field-group"><label class="field-label" for="avatar-chant-text">पूरा पाठ — इसके समाप्त होने तक Video Loop होगी</label><textarea id="avatar-chant-text" class="field-textarea">ॐ नमः शिवाय। सर्वे भवन्तु सुखिनः। सर्वे सन्तु निरामयाः॥</textarea><button class="button button-soft" data-action="load-latest-text">Text Studio का आखिरी सुरक्षित पाठ लाएँ</button></div>
-        <div class="card-grid"><div><label class="field-label" for="avatar-voice-select">उपलब्ध Device Voice</label><select id="avatar-voice-select" class="field-select"><option value="">Device की Default आवाज़</option></select></div><div><label class="field-label" for="avatar-tts-rate">आवाज़ की गति</label><input id="avatar-tts-rate" class="field" type="range" min="0.5" max="1.5" step="0.05" value="0.9"></div><div><label class="field-label" for="avatar-tts-pitch">आवाज़ की Pitch</label><input id="avatar-tts-pitch" class="field" type="range" min="0.5" max="1.5" step="0.05" value="1.05"></div></div>
+        <div class="card-grid"><div><label class="field-label" for="avatar-language-select">भाषा चुनें</label><select id="avatar-language-select" class="field-select"><option value="vedic">वैदिक संस्कृत</option><option value="sanskrit" selected>संस्कृत</option><option value="hindi">हिंदी</option></select></div><div><label class="field-label" for="avatar-tts-rate">आवाज़ की गति</label><input id="avatar-tts-rate" class="field" type="range" min="0.5" max="1.5" step="0.05" value="0.9"></div><div><label class="field-label" for="avatar-tts-pitch">आवाज़ की Pitch</label><input id="avatar-tts-pitch" class="field" type="range" min="0.5" max="1.5" step="0.05" value="1.05"></div></div>
         <div id="avatar-stage" class="avatar-stage" aria-label="9:16 Avatar Playback Stage">
           <img id="avatar-stage-photo" alt="Avatar Photo" hidden>
           <video id="avatar-stage-video" playsinline muted loop preload="metadata" hidden></video>
