@@ -22,7 +22,7 @@ test("voice, YouTube and avatar controls are present in the workspace source", a
     readFile(new URL("../app/indexes/index-4-avatar-video.js", import.meta.url), "utf8"),
     readFile(new URL("../app/main.js", import.meta.url), "utf8")
   ]);
-  assert.match(voice, /tts-voice-select/);
+  assert.match(voice, /tts-language-select/);
   assert.match(voice, /speak-recitation/);
   assert.match(learning, /youtube-external-link/);
   assert.match(avatar, /avatar-video-file/);
@@ -65,5 +65,5 @@ test("root shell redirects the bare URL to the current versioned build", async (
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /const build = "20261104-language-three-v3"/);
   assert.match(html, /searchParams.set\("build", build\)/);
-  assert.match(html, /main\\.js\\?v=20261104-language-three-v3/);
+  assert.ok(html.includes("main.js?v=20261104-language-three-v3"));
 });
