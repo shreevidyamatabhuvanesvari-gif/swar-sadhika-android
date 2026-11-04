@@ -44,15 +44,21 @@ test("language choices are exactly Vedic Sanskrit, Sanskrit and Hindi in order",
 });
 
 test("language selectors in settings, voice and avatar use the exact three choices", async () => {
-  const [settings, voice, avatar] = await Promise.all([
+  const [settings, voiceSource, avatarSource] = await Promise.all([
     readFile(new URL("../app/indexes/index-1-workspace.js", import.meta.url), "utf8"),
     readFile(new URL("../app/indexes/index-2-voice-chant.js", import.meta.url), "utf8"),
     readFile(new URL("../app/indexes/index-4-avatar-video.js", import.meta.url), "utf8")
   ]);
-  assert.match(settings, /<option value="vedic">वैदिक संस्कृत<\\/option><option value="sanskrit" selected>संस्कृत<\\/option><option value="hindi">हिंदी<\\/option>/);
-  assert.match(voice, /id="tts-language-select"/);
-  assert.match(voice, /id="recitation-language-select"/);
-  assert.match(avatar, /id="avatar-language-select"/);
+  const orderedOptions = '<option value="vedic">वैदिक संस्कृत</option><option value="sanskrit" selected>संस्कृत</option><option value="hindi">हिंदी</option>';
+  assert.ok(settings.includes(orderedOptions));
+  assert.ok(voiceSource.includes('id="tts-language-select"'));
+  assert.ok(voiceSource.includes('id="recitation-language-select"'));
+  assert.ok(avatarSource.includes('id="avatar-language-select"'));
+  for (const source of [voiceSource, avatarSource]) {
+    assert.ok(source.includes('<option value="vedic">वैदिक संस्कृत</option>'));
+    assert.ok(source.includes('<option value="sanskrit" selected>संस्कृत</option>'));
+    assert.ok(source.includes('<option value="hindi">हिंदी</option>'));
+  }
 });
 
 test("root shell redirects the bare URL to the current versioned build", async () => {
