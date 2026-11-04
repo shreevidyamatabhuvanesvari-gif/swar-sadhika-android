@@ -76,6 +76,41 @@ export async function mount(context) {
     });
   }
 
+  function stripTerminalVerseNumber(sourceLine) {
+    const line = String(sourceLine);
+    const patterns = [
+      {
+        regex: /(\s*(?:॥|।।|।))\s*[०-९0-9]{1,4}\s*(?:॥|।।|।)\s*$/u,
+        preserve: match => match[1]
+      },
+      {
+        regex: /(\s*(?:॥|।।|।))\s*[०-९0-9]{1,4}\s*$/u,
+        preserve: match => match[1]
+      },
+      {
+        regex: /\s*[\[(]\s*[०-९0-9]{1,4}\s*[\])}]\s*$/u,
+        preserve: () => ""
+      },
+      {
+        regex: /(\s+)[०-९0-9]{1,4}(\s*(?:॥|।।|।|[.)]))?\s*$/u,
+        preserve: match => match[2] ? match[2].trimStart() : ""
+      }
+    ];
+
+    for (const pattern of patterns) {
+      const match = line.match(pattern.regex);
+      if (!match) continue;
+      const prefix = line.slice(0, match.index).trimEnd();
+      return {
+        text: prefix + pattern.preserve(match),
+        removed: true,
+        number: (match[0].match(/[०-९0-9]{1,4}/u) || [""])[0]
+      };
+    }
+
+    return { text: line, removed: false, number: "" };
+  }
+
   function hasVedicMarks(value) {
     return /[\u0951\u0952\u1cda-\u1cde\u1cdf-\u1ce0]/u.test(value);
   }
@@ -230,8 +265,17 @@ export async function mount(context) {
     }
 
     const line = state.lines[state.index];
-    const utterance = new Utterance(line);
+    const prepared = stripTerminalVerseNumber(line);
+    const speechText = prepared.text.trim();
     const voice = chooseVoice(line);
+
+    if (!speechText) {
+      state.index += 1;
+      scheduleNext(generation);
+      return;
+    }
+
+    const utterance = new Utterance(speechText);
     const language = voice && voice.lang ? voice.lang : (isDevanagari(line) ? "hi-IN" : "en-IN");
 
     if (voice) utterance.voice = voice;
@@ -242,12 +286,16 @@ export async function mount(context) {
     // A slight pitch lift is only a tonal preference, not a female-voice synthesizer.
     utterance.pitch = voice && voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
 
+    // Display the original line unchanged; only the spoken copy omits its trailing verse index.
     setLine(line);
+    const numberNotice = prepared.removed
+      ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।"
+      : "";
     const specialNotice = hasVedicMarks(line)
       ? " · वैदिक स्वर-चिह्न भेजे जा रहे हैं; उनका सही वैदिक गायन voice engine पर निर्भर है।"
       : "";
     setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
-      (voice ? voice.name : "डिवाइस की default voice") + specialNotice);
+      (voice ? voice.name : "डिवाइस की default voice") + numberNotice + specialNotice);
 
     utterance.onend = () => {
       if (generation !== state.generation || !state.active) return;
