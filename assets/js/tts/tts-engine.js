@@ -1,9 +1,19 @@
+import {
+  VEDIC_PRONUNCIATION_VERSION,
+  analyzeVedicText as analyzeVedicPronunciationText,
+  prepareVedicSpeech as prepareVedicSpeechText,
+  findPronunciation as findVedicPronunciation,
+  getPronunciationDiagnostics as getVedicPronunciationDiagnostics,
+  getKnowledgeBaseCoverage as getVedicKnowledgeBaseCoverage,
+  selfTest as runVedicPronunciationSelfTest
+} from "./vedic-sanskrit-pronunciation.js";
+
 /* Swar-Sadhika Local TTS Engine Manager
  * Model-independent engine. This version uses only the browser's native
  * Speech Synthesis API; it performs no network requests and loads no model.
  */
 
-export const TTS_ENGINE_VERSION = "1.0.0";
+export const TTS_ENGINE_VERSION = "1.1.0";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -261,6 +271,7 @@ export function createTtsEngine(options = {}) {
   let capabilities = null;
   let lastError = null;
   let lastDiagnostics = null;
+  let lastPronunciationReport = null;
   let disposed = false;
 
   function emit(eventName, detail = {}) {
@@ -300,7 +311,9 @@ export function createTtsEngine(options = {}) {
       backendType: backend ? backend.type : null,
       backendLabel: backend ? backend.label : null,
       localOnly: true,
-      lastError: lastError ? Object.freeze({ code: lastError.code, message: lastError.message }) : null
+      lastError: lastError ? Object.freeze({ code: lastError.code, message: lastError.message }) : null,
+      pronunciationKnowledgeBaseVersion: VEDIC_PRONUNCIATION_VERSION,
+      lastPronunciationReport: lastPronunciationReport
     });
   }
 
@@ -563,17 +576,47 @@ export function createTtsEngine(options = {}) {
 
     const adapter = activeBackend;
     const backendId = activeBackendId;
+    const pronunciationOptions = speechOptions.pronunciation && typeof speechOptions.pronunciation === "object"
+      ? speechOptions.pronunciation
+      : {};
+    const preparedSpeech = prepareSpeech(text, pronunciationOptions);
+    const analysis = preparedSpeech.analysis;
+    const pronunciationSummary = Object.freeze({
+      codePointCount: analysis.codePointCount,
+      wordCount: analysis.words.length,
+      knownDifficultWordCount: analysis.knownDifficultWords.length,
+      unlistedWordCount: analysis.unlistedWords.length,
+      conjunctCount: analysis.conjuncts.length,
+      matraCount: analysis.matras.total,
+      accentMarkCount: analysis.accentMarks.length,
+      unclassifiedMarkCount: analysis.unclassifiedMarks.length,
+      requiresBranchContext: preparedSpeech.requiresBranchContext,
+      requiresAccentAwareBackend: preparedSpeech.requiresAccentAwareBackend,
+      nativeTtsRecommendation: preparedSpeech.nativeTtsRecommendation,
+      originalTextPreserved: preparedSpeech.speechText === text
+    });
+    lastPronunciationReport = pronunciationSummary;
+    lastDiagnostics = null;
+    emit("pronunciationanalysis", { backendId, ...pronunciationSummary });
+    if (preparedSpeech.blockedReasons.length) {
+      emit("pronunciationwarning", {
+        backendId, backendType: adapter.type,
+        reasons: preparedSpeech.blockedReasons,
+        nativeTtsRecommendation: preparedSpeech.nativeTtsRecommendation,
+        message: "विशेष/अज्ञात चिह्नों का उच्चारण चयनित Backend पर प्रमाणित नहीं है। मूल पाठ बिना बदलाव के भेजा जाएगा।"
+      });
+    }
     const token = ++speechSequence;
     const backendOptions = { ...speechOptions };
     delete backendOptions.replace;
+    delete backendOptions.pronunciation;
     activeSpeech = { token, backendId };
     playback = "speaking";
     lastError = null;
-    emit("speechstart", { backendId, text });
+    emit("speechstart", { backendId, text, pronunciation: pronunciationSummary });
     emit("statuschange", getStatus());
-
     try {
-      const result = await adapter.speak(text, backendOptions);
+      const result = await adapter.speak(preparedSpeech.speechText, backendOptions);
       if (token !== speechSequence) return Object.freeze({ status: "cancelled", backendId });
       activeSpeech = null;
       playback = "idle";
@@ -715,6 +758,7 @@ export function createTtsEngine(options = {}) {
         voiceLocality = Object.freeze({ error: asError(error, "VOICE_DIAGNOSTICS_FAILED").message });
       }
     }
+    const pronunciationKnowledgeBase = getPronunciationKnowledgeBaseInfo();
     lastDiagnostics = Object.freeze({
       engineVersion: TTS_ENGINE_VERSION,
       generatedAt: new Date().toISOString(),
@@ -724,10 +768,64 @@ export function createTtsEngine(options = {}) {
       capabilities: currentCapabilities,
       voiceLocality,
       backends: Object.freeze(results),
-      note: "यह API और Backend probe रिपोर्ट है; यह स्वयं ऑडियो गुणवत्ता या Neural Inference सफलता प्रमाणित नहीं करती।"
+      pronunciationKnowledgeBase,
+      note: "यह API/Backend/Pronunciation Knowledge Base जाँच है; यह स्वयं ऑडियो गुणवत्ता या शुद्ध वैदिक उच्चारण प्रमाणित नहीं करती।"
     });
     emit("diagnostics", lastDiagnostics);
     return lastDiagnostics;
+  }
+
+  function analyzeText(text, pronunciationOptions = {}) {
+    ensureNotDisposed();
+    try { return analyzeVedicPronunciationText(text, pronunciationOptions); }
+    catch (error) { throw asError(error, "PRONUNCIATION_ANALYSIS_FAILED"); }
+  }
+
+  function prepareSpeech(text, pronunciationOptions = {}) {
+    ensureNotDisposed();
+    let prepared;
+    try { prepared = prepareVedicSpeechText(text, pronunciationOptions); }
+    catch (error) { throw asError(error, "PRONUNCIATION_PREPARATION_FAILED"); }
+    if (!prepared || prepared.originalText !== text || prepared.speechText !== text || prepared.modified !== false) {
+      throw new TtsEngineError("Pronunciation module ने मूल पाठ बदलने का प्रयास किया; TTS संचालन रोका गया।", "PRONUNCIATION_TEXT_MUTATION_BLOCKED");
+    }
+    return prepared;
+  }
+
+  function findPronunciation(word, pronunciationOptions = {}) {
+    ensureNotDisposed();
+    try { return findVedicPronunciation(word, pronunciationOptions); }
+    catch (error) { throw asError(error, "PRONUNCIATION_LOOKUP_FAILED"); }
+  }
+
+  function getTextPronunciationDiagnostics(text, pronunciationOptions = {}) {
+    ensureNotDisposed();
+    try { return getVedicPronunciationDiagnostics(text, pronunciationOptions); }
+    catch (error) { throw asError(error, "PRONUNCIATION_DIAGNOSTICS_FAILED"); }
+  }
+
+  function runPronunciationSelfTest() {
+    ensureNotDisposed();
+    try { return runVedicPronunciationSelfTest(); }
+    catch (error) { throw asError(error, "PRONUNCIATION_SELF_TEST_FAILED"); }
+  }
+
+  function getPronunciationKnowledgeBaseInfo() {
+    ensureNotDisposed();
+    let coverage, selfTest;
+    try {
+      coverage = getVedicKnowledgeBaseCoverage();
+      selfTest = runVedicPronunciationSelfTest();
+    } catch (error) {
+      throw asError(error, "PRONUNCIATION_KNOWLEDGE_BASE_FAILED");
+    }
+    return Object.freeze({
+      available: true,
+      version: VEDIC_PRONUNCIATION_VERSION,
+      integrationMode: "analysis-only; original speech text preserved",
+      coverage,
+      selfTest: Object.freeze({ status: selfTest.status, total: selfTest.total, passed: selfTest.passed, failed: selfTest.failed })
+    });
   }
 
   async function getCapabilities() {
@@ -803,6 +901,12 @@ export function createTtsEngine(options = {}) {
     initialize,
     getCapabilities,
     getStatus,
+    analyzeText,
+    prepareSpeech,
+    findPronunciation,
+    getTextPronunciationDiagnostics,
+    getPronunciationKnowledgeBaseInfo,
+    runPronunciationSelfTest,
     getDiagnostics,
     runDiagnostics,
     listBackends,
