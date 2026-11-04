@@ -53,8 +53,13 @@ test("Svāra refuses empty text and unsupported languages", async () => {
 
 test("Svāra worker errors propagate without fake audio success", async () => {
   class ErrorWorker extends ReadyMockWorker {
-    postMessage() {
-      setTimeout(() => this.dispatchEvent(new MessageEvent("message", { data: { status: "error", data: "model failure", dtype: "q4f16" } })), 0);
+    postMessage(message) {
+      setTimeout(() => {
+        const data = message.type === "preload"
+          ? { status: "ready", dtype: "q4f16" }
+          : { status: "error", data: "model failure", dtype: "q4f16" };
+        this.dispatchEvent(new MessageEvent("message", { data }));
+      }, 0);
     }
   }
   const engine = createSvaraFemaleSpeechEnginePart2({ workerFactory: () => new ErrorWorker() });
