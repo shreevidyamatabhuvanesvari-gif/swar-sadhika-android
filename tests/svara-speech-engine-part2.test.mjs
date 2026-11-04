@@ -5,19 +5,19 @@ import { createSvaraFemaleSpeechEnginePart2, SVARA_FEMALE_VOICE_OPTIONS_PART2 } 
 class MockWorker extends EventTarget {
   terminated = false;
   postMessage(message) {
-    queueMicrotask(() => {
+    setTimeout(() => {
       const data = message.type === "preload"
         ? { status: "ready", dtype: "q4f16" }
         : { status: "complete", audio: new Blob([new Uint8Array([1,2,3])], { type: "audio/wav" }), voice: message.speaker_id, sampleRate: 24000 };
       this.dispatchEvent(new MessageEvent("message", { data }));
-    });
+    }, 0);
   }
   terminate() { this.terminated = true; }
 }
 class ReadyMockWorker extends MockWorker {
   constructor() {
     super();
-    queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", { data: { status: "feature-success", fp16: true } })));
+    setTimeout(() => this.dispatchEvent(new MessageEvent("message", { data: { status: "feature-success", fp16: true } })), 0);
   }
 }
 
@@ -54,7 +54,7 @@ test("Svāra refuses empty text and unsupported languages", async () => {
 test("Svāra worker errors propagate without fake audio success", async () => {
   class ErrorWorker extends ReadyMockWorker {
     postMessage() {
-      queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", { data: { status: "error", data: "model failure", dtype: "q4f16" } })));
+      setTimeout(() => this.dispatchEvent(new MessageEvent("message", { data: { status: "error", data: "model failure", dtype: "q4f16" } })), 0);
     }
   }
   const engine = createSvaraFemaleSpeechEnginePart2({ workerFactory: () => new ErrorWorker() });
