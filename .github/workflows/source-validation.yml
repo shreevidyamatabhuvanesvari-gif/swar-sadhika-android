@@ -20,7 +20,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install pinned dependencies
+        run: npm install --no-package-lock
       - name: Check JavaScript syntax
         run: npm run check:syntax
       - name: Verify all four indexes and 45 submodules
         run: npm test
+      - name: Build GitHub Pages application
+        run: npm run build

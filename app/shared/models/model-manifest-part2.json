@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0.0",
+  "policy": "SS-ENGINE-COMPLETENESS-LOCK-001",
+  "generatedAt": "2026-11-04",
+  "note": "Candidate inventory only. A candidate is not a production-approved model. Production approval requires immutable revision, artifact checksums, license review, Android Chrome inference and offline evidence.",
+  "candidates": {
+    "svaraFemaleSpeech": {
+      "repository": "shreyask/svara-tts-v1-ONNX",
+      "revision": "3931df67fac6356991b4eba2b43e50dde67f2d1b",
+      "license": "Apache-2.0",
+      "task": "multilingual-text-to-speech",
+      "supportedVoiceIds": [
+        "Hindi (Female)",
+        "Sanskrit (Female)"
+      ],
+      "deployment": "Transformers.js 4.2.0 + ONNX Runtime Web 1.25.1 + WebGPU",
+      "quantization": "q4f16",
+      "estimatedWeights": "~1.95 GB",
+      "codec": {
+        "repository": "onnx-community/snac_24khz-ONNX",
+        "revision": "e0b0016bc39c9d144e51aba2f275f59b7a6874d6",
+        "artifact": "onnx/decoder_model_fp16.onnx",
+        "license": "MIT",
+        "estimatedSize": "~26 MB"
+      },
+      "supportedUse": [
+        "Hindi female speech",
+        "Sanskrit female speech"
+      ],
+      "explicitlyNotSupported": [
+        "musical singing",
+        "Vedic accent generation",
+        "phoneme alignment"
+      ],
+      "readiness": "INTEGRATED_CANDIDATE_UNVERIFIED",
+      "requiredDeviceEvidence": [
+        "WebGPU adapter availability",
+        "shader-f16 compatibility",
+        "GPU memory stability",
+        "storage quota",
+        "real PCM decode and playback",
+        "airplane-mode repeat inference"
+      ]
+    },
+    "diffSinger": {
+      "repository": "openvpi/DiffSinger",
+      "revision": "cb7869b8733a3882679c328994ee162845092cff",
+      "sourceLicense": "Apache-2.0",
+      "task": "score-conditioned-singing-voice-synthesis",
+      "currentDecision": "NOT_APPROVED_FOR_SWAR_SADHIKA",
+      "blockers": [
+        "No selected Hindi/Sanskrit female acoustic checkpoint",
+        "No validated Devanagari-to-trained-phoneme frontend",
+        "No exact Android Chrome WebGPU/WASM acoustic-model package",
+        "Checkpoint and dataset redistribution terms require separate verification"
+      ],
+      "readiness": "BLOCKED_MODEL_AND_VOICEBANK"
+    },
+    "mediaPipeFaceLandmarker": {
+      "documentation": "https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker",
+      "expectedOutputs": {
+        "faceLandmarks3D": 478,
+        "blendshapeScores": 52
+      },
+      "task": "face-landmark-analysis",
+      "readiness": "CANDIDATE_NOT_INTEGRATED",
+      "blockers": [
+        "Pin @mediapipe/tasks-vision version",
+        "Pin model artifact revision and checksum",
+        "Implement calibrated still-photo/video rig renderer",
+        "Measure Android frame performance"
+      ]
+    },
+    "mediaPipePoseLandmarker": {
+      "documentation": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js",
+      "task": "body-pose-landmark-analysis",
+      "readiness": "CANDIDATE_NOT_INTEGRATED",
+      "blockers": [
+        "Pin runtime and model artifacts",
+        "Define target avatar skeleton",
+        "Implement and test motion retargeting"
+      ]
+    },
+    "phonemeAlignment": {
+      "task": "audio-conditioned-phoneme-timestamp-alignment",
+      "readiness": "NO_APPROVED_HINDI_SANSKRIT_MODEL",
+      "blockers": [
+        "Select redistributable local aligner",
+        "Verify Hindi and Sanskrit coverage",
+        "Produce measured phoneme timestamps rather than duration estimates"
+      ]
+    }
+  },
+  "releaseState": "BLOCKED_UNTIL_ALL_ENGINE_ACCEPTANCE_GATES_PASS"
+}

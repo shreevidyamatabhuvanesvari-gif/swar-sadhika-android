@@ -133,6 +133,6 @@ export function createCoordinatedEnginesPart2(options = {}) {
     getStatus,
     registerSingingProvider: singing.registerProvider,
     registerAvatarRenderer: avatar.setRenderer,
-    hasSingingProvider: () => singing.getStatus().state !== "NO_PROVIDER"
+    hasSingingProvider: () => { const status = singing.getStatus(); return status.state === "PROVIDER_REGISTERED_UNVERIFIED" && status.capabilities.neuralInference === true && status.capabilities.musicalSinging === true && status.capabilities.modelVerified === true; }
   });
 }
