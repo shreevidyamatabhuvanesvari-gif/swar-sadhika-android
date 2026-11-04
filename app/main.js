@@ -5,6 +5,7 @@ import { avatarIndex } from "./indexes/index-4-avatar-video.js?v=20261104-langua
 import { renderIndex } from "./indexes/shared.js?v=20261104-language-three-v3";
 import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js?v=20261104-language-three-v3";
 import { populateLanguageSelect, speakText, stopSpeech } from "./core/speech.js?v=20261104-language-three-v3";
+import { createCoordinatedEnginesPart2 } from "./engines/synchronization/chant-session-controller-part2.js?v=20261104-engines-part2-v1";
 
 const indexes = [workspaceIndex, voiceIndex, learningIndex, avatarIndex];
 const root = document.getElementById("index-root");
@@ -13,6 +14,14 @@ let activeIndex = "workspace";
 const activeModules = Object.fromEntries(indexes.map(item => [item.id, item.modules[0].id]));
 let currentObjectUrls = [];
 let avatarPlaybackActive = false;
+const coordinatedEnginesPart2 = createCoordinatedEnginesPart2();
+window.swarSadhikaEnginesPart2 = Object.freeze({
+  getStatus: coordinatedEnginesPart2.getStatus,
+  registerSingingProvider: coordinatedEnginesPart2.registerSingingProvider,
+  registerAvatarRenderer: coordinatedEnginesPart2.registerAvatarRenderer,
+  play: coordinatedEnginesPart2.play,
+  stop: coordinatedEnginesPart2.stop
+});
 
 function notify(message) {
   toast.textContent = message;
@@ -228,6 +237,52 @@ async function loadLatestSavedText() {
   if (status) status.textContent = "Text Studio का सबसे नया सुरक्षित पाठ लोड हुआ।";
 }
 
+async function playCoordinatedAvatarPart2(text, stage, video, status) {
+  stopSpeech();
+  avatarPlaybackActive = true;
+  const fullscreenPromise = typeof stage.requestFullscreen === "function"
+    ? stage.requestFullscreen({ navigationUI: "hide" }).then(() => true).catch(() => false)
+    : Promise.resolve(false);
+  const videoPromise = video && !video.hidden
+    ? video.play().then(() => true).catch(() => false)
+    : Promise.resolve(true);
+  const fullscreenOk = await fullscreenPromise;
+  if (fullscreenOk) stage.classList.add("is-playing");
+  else if (status) status.textContent = "Fullscreen अनुमति उपलब्ध नहीं हुई; समन्वित Audio 9:16 Stage में चलेगा।";
+  const videoOk = await videoPromise;
+  if (!videoOk && status) status.textContent = "Video Clip चल नहीं सकी; Generated Audio जारी रहेगा।";
+  try {
+    await coordinatedEnginesPart2.play(text, {
+      languageMode: document.getElementById("avatar-language-select")?.value || "sanskrit",
+      stage,
+      onStatus: detail => {
+        if (!status) return;
+        if (detail.state === "GENERATING_AUDIO") status.textContent = "स्थानीय Singing Provider से Audio तैयार हो रहा है…";
+        else if (detail.state === "AUDIO_READY") status.textContent = detail.hasPhonemeAlignment
+          ? "Audio तैयार है; Phoneme/Viseme Timeline उपलब्ध है। Renderer की वास्तविक Rig गुणवत्ता अलग से सत्यापित होगी।"
+          : "Audio तैयार है; इस Output में Phoneme Alignment उपलब्ध नहीं है, इसलिए Lip-Sync निष्क्रिय है।";
+        else if (detail.state === "PLAYING") status.textContent = detail.viseme && detail.viseme !== "rest"
+          ? "Generated Audio चल रहा है · Viseme: " + detail.viseme
+          : "Generated Audio चल रहा है।";
+        else if (detail.state === "COMPLETED") status.textContent = "Generated Audio पूरा हुआ।";
+        else if (detail.state === "ERROR") status.textContent = "Engine Error: " + detail.message;
+      }
+    });
+  } catch (error) {
+    if (status) status.textContent = "Coordinated Engine Playback विफल: " + error.message;
+  } finally {
+    avatarPlaybackActive = false;
+    stage.classList.remove("is-playing");
+    if (video && !video.hidden) {
+      video.pause();
+      try { video.currentTime = 0; } catch {}
+    }
+    if (document.fullscreenElement === stage) {
+      try { await document.exitFullscreen(); } catch {}
+    }
+  }
+}
+
 async function playAvatarFullscreen() {
   const text = document.getElementById("avatar-chant-text")?.value.trim();
   const stage = document.getElementById("avatar-stage");
@@ -260,7 +315,7 @@ async function playAvatarFullscreen() {
   }
   const videoOk = await videoPromise;
   if (!videoOk && status) status.textContent = "Video Codec/Playback उपलब्ध नहीं हुआ; आवाज़ जारी रहेगी। MP4 या WebM Clip आज़माएँ।";
-  if (status && videoOk) status.textContent = "पाठ चल रहा है। Video Clip बिना रुके Loop होगी और पाठ पूरा होने पर रुकेगी।";
+  if (status && videoOk) status.textContent = "Device Speech TTS Preview चल रहा है। यह neural singing model नहीं है और phoneme-synchronized Lip-Sync उपलब्ध नहीं है।";
   try {
     await speechPromise;
     if (status) status.textContent = "पाठ पूरा हुआ। Video Clip रोक दी गई।";
@@ -283,6 +338,7 @@ function stopAvatarPlayback(message = "Playback रोक दिया गया
   if (!avatarPlaybackActive) return;
   avatarPlaybackActive = false;
   stopSpeech();
+  coordinatedEnginesPart2.stop("Avatar playback stopped by user");
   const stage = document.getElementById("avatar-stage");
   const video = document.getElementById("avatar-stage-video");
   if (stage) stage.classList.remove("is-playing");
