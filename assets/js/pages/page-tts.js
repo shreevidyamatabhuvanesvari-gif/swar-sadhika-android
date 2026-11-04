@@ -1,6 +1,6 @@
 /* Swar-Sadhika — TTS page module.
  * UI and line sequencing live here; speech backends are owned by tts-engine.js.
- * This page uses only the local Native TTS backend currently registered there.
+ * Current backend: local Native Speech Synthesis only.
  */
 import { createTtsEngine } from "../tts/tts-engine.js";
 
@@ -303,10 +303,14 @@ export async function mount(context) {
     state.generation += 1;
     const generation = state.generation;
     clearNextTimer();
+    state.active = false;
+    state.speechInFlight = false;
+    updateButtons();
     try {
       await engine.cancel();
     } catch (error) {
-      finish("पिछला वाचन सुरक्षित रूप से रोक नहीं सका: " + (error && error.message ? error.message : "TTS त्रुटि"), true);
+      finish("पिछला वाचन सुरक्षित रूप से रोक नहीं सका: " +
+        (error && error.message ? error.message : "TTS त्रुटि"), true);
       return;
     }
     if (generation !== state.generation || state.destroyed) return;
@@ -314,7 +318,6 @@ export async function mount(context) {
     state.lines = lines;
     state.index = 0;
     state.active = true;
-    state.speechInFlight = false;
     state.userPaused = false;
     state.navigationPaused = false;
     state.waitingForNext = false;
@@ -418,7 +421,8 @@ export async function mount(context) {
           gender === "male" ? " · पुरुष-स्वर नाम" : "";
         const option = doc.createElement("option");
         option.value = entry.key;
-        option.textContent = String(voice.name || "स्थानीय Voice") + " (" + String(voice.lang || "भाषा अज्ञात") + ")" + genderText + " · डिवाइस";
+        option.textContent = String(voice.name || "स्थानीय Voice") + " (" +
+          String(voice.lang || "भाषा अज्ञात") + ")" + genderText + " · डिवाइस";
         ui.voice.appendChild(option);
       });
 
@@ -434,16 +438,18 @@ export async function mount(context) {
       }
       const selected = chooseVoice(ui.input.value);
       if (selected && voiceGenderHint(selected) === "female") {
-        setStatus("संभावित स्त्री-स्वर वाली स्थानीय Voice उपलब्ध है: " + selected.name + "। वास्तविक मधुरता और उच्चारण का श्रवण परीक्षण आवश्यक है।");
+        setStatus("संभावित स्त्री-स्वर वाली स्थानीय Voice उपलब्ध है: " + selected.name +
+          "। वास्तविक मधुरता और उच्चारण का श्रवण परीक्षण आवश्यक है।");
       } else {
-        setStatus("" + state.voiceEntries.length + " स्थानीय Speech Voices उपलब्ध हैं। नाम से स्पष्ट स्त्री-स्वर की पहचान नहीं हुई; स्वचालित चयन भाषा और उपलब्धता पर आधारित है।", true);
+        setStatus(state.voiceEntries.length + " स्थानीय Speech Voices उपलब्ध हैं। नाम से स्पष्ट स्त्री-स्वर की पहचान नहीं हुई; स्वचालित चयन भाषा और उपलब्धता पर आधारित है।", true);
       }
     } catch (error) {
       if (state.destroyed || request !== state.voiceRefreshSequence) return;
       state.voices = [];
       state.voiceEntries = [];
       updateButtons();
-      setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " +
+        (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
     }
   }
 
@@ -457,7 +463,9 @@ export async function mount(context) {
     if (state.speechInFlight) {
       const paused = await engine.pause();
       if (!paused && state.speechInFlight) {
-        setStatus("दूसरे पेज पर जाने पर Native TTS Pause नहीं हो सका। वाचन की स्थिति जाँचें।", true);
+        setStatus("दूसरे पेज पर जाने पर Native TTS Pause नहीं हो सका। वापस आने पर वाचन की स्थिति जाँचें।", true);
+        updateButtons();
+        return;
       }
     }
     setStatus("दूसरे पेज पर जाने के कारण TTS अस्थायी रूप से रुका है। वापस आने पर जारी किया जा सकता है।");
@@ -507,8 +515,9 @@ export async function mount(context) {
     state.unsubscribeVoices = null;
     setLine("");
     updateButtons();
-    try { await engine.dispose(); }
-    catch (error) {
+    try {
+      await engine.dispose();
+    } catch (error) {
       if (win.console && typeof win.console.error === "function") {
         win.console.error("[Swar-Sadhika] TTS Engine cleanup failed", error);
       }
@@ -536,16 +545,18 @@ export async function mount(context) {
     }
     state.engineReady = Boolean(initialized && initialized.ready);
     if (!state.engineReady) {
-      setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें。", true);
+      setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें।", true);
       updateButtons();
     } else {
       await refreshVoices();
     }
   } catch (error) {
-    state.engineReady = false;
-    setStatus("TTS Engine initialize नहीं हो सका: " +
-      (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-    updateButtons();
+    if (!state.destroyed) {
+      state.engineReady = false;
+      setStatus("TTS Engine initialize नहीं हो सका: " +
+        (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      updateButtons();
+    }
   }
 
   return Object.freeze({ onShow, onHide, unmount });
