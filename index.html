@@ -6,18 +6,7 @@
   <meta name="theme-color" content="#17152d">
   <meta name="description" content="Swar-Sadhika Android — photo/video index, line-by-line speech, avatar and modular tools.">
   <title>Swar-Sadhika Android | Index Panel</title>
-  <style>
-    :root{color-scheme:dark;--bg:#10101d;--panel:#19192b;--panel2:#202039;--ink:#f6f3ff;--muted:#b8b5ce;--line:#383754;--accent:#c5a7ff;--accent2:#65e2d1;--danger:#ff8f9a;--good:#80e0ad;--radius:18px;--shadow:0 14px 38px #0005}
-    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(1000px 500px at 10% -10%,#302454 0,transparent 55%),var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;min-height:100vh}
-    button,input,textarea,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--accent2);outline-offset:2px}
-    .topbar{position:sticky;top:0;z-index:20;background:#121222ed;backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding:10px max(14px,env(safe-area-inset-right)) 10px max(14px,env(safe-area-inset-left))}
-    .brandrow{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:1180px;margin:auto}.brand{font-weight:800;letter-spacing:.2px}.brand small{display:block;color:var(--muted);font-size:11px;font-weight:500}.nav{display:flex;gap:8px;overflow-x:auto;padding:9px 1px 2px;max-width:1180px;margin:0 auto;scrollbar-width:thin}.nav button,.btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:999px;padding:9px 14px;white-space:nowrap;min-height:40px}.nav button[aria-current="page"]{background:#48356e;border-color:#9b7bd7}.btn.primary{background:linear-gradient(135deg,#7857b7,#4b73a9);border-color:transparent}.btn.secondary{background:#263c47;border-color:#43717c}.btn.danger{background:#482733;border-color:#7f4657}.btn:disabled{opacity:.45;cursor:not-allowed}
-    main{max-width:1180px;margin:0 auto;padding:22px 14px 60px}.view[hidden],.hidden{display:none!important}.intro{margin:0 0 18px}.intro h1{font-size:clamp(23px,4vw,34px);line-height:1.2;margin:0 0 7px}.intro p{color:var(--muted);margin:0}.panel{background:linear-gradient(160deg,#1c1c31,#171727);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin:15px 0}.panel h2{font-size:18px;margin:0 0 10px}.subtle{color:var(--muted);font-size:13px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.row.between{justify-content:space-between}.filepick{display:inline-flex;align-items:center;gap:8px;border:1px dashed #8d7ab8;border-radius:14px;padding:11px 14px;background:#28223b;color:var(--ink);cursor:pointer}.filepick input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.gallery{display:flex;gap:10px;overflow-x:auto;padding:12px 2px 4px;min-height:0}.thumb{position:relative;flex:0 0 78px;width:78px;aspect-ratio:9/16;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:#0b0b14;padding:0}.thumb[aria-pressed="true"]{border-color:var(--accent2);box-shadow:0 0 0 2px #65e2d155}.thumb img,.thumb video{width:100%;height:100%;object-fit:cover}.thumb span{position:absolute;bottom:3px;left:3px;right:3px;background:#000a;border-radius:6px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .stage-wrap{display:flex;justify-content:center}.stage{position:relative;width:min(100%,390px);aspect-ratio:9/16;max-height:min(74svh,720px);background:#080811;border:1px solid #55506d;border-radius:22px;overflow:hidden;box-shadow:0 20px 50px #0008;isolation:isolate}.stage img.media,.stage video.media{width:100%;height:100%;display:block;object-fit:contain;background:#05050b}.stage .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:22px;color:#b9b4ce}.stage .empty strong{display:block;color:#eee9ff;font-size:18px}.line-overlay{position:absolute;z-index:4;left:4%;right:4%;top:50%;transform:translateY(-50%);padding:8px 10px;text-align:center;font-weight:900;font-size:clamp(18px,5vw,34px);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:clip;letter-spacing:.1px;text-shadow:0 2px 5px #000,0 0 12px #000;background:#0005;border-radius:10px;pointer-events:none}.line-overlay .rainbow{display:inline-block;background:linear-gradient(90deg,#ff6b6b,#ffd166,#6bff95,#61d8ff,#c69bff,#ff7ac8);background-size:250% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:rainbow 5s linear infinite;filter:drop-shadow(0 2px 3px #000)}@keyframes rainbow{to{background-position:250% center}}
-    .avatar-overlay{position:absolute;z-index:3;right:5%;bottom:5%;width:28%;aspect-ratio:3/4;object-fit:cover;object-position:top;border:2px solid #fff;border-radius:14px;box-shadow:0 4px 16px #0009;background:#222}.fullscreen-trigger{position:absolute;z-index:8;right:10px;top:10px;background:#090912cc;border:1px solid #ffffff65;color:white;border-radius:999px;padding:9px 12px}.stage:fullscreen{width:min(100vw,56.25vh);height:100vh;max-height:100vh;aspect-ratio:9/16;border:0;border-radius:0;margin:auto}.stage:fullscreen .fullscreen-trigger{display:none}.stage:fullscreen .line-overlay{font-size:clamp(22px,4vh,44px)}
-    textarea{width:100%;min-height:140px;resize:vertical;border:1px solid var(--line);border-radius:13px;background:#0e0e1a;color:var(--ink);padding:12px}label.field{display:grid;gap:6px;color:var(--muted);font-size:13px;flex:1;min-width:180px}select,input[type=range],input[type=text]{accent-color:var(--accent)}select,input[type=text]{width:100%;border:1px solid var(--line);border-radius:12px;background:#10101e;color:var(--ink);padding:10px}.tts-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.note{border-left:3px solid var(--accent);padding:9px 12px;background:#242039;border-radius:0 10px 10px 0;color:#d8d2ee;font-size:13px;margin-top:12px}.status{padding:10px 12px;border:1px solid var(--line);background:#11111e;border-radius:12px;color:var(--muted);font-size:13px}.status.good{border-color:#3e8064;color:#a8f0c7}.status.warn{border-color:#8a6a35;color:#f5d79a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}.tile{border:1px solid var(--line);border-radius:14px;background:#1b1b2d;padding:14px}.tile strong{display:block;margin-bottom:5px}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;color:var(--muted)}.audit-list{display:grid;gap:8px}.audit-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);background:#151524;border-radius:11px}.pass{color:var(--good)}.fail{color:var(--danger)}.pending{color:#f4d08b}.footer{text-align:center;color:#88849f;font-size:12px;margin:35px 0 5px}
-    @media(min-width:760px){main{padding-top:30px}.panel{padding:20px}.nav{flex-wrap:wrap}.stage{width:min(100%,360px)}}
-  </style>
+  <link rel="stylesheet" href="./assets/css/app.css">
 </head>
 <body>
   <header class="topbar">
@@ -46,145 +35,47 @@
           <div id="line-overlay" class="line-overlay hidden" aria-live="polite"><span id="rainbow-line" class="rainbow"></span></div>
           <button id="fullscreen-btn" class="fullscreen-trigger" type="button" aria-label="वीडियो या फोटो पूर्ण स्क्रीन में चलाएँ">⛶ पूर्ण स्क्रीन</button>
         </div></div>
-        <div class="row between" style="margin-top:12px"><span id="media-status" class="subtle" aria-live="polite">अभी कोई मीडिया चयनित नहीं है।</span><button id="remove-media" class="btn danger" type="button" disabled>चयन हटाएँ</button></div>
+        <div class="row between"><span id="media-status" class="subtle" aria-live="polite">अभी कोई मीडिया चयनित नहीं है।</span><button id="remove-media" class="btn danger" type="button" disabled>चयन हटाएँ</button></div>
       </section>
       <section id="text-section" class="panel" aria-labelledby="text-heading">
         <h2 id="text-heading">पाठ और मधुर TTS</h2>
         <p class="subtle">हर खाली पंक्ति को छोड़कर अगली पंक्ति पढ़ी जाएगी। पढ़ी जा रही पंक्ति चुनी हुई फोटो/वीडियो पर बहुरंगी रूप में बनी रहेगी और उस पंक्ति का उच्चारण पूरा होने पर अगली पंक्ति आएगी।</p>
         <textarea id="text-input" placeholder="यहाँ अपना संस्कृत श्लोक, मंत्र या अन्य पाठ लिखें।
 हर नई पंक्ति अलग से पढ़ी जाएगी।" aria-label="TTS के लिए पंक्ति-दर-पंक्ति पाठ"></textarea>
-        <div class="row" style="margin-top:12px">
+        <div class="row">
           <label class="field">आवाज़ चुनें<select id="voice-select"><option value="">ब्राउज़र की उपयुक्त आवाज़ खोजी जा रही है…</option></select></label>
           <label class="field">पढ़ने की गति <span id="rate-value">0.88×</span><input id="speech-rate" type="range" min="0.65" max="1.15" step="0.05" value="0.88"></label>
         </div>
         <div class="tts-actions"><button id="speak-btn" class="btn primary" type="button">▶ पढ़ना शुरू करें</button><button id="pause-btn" class="btn" type="button" disabled>Ⅱ रोकें</button><button id="resume-btn" class="btn" type="button" disabled>▶ फिर शुरू करें</button><button id="stop-btn" class="btn danger" type="button" disabled>■ समाप्त करें</button></div>
-        <div id="tts-status" class="status" role="status" aria-live="polite" style="margin-top:12px">TTS तैयार है। आवाज़ उपलब्धता आपके Android/ब्राउज़र की installed speech voices पर निर्भर करती है।</div>
+        <div id="tts-status" class="status" role="status" aria-live="polite">TTS तैयार है। आवाज़ उपलब्धता आपके Android/ब्राउज़र की installed speech voices पर निर्भर करती है।</div>
         <div class="note">महिला-स्वर का चयन उपलब्ध voice names के आधार पर सुझाया जाता है। वास्तविक आवाज़ और उसकी मधुरता Android में उपलब्ध Hindi/संस्कृत-संगत TTS voice पर निर्भर करेगी; यह पृष्ठ किसी बाहरी AI सेवा को कॉल नहीं करता।</div>
       </section>
     </section>
 
     <section id="view-nano-server" class="view" hidden aria-labelledby="server-title">
       <div class="intro"><h1 id="server-title">नैनो सर्वर</h1><p>ऐप के अपने निजी सर्वर की लाइव स्थिति के लिए आरक्षित पृष्ठ।</p></div>
-      <div class="panel"><div class="status warn">अभी निजी Nano Server का endpoint या server process इस Repository में मौजूद नहीं है। इसलिए कोई काल्पनिक LIVE स्थिति नहीं दिखाई जा रही है।</div><div class="grid" style="margin-top:14px"><div class="tile"><strong>सर्वर कनेक्शन</strong><span class="pending">कॉन्फ़िगरेशन लंबित</span></div><div class="tile"><strong>लाइव हेल्थ चेक</strong><span class="pending">Health endpoint लंबित</span></div><div class="tile"><strong>डेटा स्रोत</strong><span class="subtle">स्थानीय ब्राउज़र; सर्वर से कनेक्शन अभी सक्रिय नहीं</span></div></div><p class="note">भविष्य में Nano Server मॉड्यूल और उसके health-check endpoint को Registry में जोड़कर इसी पृष्ठ पर वास्तविक status, uptime और सीमित runtime जानकारी दिखाई जा सकेगी।</p></div>
+      <div class="panel"><div class="status warn">अभी निजी Nano Server का endpoint या server process इस Repository में मौजूद नहीं है। इसलिए कोई काल्पनिक LIVE स्थिति नहीं दिखाई जा रही है।</div><div class="grid"><div class="tile"><strong>सर्वर कनेक्शन</strong><span class="pending">कॉन्फ़िगरेशन लंबित</span></div><div class="tile"><strong>लाइव हेल्थ चेक</strong><span class="pending">Health endpoint लंबित</span></div><div class="tile"><strong>डेटा स्रोत</strong><span class="subtle">स्थानीय ब्राउज़र; सर्वर से कनेक्शन अभी सक्रिय नहीं</span></div></div><p class="note">भविष्य में Nano Server मॉड्यूल और उसके health-check endpoint को Registry में जोड़कर इसी पृष्ठ पर वास्तविक status, uptime और सीमित runtime जानकारी दिखाई जा सकेगी।</p></div>
     </section>
 
     <section id="view-avatar" class="view" hidden aria-labelledby="avatar-title">
       <div class="intro"><h1 id="avatar-title">अवतार चयन</h1><p>अपनी फोटो चुनकर मीडिया इंडेक्स पर अस्थायी अवतार के रूप में लगाएँ।</p></div>
-      <div class="panel"><label class="filepick">＋ अवतार फोटो चुनें<input id="avatar-input" type="file" accept="image/*"></label><div class="row" style="margin-top:15px;align-items:flex-start"><img id="avatar-preview" class="hidden" alt="अवतार पूर्वावलोकन" style="width:min(48%,220px);aspect-ratio:3/4;object-fit:cover;object-position:top;border-radius:15px;border:1px solid var(--line)"><div style="flex:1;min-width:180px"><p id="avatar-status" class="subtle">अभी कोई अवतार फोटो चयनित नहीं है।</p><div class="tts-actions"><button id="apply-avatar" class="btn primary" type="button" disabled>इंडेक्स पैनल पर लगाएँ</button><button id="clear-avatar" class="btn danger" type="button" disabled>अवतार हटाएँ</button></div></div></div><p class="note">फोटो केवल इस ब्राउज़र सत्र में उपयोग होती है। यह GitHub या किसी सर्वर पर अपलोड नहीं होती। पृष्ठ रीफ्रेश करने पर स्थानीय object URL समाप्त हो सकता है।</p></div>
+      <div class="panel"><label class="filepick">＋ अवतार फोटो चुनें<input id="avatar-input" type="file" accept="image/*"></label><div class="row"><img id="avatar-preview" class="hidden" alt="अवतार पूर्वावलोकन"><div><p id="avatar-status" class="subtle">अभी कोई अवतार फोटो चयनित नहीं है।</p><div class="tts-actions"><button id="apply-avatar" class="btn primary" type="button" disabled>इंडेक्स पैनल पर लगाएँ</button><button id="clear-avatar" class="btn danger" type="button" disabled>अवतार हटाएँ</button></div></div></div><p class="note">फोटो केवल इस ब्राउज़र सत्र में उपयोग होती है। यह GitHub या किसी सर्वर पर अपलोड नहीं होती। पृष्ठ रीफ्रेश करने पर स्थानीय object URL समाप्त हो सकता है।</p></div>
     </section>
 
     <section id="view-nano-brain" class="view" hidden aria-labelledby="brain-title">
       <div class="intro"><h1 id="brain-title">नैनो ब्रेन</h1><p>भविष्य में पाँच भागों को एक ही मुख्य ब्रेन फाइल से संचालित करने के लिए आरक्षित स्थान।</p></div>
-      <div class="panel"><div class="status warn">ब्रेन के कार्य और फीचर अभी निर्धारित किए जाने शेष हैं। इस चरण में कोई काल्पनिक बुद्धिमत्ता या AI क्षमता सक्रिय नहीं है।</div><div class="grid" style="margin-top:14px"><div class="tile"><strong>भाग 1</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 2</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 3</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 4</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 5</strong><span class="pending">योजना लंबित</span></div></div><p class="note">पाँचों भागों का वास्तविक कार्य आपके साथ तय होने के बाद ही कोड और इंटरफेस बनाया जाएगा। अभी केवल navigation और सुरक्षित placeholder तैयार है।</p></div>
+      <div class="panel"><div class="status warn">ब्रेन के कार्य और फीचर अभी निर्धारित किए जाने शेष हैं। इस चरण में कोई काल्पनिक बुद्धिमत्ता या AI क्षमता सक्रिय नहीं है।</div><div class="grid"><div class="tile"><strong>भाग 1</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 2</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 3</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 4</strong><span class="pending">योजना लंबित</span></div><div class="tile"><strong>भाग 5</strong><span class="pending">योजना लंबित</span></div></div><p class="note">पाँचों भागों का वास्तविक कार्य आपके साथ तय होने के बाद ही कोड और इंटरफेस बनाया जाएगा। अभी केवल navigation और सुरक्षित placeholder तैयार है।</p></div>
     </section>
 
     <section id="view-diagnostics" class="view" hidden aria-labelledby="diag-title">
       <div class="intro"><h1 id="diag-title">फाइल और कार्यक्षमता जाँच</h1><p>यह पृष्ठ उपलब्ध मॉड्यूलों की Registry तथा इस पैनल की मूल browser सुविधाओं का परीक्षण करता है।</p></div>
       <div class="panel"><div class="row between"><h2>स्व-परीक्षण</h2><button id="run-audit" class="btn primary" type="button">पुनः जाँचें</button></div><div id="audit-list" class="audit-list" aria-live="polite"><div class="status">जाँच प्रारंभ हो रही है…</div></div></div>
-      <div class="panel"><h2>मॉड्यूल रजिस्ट्री</h2><p class="subtle">नए पेज/मॉड्यूल भविष्य में <code>modules/registry.json</code> में दर्ज होंगे। प्रत्येक JS मॉड्यूल को <code>mount(context)</code> export देना होगा; वैकल्पिक <code>selfTest()</code> export से कार्य-परीक्षण किया जाएगा। Registry में <code>status:"placeholder"</code> वाली फाइल DUMMY के रूप में दिखाई जाएगी।</p><div id="registry-status" class="status">Registry पढ़ी जा रही है…</div><div id="module-audit" class="audit-list" style="margin-top:10px"></div><p class="note">GitHub Pages पर सर्वर-साइड directory listing उपलब्ध नहीं होती। इसलिए Registry में दर्ज फाइलों का ऑडिट संभव है; Registry में दर्ज न की गई हर Repository फाइल की स्वतः खोज के लिए अलग GitHub API/निजी सर्वर एकीकरण तय करना होगा।</p></div>
+      <div class="panel"><h2>मॉड्यूल रजिस्ट्री</h2><p class="subtle">नए पेज/मॉड्यूल भविष्य में <code>modules/registry.json</code> में दर्ज होंगे। प्रत्येक JS मॉड्यूल को <code>mount(context)</code> export देना होगा; वैकल्पिक <code>selfTest()</code> export से कार्य-परीक्षण किया जाएगा। Registry में <code>status:"placeholder"</code> वाली फाइल DUMMY के रूप में दिखाई जाएगी।</p><div id="registry-status" class="status">Registry पढ़ी जा रही है…</div><div id="module-audit" class="audit-list"></div><p class="note">GitHub Pages पर सर्वर-साइड directory listing उपलब्ध नहीं होती। इसलिए Registry में दर्ज फाइलों का ऑडिट संभव है; Registry में दर्ज न की गई हर Repository फाइल की स्वतः खोज के लिए अलग GitHub API/निजी सर्वर एकीकरण तय करना होगा।</p></div>
     </section>
 
     <section id="view-module" class="view" hidden aria-labelledby="module-title"><div class="intro"><h1 id="module-title">मॉड्यूल</h1><p id="module-description">Registry से लोड किया गया मॉड्यूल।</p></div><div class="panel"><div id="module-mount"></div></div></section>
     <div class="footer">Swar-Sadhika Android · Local-first interface · No external AI API</div>
   </main>
-  <script>
-  (()=>{
-    'use strict';
-    const $=id=>document.getElementById(id);
-    const state={items:[],selected:-1,avatarUrl:'',avatarOwnedUrl:'',voices:[],speaking:false,paused:false,lines:[],lineIndex:0,utterance:null,registry:null,route:'index',activeModule:null,moduleInstance:null};
-    const routeViews=['index','nano-server','avatar','nano-brain','diagnostics','module'];
-    const safeText=(value,max=120)=>String(value??'').slice(0,max);
-    const setStatus=(id,message,kind='')=>{const el=$(id);if(el){el.textContent=message;el.className='status'+(kind?' '+kind:'')}};
-    function showRoute(route){
-      if(!routeViews.includes(route)&&!findModule(route))return;
-      state.route=route;
-      routeViews.forEach(name=>{const el=$('view-'+name);if(el)el.hidden=name!==route});
-      document.querySelectorAll('[data-route]').forEach(btn=>{if(btn.dataset.route===route)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current')});
-      if(route==='diagnostics')runAudit();
-      if(route==='module')loadModule(findModule(route)||findModule(location.hash.slice(1)));
-      if(route!=='module'&&state.moduleInstance&&typeof state.moduleInstance.unmount==='function'){try{state.moduleInstance.unmount()}catch(e){console.warn('Module unmount failed',e)}state.moduleInstance=null;state.activeModule=null}
-      if(route!=='index')history.replaceState(null,'','#'+route);else history.replaceState(null,'',location.pathname+location.search);
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-    function findModule(route){return state.registry?.modules?.find(m=>m.route===route||m.id===route)||null}
-    function addRegistryNav(){
-      const nav=document.querySelector('.nav');
-      (state.registry?.modules||[]).forEach(m=>{if(document.querySelector('[data-route="'+CSS.escape(m.route)+'"]'))return;const b=document.createElement('button');b.type='button';b.dataset.route=m.route;b.textContent=safeText(m.label,36)||safeText(m.id,36);nav.appendChild(b)});
-    }
-    async function initRegistry(){
-      try{
-        const response=await fetch('./modules/registry.json',{cache:'no-store'});
-        if(!response.ok)throw new Error('Registry अभी उपलब्ध नहीं है ('+response.status+')');
-        const data=await response.json();
-        if(!data||!Array.isArray(data.modules))throw new Error('Registry का format अमान्य है।');
-        const seenRoutes=new Set();
-        data.modules.forEach(m=>{if(!m||typeof m.id!=='string'||typeof m.route!=='string'||typeof m.entry!=='string'||!/^modules\/[a-zA-Z0-9_./-]+\.js$/.test(m.entry)||m.entry.includes('..')||!/^[-a-zA-Z0-9_]+$/.test(m.route)||seenRoutes.has(m.route)||!['active','placeholder',undefined].includes(m.status))throw new Error('Registry में असुरक्षित, duplicate या अमान्य module entry मिली।');seenRoutes.add(m.route)});
-        state.registry=data;addRegistryNav();setStatus('registry-status','Registry उपलब्ध है: '+data.modules.length+' मॉड्यूल दर्ज।','good');
-      }catch(error){state.registry={modules:[]};setStatus('registry-status','अभी Registry स्थापित नहीं है। भविष्य में modules/registry.json जोड़ने पर index.html बदले बिना मॉड्यूल खोजे जा सकेंगे।','warn')}
-    }
-    async function loadModule(module){
-      const mount=$('module-mount');if(!module){$('module-title').textContent='मॉड्यूल उपलब्ध नहीं';mount.textContent='यह मॉड्यूल अभी Registry में दर्ज नहीं है।';return}
-      if(state.activeModule===module.id&&state.moduleInstance)return;
-      if(state.moduleInstance&&typeof state.moduleInstance.unmount==='function'){try{state.moduleInstance.unmount()}catch(e){console.warn(e)}}
-      mount.replaceChildren();$('module-title').textContent=safeText(module.label||module.id);$('module-description').textContent=safeText(module.description||'Registry मॉड्यूल');
-      try{const url=new URL('./'+module.entry,document.baseURI);if(url.origin!==location.origin)throw new Error('केवल इसी origin के modules स्वीकार हैं।');const mod=await import(url.href);if(typeof mod.mount!=='function')throw new Error('मॉड्यूल में named export mount(context) आवश्यक है।');const instance=await mod.mount({root:mount,navigate:showRoute,appVersion:'index-panel-1'});state.moduleInstance=instance||{};state.activeModule=module.id}
-      catch(error){mount.textContent='मॉड्यूल लोड नहीं हो सका: '+safeText(error.message,240);setStatus('registry-status','मॉड्यूल लोड त्रुटि: '+safeText(error.message,180),'warn')}
-    }
-    function renderGallery(){
-      const gallery=$('gallery');gallery.replaceChildren();state.items.forEach((item,index)=>{const b=document.createElement('button');b.type='button';b.className='thumb';b.setAttribute('aria-pressed',String(index===state.selected));b.title=item.name;b.addEventListener('click',()=>selectMedia(index));if(item.kind==='image'){const img=document.createElement('img');img.src=item.url;img.alt=item.name;b.appendChild(img)}else{const v=document.createElement('video');v.src=item.url;v.muted=true;v.playsInline=true;b.appendChild(v)}const label=document.createElement('span');label.textContent=item.name;b.appendChild(label);gallery.appendChild(b)});
-      $('remove-media').disabled=state.selected<0;
-    }
-    function selectMedia(index){
-      if(index<0||index>=state.items.length)return;state.selected=index;const item=state.items[index];$('stage-empty').classList.add('hidden');$('stage-image').classList.add('hidden');$('stage-video').classList.add('hidden');
-      if(item.kind==='image'){$('stage-image').src=item.url;$('stage-image').classList.remove('hidden');$('stage-video').pause();$('stage-video').removeAttribute('src');$('stage-video').load()}
-      else{$('stage-video').src=item.url;$('stage-video').classList.remove('hidden');$('stage-image').removeAttribute('src')}
-      $('media-status').textContent=item.name+' · '+(item.kind==='image'?'फोटो':'वीडियो')+' · 9:16 पूर्वावलोकन';renderGallery();
-    }
-    $('media-input').addEventListener('change',event=>{Array.from(event.target.files||[]).forEach(file=>{if(!file.type.startsWith('image/')&&!file.type.startsWith('video/'))return;const url=URL.createObjectURL(file);state.items.push({name:file.name,kind:file.type.startsWith('image/')?'image':'video',url,file})});if(state.items.length&&state.selected<0)selectMedia(0);else renderGallery();event.target.value=''});
-    $('remove-media').addEventListener('click',()=>{if(state.selected<0)return;const removed=state.items.splice(state.selected,1)[0];URL.revokeObjectURL(removed.url);state.selected=-1;if(state.items.length)selectMedia(0);else{$('stage-image').classList.add('hidden');$('stage-video').pause();$('stage-video').classList.add('hidden');$('stage-empty').classList.remove('hidden');$('media-status').textContent='अभी कोई मीडिया चयनित नहीं है।';renderGallery()}});
-    $('fullscreen-btn').addEventListener('click',async()=>{const stage=$('media-stage');try{if(!document.fullscreenElement){if(stage.requestFullscreen)await stage.requestFullscreen();else setStatus('media-status','इस ब्राउज़र में Fullscreen API उपलब्ध नहीं है।','warn')}else await document.exitFullscreen()}catch(error){setStatus('media-status','पूर्ण स्क्रीन शुरू नहीं हो सकी: '+safeText(error.message,120),'warn')}});
-    document.addEventListener('fullscreenchange',()=>{$('fullscreen-btn').classList.toggle('hidden',!!document.fullscreenElement)});
-    function updateVoices(){
-      if(!('speechSynthesis'in window)){$('voice-select').innerHTML='<option value="">इस ब्राउज़र में TTS उपलब्ध नहीं</option>';return}
-      state.voices=window.speechSynthesis.getVoices();const select=$('voice-select');const old=select.value;select.replaceChildren();
-      const sorted=[...state.voices].sort((a,b)=>{const score=v=>(/^hi([-_]|$)/i.test(v.lang)?5:0)+(/female|woman|girl|samantha|zira|lekha|heera|priya|neerja|veena|kavya/i.test(v.name)?3:0);return score(b)-score(a)});
-      if(!sorted.length){const o=document.createElement('option');o.value='';o.textContent='आवाज़ें लोड हो रही हैं…';select.appendChild(o);return}
-      sorted.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name+' ('+v.lang+')';select.appendChild(o)});
-      const preferred=sorted.find(v=>/^hi([-_]|$)/i.test(v.lang)&&/female|woman|girl|samantha|zira|lekha|heera|priya|neerja|veena|kavya/i.test(v.name))||sorted.find(v=>/^hi([-_]|$)/i.test(v.lang))||sorted[0];select.value=state.voices.find(v=>v.name===old)?old:preferred.name;
-    }
-    if('speechSynthesis'in window){updateVoices();window.speechSynthesis.onvoiceschanged=updateVoices}
-    $('speech-rate').addEventListener('input',()=>{$('rate-value').textContent=Number($('speech-rate').value).toFixed(2)+'×'});
-    function showLine(line){const overlay=$('line-overlay');$('rainbow-line').textContent=line;overlay.classList.remove('hidden');const span=$('rainbow-line');let size=34;span.style.fontSize=size+'px';const max=overlay.clientWidth-16;while(span.scrollWidth>max&&size>12){size-=1;span.style.fontSize=size+'px'}}
-    function clearLine(){ $('line-overlay').classList.add('hidden');$('rainbow-line').textContent=''}
-    function updateTtsButtons(){const active=state.speaking;$('speak-btn').disabled=active;$('pause-btn').disabled=!active||state.paused;$('resume-btn').disabled=!active||!state.paused;$('stop-btn').disabled=!active}
-    function finishTts(message='पाठ पूरा हो गया।') {state.speaking=false;state.paused=false;state.utterance=null;clearLine();updateTtsButtons();setStatus('tts-status',message,'good')}
-    function speakNext(){
-      if(!state.speaking)return;if(state.lineIndex>=state.lines.length){finishTts();return}
-      const line=state.lines[state.lineIndex];showLine(line);const utterance=new SpeechSynthesisUtterance(line);const voice=state.voices.find(v=>v.name===$('voice-select').value);if(voice){utterance.voice=voice;utterance.lang=voice.lang}else utterance.lang='hi-IN';utterance.rate=Number($('speech-rate').value);utterance.pitch=1.08;state.utterance=utterance;
-      utterance.onstart=()=>setStatus('tts-status','पढ़ा जा रहा है ('+(state.lineIndex+1)+'/'+state.lines.length+'): '+line,'good');
-      utterance.onend=()=>{if(!state.speaking)return;state.lineIndex++;if(state.lineIndex<state.lines.length){setTimeout(speakNext,180)}else finishTts()};
-      utterance.onerror=event=>{if(!state.speaking)return;finishTts('TTS त्रुटि ('+safeText(event.error,60)+')। उपलब्ध Hindi voice की जाँच करें।')};
-      window.speechSynthesis.speak(utterance);
-    }
-    $('speak-btn').addEventListener('click',()=>{if(!('speechSynthesis'in window)){setStatus('tts-status','इस ब्राउज़र में Web Speech TTS उपलब्ध नहीं है।','warn');return}const lines=$('text-input').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length){setStatus('tts-status','पहले टेक्स्ट बॉक्स में पाठ लिखें।','warn');return}if(state.selected<0){setStatus('tts-status','पहले मीडिया इंडेक्स से फोटो या वीडियो चुनें।','warn');return}window.speechSynthesis.cancel();state.lines=lines;state.lineIndex=0;state.speaking=true;state.paused=false;updateTtsButtons();speakNext()});
-    $('pause-btn').addEventListener('click',()=>{if(state.speaking){window.speechSynthesis.pause();state.paused=true;updateTtsButtons();setStatus('tts-status','पाठ रोका गया है; वर्तमान पंक्ति प्रदर्शित रहेगी।')}});
-    $('resume-btn').addEventListener('click',()=>{if(state.speaking){window.speechSynthesis.resume();state.paused=false;updateTtsButtons();setStatus('tts-status','पाठ फिर शुरू हो गया है।','good')}});
-    $('stop-btn').addEventListener('click',()=>{window.speechSynthesis.cancel();finishTts('पाठ रोक दिया गया।')});
-    $('avatar-input').addEventListener('change',event=>{const file=event.target.files?.[0];if(!file||!file.type.startsWith('image/'))return;if(state.avatarOwnedUrl)URL.revokeObjectURL(state.avatarOwnedUrl);state.avatarOwnedUrl=URL.createObjectURL(file);$('avatar-preview').src=state.avatarOwnedUrl;$('avatar-preview').classList.remove('hidden');$('avatar-status').textContent=file.name+' चयनित है।';$('apply-avatar').disabled=false;$('clear-avatar').disabled=false;event.target.value=''});
-    $('apply-avatar').addEventListener('click',()=>{if(!state.avatarOwnedUrl)return;if(state.avatarUrl&&state.avatarUrl!==state.avatarOwnedUrl)URL.revokeObjectURL(state.avatarUrl);state.avatarUrl=state.avatarOwnedUrl;$('avatar-overlay').src=state.avatarUrl;$('avatar-overlay').classList.remove('hidden');setStatus('avatar-status','अवतार मीडिया इंडेक्स पर लगा दिया गया है।','good')});
-    $('clear-avatar').addEventListener('click',()=>{if(state.avatarUrl){$('avatar-overlay').classList.add('hidden');$('avatar-overlay').removeAttribute('src');state.avatarUrl=''}if(state.avatarOwnedUrl){URL.revokeObjectURL(state.avatarOwnedUrl);state.avatarOwnedUrl=''}$('avatar-preview').classList.add('hidden');$('avatar-preview').removeAttribute('src');$('avatar-status').textContent='अवतार हटा दिया गया है।';$('apply-avatar').disabled=true;$('clear-avatar').disabled=true});
-    async function runAudit(){
-      const list=$('audit-list');list.replaceChildren();const checks=[['मीडिया अपलोड इनपुट',!!$('media-input')],['9:16 पूर्वावलोकन स्टेज',!!$('media-stage')&&getComputedStyle($('media-stage')).aspectRatio!=='auto'],['पूर्ण स्क्रीन API',!!($('media-stage')?.requestFullscreen)],['ब्राउज़र TTS API',('speechSynthesis'in window)&&('SpeechSynthesisUtterance'in window)],['पंक्ति overlay',!!$('line-overlay')],['अवतार चयन नियंत्रण',!!$('avatar-input')&&!!$('apply-avatar')]];
-      checks.forEach(([label,ok])=>{const row=document.createElement('div');row.className='audit-row';const name=document.createElement('span');name.textContent=label;const result=document.createElement('strong');result.className=ok?'pass':'pending';result.textContent=ok?'उपलब्ध':'सीमित / अनुपलब्ध';row.append(name,result);list.appendChild(row)});
-      const modules=$('module-audit');modules.replaceChildren();const declared=state.registry?.modules||[];if(!declared.length){const p=document.createElement('div');p.className='status warn';p.textContent='कोई मॉड्यूल Registry में दर्ज नहीं है। अभी केवल index.html और README.md की स्थिति इस UI से जाँची गई है; यह GitHub की सम्पूर्ण फाइल सूची नहीं है।';modules.appendChild(p);return}
-      for(const m of declared){const row=document.createElement('div');row.className='audit-row';const name=document.createElement('span');name.textContent=safeText(m.label||m.id)+' · '+safeText(m.entry,100);const result=document.createElement('strong');result.textContent='जाँच जारी';result.className='pending';row.append(name,result);modules.appendChild(row);try{const response=await fetch('./'+m.entry,{method:'GET',cache:'no-store'});if(!response.ok){result.textContent='फाइल त्रुटि '+response.status;result.className='fail';continue}const url=new URL('./'+m.entry,document.baseURI);const mod=await import(url.href);if(typeof mod.mount!=='function'){result.textContent='काम नहीं कर रही: mount() अनुपस्थित';result.className='fail'}else if(m.status==='placeholder'){result.textContent='DUMMY / PLACEHOLDER';result.className='pending'}else if(typeof mod.selfTest==='function'){const ok=await mod.selfTest();result.textContent=ok?'Self-test सफल':'Self-test विफल';result.className=ok?'pass':'fail'}else{result.textContent='फाइल व mount उपलब्ध; कार्य-परीक्षण शेष';result.className='pending'}}catch(e){result.textContent='लोड / जाँच विफल';result.className='fail'}}
-    }
-    $('run-audit').addEventListener('click',runAudit);
-    document.addEventListener('click',event=>{const routeButton=event.target.closest('[data-route]');if(routeButton){const route=routeButton.dataset.route;showRoute(routeViews.includes(route)?route:'module');if(!routeViews.includes(route)){history.replaceState(null,'','#'+route);loadModule(findModule(route))}return}const action=event.target.closest('[data-action]');if(action?.dataset.action==='jump-text'){showRoute('index');setTimeout(()=>$('text-section').scrollIntoView({behavior:'smooth',block:'start'}),80);$('text-input').focus({preventScroll:true})}});
-    window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'index';if(routeViews.includes(route))showRoute(route);else if(findModule(route)){showRoute('module');loadModule(findModule(route))}});
-    window.addEventListener('beforeunload',()=>{state.items.forEach(item=>URL.revokeObjectURL(item.url));if(state.avatarOwnedUrl)URL.revokeObjectURL(state.avatarOwnedUrl);if('speechSynthesis'in window)window.speechSynthesis.cancel()});
-    (async()=>{await initRegistry();const requested=location.hash.slice(1);if(routeViews.includes(requested))showRoute(requested);else if(findModule(requested)){showRoute('module');loadModule(findModule(requested))}else showRoute('index');runAudit()})();
-  })();
-  </script>
+  <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>
