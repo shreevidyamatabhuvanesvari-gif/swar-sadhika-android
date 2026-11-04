@@ -1,9 +1,0 @@
-{
-  "name": "swar-sadhika-android",
-  "private": true,
-  "version": "1.0.0-rebuild",
-  "type": "module",
-  "scripts": {
-    "validate:progress": "python tools/validate_progress.py ."
-  }
-}
