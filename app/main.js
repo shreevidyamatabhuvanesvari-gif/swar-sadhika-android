@@ -4,6 +4,7 @@ import { learningIndex } from "./indexes/index-3-learning.js";
 import { avatarIndex } from "./indexes/index-4-avatar-video.js";
 import { renderIndex } from "./indexes/shared.js";
 import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js";
+import { getSpeechVoices, populateVoiceSelect, speakText, stopSpeech } from "./core/speech.js";
 
 const indexes = [workspaceIndex, voiceIndex, learningIndex, avatarIndex];
 const root = document.getElementById("index-root");
@@ -11,6 +12,7 @@ const toast = document.getElementById("toast");
 let activeIndex = "workspace";
 const activeModules = Object.fromEntries(indexes.map(item => [item.id, item.modules[0].id]));
 let currentObjectUrls = [];
+let avatarPlaybackActive = false;
 
 function notify(message) {
   toast.textContent = message;
@@ -105,25 +107,190 @@ async function onPanelRendered() {
   if (activeIndex === "voice") await showRecords("voice-profile-list", ["voice-profile"]);
   if (activeIndex === "learning") await showRecords("memory-records", ["learning"]);
   if (activeIndex === "avatar") await showRecords("caption-records", ["caption"]);
-  if (activeIndex === "avatar") await restoreAvatarPreview();
+  if (activeIndex === "avatar") await restoreAvatarMedia();
+  populateSpeechVoiceControls();
 }
 
-async function restoreAvatarPreview() {
-  const target = document.getElementById("avatar-preview");
-  if (!target) return;
+function populateSpeechVoiceControls() {
+  const voices = getSpeechVoices();
+  ["tts-voice-select", "recitation-voice-select", "avatar-voice-select"].forEach(id => {
+    const select = document.getElementById(id);
+    if (select) populateVoiceSelect(select, voices, "hi-IN");
+  });
+}
+
+async function restoreAvatarMedia() {
+  const photoPreview = document.getElementById("avatar-photo-preview");
+  const stagePhoto = document.getElementById("avatar-stage-photo");
+  const stageVideo = document.getElementById("avatar-stage-video");
+  const placeholder = document.getElementById("avatar-stage-placeholder");
+  if (!photoPreview && !stagePhoto && !stageVideo) return;
   try {
-    const asset = await getAsset("personal-avatar");
-    if (asset?.blob instanceof Blob) {
-      const url = URL.createObjectURL(asset.blob);
-      currentObjectUrls.push(url);
-      target.innerHTML = `<img src="${url}" alt="स्थानीय रूप से सुरक्षित Avatar Photo">`;
+    const [photo, video] = await Promise.all([
+      getAsset("personal-avatar"),
+      getAsset("avatar-loop-video")
+    ]);
+    if (photo?.blob instanceof Blob) {
+      const photoUrl = URL.createObjectURL(photo.blob);
+      currentObjectUrls.push(photoUrl);
+      if (photoPreview) {
+        photoPreview.src = photoUrl;
+        photoPreview.hidden = false;
+      }
+      if (stagePhoto) {
+        stagePhoto.src = photoUrl;
+        stagePhoto.hidden = Boolean(video?.blob instanceof Blob);
+      }
+    } else {
+      if (photoPreview) photoPreview.hidden = true;
+      if (stagePhoto) stagePhoto.hidden = true;
     }
+    if (video?.blob instanceof Blob && stageVideo) {
+      const videoUrl = URL.createObjectURL(video.blob);
+      currentObjectUrls.push(videoUrl);
+      stageVideo.src = videoUrl;
+      stageVideo.loop = true;
+      stageVideo.muted = true;
+      stageVideo.playsInline = true;
+      stageVideo.hidden = false;
+      stageVideo.load();
+      stageVideo.onloadedmetadata = () => {
+        try { stageVideo.currentTime = 0; } catch {}
+      };
+    } else if (stageVideo) {
+      stageVideo.pause();
+      stageVideo.removeAttribute("src");
+      stageVideo.load();
+      stageVideo.hidden = true;
+    }
+    if (placeholder) placeholder.hidden = Boolean(video?.blob instanceof Blob || photo?.blob instanceof Blob);
+    const photoStatus = document.getElementById("avatar-photo-status");
+    if (photoStatus && photo) photoStatus.textContent = "Saved Photo: " + photo.name + " · नई Photo सुरक्षित करने पर पुरानी Photo बदल जाएगी।";
+    const videoStatus = document.getElementById("avatar-video-status");
+    if (videoStatus && video) videoStatus.textContent = "Saved Video: " + video.name + " · Playback के समय यह Clip Loop होगी।";
   } catch (error) {
     const status = document.getElementById("avatar-photo-status");
-    if (status) status.textContent = error.message;
+    if (status) status.textContent = "स्थानीय Avatar Media पढ़ी नहीं जा सकी: " + error.message;
   }
 }
 
+function previewAvatarPhotoSelection() {
+  const file = document.getElementById("avatar-photo-file")?.files?.[0];
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return notify("JPG, PNG या WEBP Photo चुनें।");
+  const url = URL.createObjectURL(file);
+  currentObjectUrls.push(url);
+  const preview = document.getElementById("avatar-photo-preview");
+  const stagePhoto = document.getElementById("avatar-stage-photo");
+  if (preview) { preview.src = url; preview.hidden = false; }
+  if (stagePhoto && document.getElementById("avatar-stage-video")?.hidden !== false) {
+    stagePhoto.src = url;
+    stagePhoto.hidden = false;
+    const placeholder = document.getElementById("avatar-stage-placeholder");
+    if (placeholder) placeholder.hidden = true;
+  }
+}
+
+function previewAvatarVideoSelection() {
+  const file = document.getElementById("avatar-video-file")?.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("video/")) return notify("Gallery से मान्य Video File चुनें।");
+  const url = URL.createObjectURL(file);
+  currentObjectUrls.push(url);
+  const video = document.getElementById("avatar-stage-video");
+  if (video) {
+    video.pause();
+    video.src = url;
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.hidden = false;
+    video.load();
+  }
+  const stagePhoto = document.getElementById("avatar-stage-photo");
+  if (stagePhoto) stagePhoto.hidden = true;
+  const placeholder = document.getElementById("avatar-stage-placeholder");
+  if (placeholder) placeholder.hidden = true;
+  const status = document.getElementById("avatar-video-status");
+  if (status) status.textContent = file.name + " · Preview तैयार है। Clip को स्थायी रखने के लिए सुरक्षित करें।";
+}
+
+async function loadLatestSavedText() {
+  const target = document.getElementById("avatar-chant-text");
+  if (!target) return;
+  const records = await getRecords("text");
+  const latest = records.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+  if (!latest?.body) {
+    notify("पहले Text Studio में पाठ सुरक्षित करें।");
+    return;
+  }
+  target.value = latest.body;
+  const status = document.getElementById("avatar-play-status");
+  if (status) status.textContent = "Text Studio का सबसे नया सुरक्षित पाठ लोड हुआ।";
+}
+
+async function playAvatarFullscreen() {
+  const text = document.getElementById("avatar-chant-text")?.value.trim();
+  const stage = document.getElementById("avatar-stage");
+  const video = document.getElementById("avatar-stage-video");
+  const status = document.getElementById("avatar-play-status");
+  if (!text) return notify("अवतार के लिए पूरा पाठ दर्ज करें या Text Studio से लाएँ।");
+  if (!stage) return notify("9:16 Avatar Stage उपलब्ध नहीं है।");
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    if (status) status.textContent = "इस Chrome/Android में Speech Synthesis API उपलब्ध नहीं है; कोई आवाज़ उत्पन्न नहीं हुई।";
+    return;
+  }
+  stopSpeech();
+  avatarPlaybackActive = true;
+  const fullscreenPromise = typeof stage.requestFullscreen === "function"
+    ? stage.requestFullscreen({ navigationUI: "hide" }).then(() => true).catch(() => false)
+    : Promise.resolve(false);
+  const videoPromise = video && !video.hidden
+    ? video.play().then(() => true).catch(() => false)
+    : Promise.resolve(true);
+  const speechPromise = speakText(text, {
+    voiceURI: document.getElementById("avatar-voice-select")?.value || "",
+    rate: Number(document.getElementById("avatar-tts-rate")?.value || 0.9),
+    pitch: Number(document.getElementById("avatar-tts-pitch")?.value || 1.05)
+  });
+  const fullscreenOk = await fullscreenPromise;
+  if (fullscreenOk) {
+    stage.classList.add("is-playing");
+  } else if (status) {
+    status.textContent = "Fullscreen अनुमति उपलब्ध नहीं हुई; पाठ 9:16 Stage में चल रहा है। पूरा होने तक Clip Loop होगी।";
+  }
+  const videoOk = await videoPromise;
+  if (!videoOk && status) status.textContent = "Video Codec/Playback उपलब्ध नहीं हुआ; आवाज़ जारी रहेगी। MP4 या WebM Clip आज़माएँ।";
+  if (status && videoOk) status.textContent = "पाठ चल रहा है। Video Clip बिना रुके Loop होगी और पाठ पूरा होने पर रुकेगी।";
+  try {
+    await speechPromise;
+    if (status) status.textContent = "पाठ पूरा हुआ। Video Clip रोक दी गई।";
+  } catch (error) {
+    if (status) status.textContent = "आवाज़ पूरी नहीं हो सकी: " + error.message;
+  } finally {
+    avatarPlaybackActive = false;
+    stage.classList.remove("is-playing");
+    if (video && !video.hidden) {
+      video.pause();
+      try { video.currentTime = 0; } catch {}
+    }
+    if (document.fullscreenElement === stage) {
+      try { await document.exitFullscreen(); } catch {}
+    }
+  }
+}
+
+function stopAvatarPlayback(message = "Playback रोक दिया गया।") {
+  if (!avatarPlaybackActive) return;
+  avatarPlaybackActive = false;
+  stopSpeech();
+  const stage = document.getElementById("avatar-stage");
+  const video = document.getElementById("avatar-stage-video");
+  if (stage) stage.classList.remove("is-playing");
+  if (video) video.pause();
+  const status = document.getElementById("avatar-play-status");
+  if (status) status.textContent = message;
+}
 async function saveText() {
   const input = document.getElementById("source-text");
   if (!input?.value.trim()) return notify("पहले पाठ लिखें।");
@@ -215,17 +382,25 @@ function parseYoutubeId(raw) {
 async function loadYoutube() {
   const raw = document.getElementById("youtube-url")?.value.trim();
   const wrap = document.getElementById("youtube-frame-wrap");
+  const external = document.getElementById("youtube-external-link");
   try {
     const id = parseYoutubeId(raw);
     if (!id || !/^[A-Za-z0-9_-]{6,20}$/.test(id)) throw new Error("URL में Video ID मान्य नहीं है।");
-    wrap.innerHTML = `<iframe title="YouTube अध्ययन-संदर्भ" width="100%" height="315" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
-    document.getElementById("youtube-status").textContent = "YouTube Embedded Player खोला गया। संरक्षित Audio Extract नहीं किया जा रहा है।";
+    const watchUrl = "https://www.youtube.com/watch?v=" + encodeURIComponent(id);
+    if (external) {
+      external.href = watchUrl;
+      external.hidden = false;
+      external.textContent = "YouTube App / Browser में खोलें";
+    }
+    wrap.innerHTML = `<iframe title="YouTube अध्ययन-संदर्भ" width="100%" height="315" src="https://www.youtube.com/embed/${encodeURIComponent(id)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    document.getElementById("youtube-status").textContent = "Embedded Player के साथ मूल YouTube Link भी दिया गया है। Embed अवरुद्ध हो तो नीचे YouTube Link दबाएँ।";
+    try { window.open(watchUrl, "_blank", "noopener,noreferrer"); } catch {}
     await putRecord({ type:"youtube-reference", title:"YouTube Reference", body:raw, videoId:id });
   } catch (error) {
     document.getElementById("youtube-status").textContent = error.message;
+    if (external) external.hidden = true;
   }
 }
-
 async function analyzeAudio() {
   const file = document.getElementById("analysis-audio-file")?.files?.[0];
   if (!file) return notify("पहले Audio File चुनें।");
@@ -263,15 +438,63 @@ async function analyzeAudio() {
 
 async function saveAvatarPhoto() {
   const file = document.getElementById("avatar-photo-file")?.files?.[0];
-  if (!file) return notify("पहले Photo चुनें।");
-  if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return notify("JPG, PNG या WEBP Photo चुनें।");
-  if (file.size > 15*1024*1024) return notify("Photo 15 MB से कम होनी चाहिए।");
+  if (!file) return notify("पहले नई Photo चुनें।");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return notify("JPG, PNG या WEBP Photo चुनें।");
+  if (file.size > 15 * 1024 * 1024) return notify("Photo 15 MB से कम होनी चाहिए।");
   await putAsset("personal-avatar", file, file.name, "image");
-  await restoreAvatarPreview();
-  document.getElementById("avatar-photo-status").textContent = "Photo नए App के निजी IndexedDB Asset Store में सुरक्षित हुई; GitHub पर Upload नहीं हुई।";
-  notify("Avatar Photo स्थानीय रूप से सुरक्षित हुई।");
+  await restoreAvatarMedia();
+  document.getElementById("avatar-photo-status").textContent = "नई Photo स्थानीय रूप से सुरक्षित हुई। इसी विकल्प से अगली Photo चुनकर पुरानी Photo बदली जा सकती है।";
+  notify("Avatar Photo सुरक्षित/अपडेट हुई।");
 }
 
+async function saveAvatarVideo() {
+  const file = document.getElementById("avatar-video-file")?.files?.[0];
+  if (!file) return notify("पहले Video Clip चुनें।");
+  if (!file.type.startsWith("video/")) return notify("मान्य MP4, WebM या अन्य Browser-supported Video चुनें।");
+  if (file.size > 100 * 1024 * 1024) return notify("Video Clip 100 MB से छोटी रखें।");
+  await putAsset("avatar-loop-video", file, file.name, "video");
+  await restoreAvatarMedia();
+  document.getElementById("avatar-video-status").textContent = "Video Clip स्थानीय IndexedDB में सुरक्षित हुई। Playback में Clip Loop होगी और पाठ पूरा होने पर रुकेगी।";
+  notify("Avatar Video Clip सुरक्षित हुई।");
+}
+
+async function speakVoicePreview() {
+  const text = document.getElementById("voice-preview-text")?.value.trim();
+  const status = document.getElementById("voice-preview-status");
+  if (!text) return notify("Preview के लिए पाठ लिखें।");
+  if (!("speechSynthesis" in window)) {
+    if (status) status.textContent = "इस Browser में Speech Synthesis API उपलब्ध नहीं है।";
+    return;
+  }
+  try {
+    if (status) status.textContent = "Android/Chrome में उपलब्ध System Voice से Preview चल रहा है…";
+    await speakText(text, {
+      voiceURI: document.getElementById("tts-voice-select")?.value || "",
+      rate: Number(document.getElementById("tts-rate")?.value || 0.9),
+      pitch: Number(document.getElementById("tts-pitch")?.value || 1.05)
+    });
+    if (status) status.textContent = "Preview पूरा हुआ। यह Device की Speech Voice है, Local Neural Female Model नहीं।";
+  } catch (error) {
+    if (status) status.textContent = "Voice Preview विफल: " + error.message;
+  }
+}
+
+async function speakRecitation() {
+  const text = document.getElementById("recitation-text")?.value.trim();
+  const status = document.getElementById("recitation-status");
+  if (!text) return notify("पहले मंत्र या श्लोक का पाठ लिखें।");
+  try {
+    if (status) status.textContent = "Device की उपलब्ध Speech Voice से पाठ चल रहा है…";
+    await speakText(text, {
+      voiceURI: document.getElementById("recitation-voice-select")?.value || "",
+      rate: Number(document.getElementById("recitation-rate")?.value || 0.9),
+      pitch: Number(document.getElementById("recitation-pitch")?.value || 1.05)
+    });
+    if (status) status.textContent = "पाठ पूरा हुआ। यह System TTS Preview है; मंत्र-गायन या Neural Singing Output नहीं।";
+  } catch (error) {
+    if (status) status.textContent = "पाठ सुनाने में समस्या: " + error.message;
+  }
+}
 async function deleteRecordAction(id) {
   if (!id) return;
   if (!confirm("क्या इसी स्थानीय Record को हटाना है?")) return;
@@ -315,10 +538,18 @@ async function handleAction(action, button) {
     case "save-voice-profile": await saveSimpleRecord("voice-profile","voice-profile-name","voice-profile-notes","voice-profile-status"); break;
     case "save-learning": await saveSimpleRecord("learning","brain-entry-title","brain-entry-body","brain-status"); break;
     case "load-youtube": await loadYoutube(); break;
-    case "clear-youtube": document.getElementById("youtube-frame-wrap").textContent = "YouTube अध्ययन Player यहाँ खुलेगा।"; document.getElementById("youtube-status").textContent = "Player साफ किया गया।"; break;
+    case "clear-youtube": document.getElementById("youtube-frame-wrap").textContent = "YouTube अध्ययन Player यहाँ खुलेगा।"; document.getElementById("youtube-status").textContent = "Player साफ किया गया।"; if (document.getElementById("youtube-external-link")) document.getElementById("youtube-external-link").hidden = true; break;
+    case "speak-voice-preview": await speakVoicePreview(); break;
+    case "speak-recitation": await speakRecitation(); break;
+    case "stop-voice-preview": stopSpeech(); document.getElementById("voice-preview-status").textContent = "Voice Preview रोक दिया गया।"; break;
+    case "stop-recitation": stopSpeech(); document.getElementById("recitation-status").textContent = "पाठ सुनाना रोक दिया गया।"; break;
     case "analyze-audio": await analyzeAudio(); break;
     case "save-avatar-photo": await saveAvatarPhoto(); break;
-    case "load-avatar-photo": await restoreAvatarPreview(); break;
+    case "save-avatar-video": await saveAvatarVideo(); break;
+    case "load-avatar-photo": await restoreAvatarMedia(); break;
+    case "load-latest-text": await loadLatestSavedText(); break;
+    case "play-avatar-fullscreen": await playAvatarFullscreen(); break;
+    case "stop-avatar-playback": stopAvatarPlayback(); break;
     case "save-caption": await saveSimpleRecord("caption","caption-start","caption-text","caption-status"); break;
     case "delete-record": await deleteRecordAction(button.dataset.recordId); break;
   }
@@ -352,12 +583,23 @@ document.addEventListener("change", async event => {
   if (target.id === "voice-audio-file") await handleFilePreview(target.id,"voice-audio-preview","audio","voice-audio-status");
   if (target.id === "gallery-audio-file") await handleFilePreview(target.id,"gallery-audio-preview","audio","gallery-audio-meta");
   if (target.id === "gallery-video-file") await handleFilePreview(target.id,"gallery-video-preview","video","gallery-video-meta");
+  if (target.id === "avatar-photo-file") previewAvatarPhotoSelection();
+  if (target.id === "avatar-video-file") previewAvatarVideoSelection();
 });
 
 document.addEventListener("input", event => {
   if (event.target.id === "library-search") showRecords("library-records", null, event.target.value);
   if (event.target.id === "memory-search") showRecords("memory-records", ["learning"], event.target.value);
 });
+
+document.addEventListener("fullscreenchange", () => {
+  const stage = document.getElementById("avatar-stage");
+  if (avatarPlaybackActive && stage && document.fullscreenElement !== stage) stopAvatarPlayback("Fullscreen बंद हुआ; Playback रोक दिया गया।");
+});
+
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.addEventListener?.("voiceschanged", populateSpeechVoiceControls);
+}
 
 async function boot() {
   document.getElementById("connection-status").textContent = navigator.onLine ? "Network: Online" : "Network: Offline";
