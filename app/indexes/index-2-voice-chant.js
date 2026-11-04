@@ -1,4 +1,4 @@
-import { moduleEntry } from "./shared.js";
+import { moduleEntry } from "./shared.js?v=20261104-avatar-cache-v2";
 
 const statusCard = (heading, explanation) => `<section class="card"><div class="heading-row"><h3>${heading}</h3><span class="state-tag state-not-started">NOT_STARTED</span></div><p>${explanation}</p><p class="muted">Engine acceptance: वास्तविक Model, Runtime, Generated Output और Android Chrome Evidence आवश्यक।</p></section>`;
 

@@ -1,4 +1,4 @@
-import { moduleEntry } from "./shared.js";
+import { moduleEntry } from "./shared.js?v=20261104-avatar-cache-v2";
 
 export const workspaceIndex = {
   id: "workspace", number: "INDEX 1", shortTitle: "कार्यकक्ष", title: "स्वर-साधिका कार्यकक्ष एवं नियंत्रण केंद्र", kicker: "WORKSPACE & CONTROL CENTER",

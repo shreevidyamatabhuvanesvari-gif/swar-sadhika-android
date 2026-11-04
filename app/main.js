@@ -1,10 +1,10 @@
-import { workspaceIndex } from "./indexes/index-1-workspace.js";
-import { voiceIndex } from "./indexes/index-2-voice-chant.js";
-import { learningIndex } from "./indexes/index-3-learning.js";
-import { avatarIndex } from "./indexes/index-4-avatar-video.js";
-import { renderIndex } from "./indexes/shared.js";
-import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js";
-import { getSpeechVoices, populateVoiceSelect, speakText, stopSpeech } from "./core/speech.js";
+import { workspaceIndex } from "./indexes/index-1-workspace.js?v=20261104-avatar-cache-v2";
+import { voiceIndex } from "./indexes/index-2-voice-chant.js?v=20261104-avatar-cache-v2";
+import { learningIndex } from "./indexes/index-3-learning.js?v=20261104-avatar-cache-v2";
+import { avatarIndex } from "./indexes/index-4-avatar-video.js?v=20261104-avatar-cache-v2";
+import { renderIndex } from "./indexes/shared.js?v=20261104-avatar-cache-v2";
+import { createId, putRecord, getRecords, putAsset, getAsset, exportRecords, importRecords, getStorageEstimate } from "./core/local-store.js?v=20261104-avatar-cache-v2";
+import { getSpeechVoices, populateVoiceSelect, speakText, stopSpeech } from "./core/speech.js?v=20261104-avatar-cache-v2";
 
 const indexes = [workspaceIndex, voiceIndex, learningIndex, avatarIndex];
 const root = document.getElementById("index-root");
@@ -498,7 +498,7 @@ async function speakRecitation() {
 async function deleteRecordAction(id) {
   if (!id) return;
   if (!confirm("क्या इसी स्थानीय Record को हटाना है?")) return;
-  const { deleteRecord } = await import("./core/local-store.js");
+  const { deleteRecord } = await import("./core/local-store.js?v=20261104-avatar-cache-v2");
   await deleteRecord(id);
   await onPanelRendered();
   notify("चयनित Record हटाया गया।");

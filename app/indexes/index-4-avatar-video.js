@@ -1,4 +1,4 @@
-import { moduleEntry } from "./shared.js";
+import { moduleEntry } from "./shared.js?v=20261104-avatar-cache-v2";
 
 const enginePanel = (title, body) => `<section class="card"><div class="heading-row"><h3>${title}</h3><span class="state-tag state-not-started">NOT_STARTED</span></div><p>${body}</p><p class="muted">इस क्षमता का PASS वास्तविक Output, Timing/Quality Tests और Android Chrome Evidence से ही तय होगा।</p></section>`;
 
