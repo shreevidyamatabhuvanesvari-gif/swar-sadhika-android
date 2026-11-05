@@ -6,7 +6,7 @@
  * Knowledge-module entries are metadata only; existing consumers keep their static imports.
  */
 
-export const NANO_SERVER_ENGINE_VERSION = "1.0.1";
+export const NANO_SERVER_ENGINE_VERSION = "1.0.2";
 
 const APP_ID = "swar-sadhika-android";
 const DB_VERSION = 1;
@@ -280,6 +280,7 @@ export function createNanoServerEngine(options = {}) {
   let activeDownloads = 0;
   const listeners = new Map();
   const downloads = new Map();
+  const activeRequests = new Set();
   const networkEvents = ["online", "offline"];
 
   function emit(type, detail) {
@@ -320,6 +321,22 @@ export function createNanoServerEngine(options = {}) {
 
   function onNetworkChange(event) {
     emit("networkchange", { event: event.type, status: getNetworkStatus() });
+  }
+
+  function createRequestScope(externalSignal) {
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    const scope = makeAbortScope(host, externalSignal, requestTimeoutMs);
+    activeRequests.add(scope.controller);
+    let cleaned = false;
+    return {
+      controller: scope.controller,
+      cleanup() {
+        if (cleaned) return;
+        cleaned = true;
+        activeRequests.delete(scope.controller);
+        scope.cleanup();
+      }
+    };
   }
 
   function resolveAppPath(relativePath, baseUrl) {
@@ -452,7 +469,7 @@ export function createNanoServerEngine(options = {}) {
       lastNetworkCheck = Object.freeze({ reachable: false, checkedAt: new Date().toISOString(), reason: "offline-hint" });
       return lastNetworkCheck;
     }
-    const scope = makeAbortScope(host, options.signal, requestTimeoutMs);
+    const scope = createRequestScope(options.signal);
     try {
       const response = await fetchImpl(manifestUrl.href, {
         method: "GET",
@@ -471,7 +488,8 @@ export function createNanoServerEngine(options = {}) {
       lastNetworkCheck = Object.freeze({ reachable, status: response.status, checkedAt: new Date().toISOString(), target: "app-origin" });
       return lastNetworkCheck;
     } catch (error) {
-      if (disposed || error.code === "ENGINE_DISPOSED") throw error;
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      if (error.code === "ENGINE_DISPOSED") throw error;
       lastNetworkCheck = Object.freeze({ reachable: false, checkedAt: new Date().toISOString(), reason: error.name === "AbortError" ? "timeout-or-abort" : "request-failed" });
       return lastNetworkCheck;
     } finally { scope.cleanup(); }
@@ -481,7 +499,7 @@ export function createNanoServerEngine(options = {}) {
     if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     await initialize();
     if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
-    const scope = makeAbortScope(host, options.signal, requestTimeoutMs);
+    const scope = createRequestScope(options.signal);
     try {
       const response = await fetchImpl(manifestUrl.href, {
         method: "GET",
@@ -510,7 +528,8 @@ export function createNanoServerEngine(options = {}) {
       emit("manifestrefreshed", { catalogVersion: validated.catalogVersion, entryCount: validated.entries.length });
       return validated;
     } catch (error) {
-      if (disposed || error.code === "ENGINE_DISPOSED") throw error;
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      if (error.code === "ENGINE_DISPOSED") throw error;
       lastError = { code: error.code || "MANIFEST_REFRESH_FAILED", message: error.message || "Manifest refresh विफल हुआ।" };
       emit("networkerror", lastError);
       if (lastManifest && options.allowCached !== false) return lastManifest;
@@ -578,7 +597,7 @@ export function createNanoServerEngine(options = {}) {
     if (url.origin !== appRootUrl.origin || !url.pathname.startsWith(appRootUrl.pathname)) {
       fail("डाउनलोड URL ऐप के अपने पथ के बाहर है।", "RESOURCE_OUTSIDE_APP", { id });
     }
-    const scope = makeAbortScope(host, options.signal, requestTimeoutMs);
+    const scope = createRequestScope(options.signal);
     activeDownloads += 1;
     downloads.set(id, scope.controller);
     try {
@@ -618,6 +637,8 @@ export function createNanoServerEngine(options = {}) {
       emit("downloadcomplete", { id, byteLength: bytes.byteLength, sha256: actualSha256, storage: store.kind });
       return Object.freeze({ id, title: entry.title, byteLength: bytes.byteLength, sha256: actualSha256, storage: store.kind });
     } catch (error) {
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      if (error.code === "ENGINE_DISPOSED") throw error;
       const details = { id, code: error.code || "DOWNLOAD_FAILED", message: error.message || "डाउनलोड विफल हुआ।" };
       lastError = details;
       emit("downloaderror", details);
@@ -728,6 +749,7 @@ export function createNanoServerEngine(options = {}) {
       storage: Object.freeze({ backend: store.kind, persistentDatabaseReady: storageReady, estimate: storageEstimate }),
       manifest: Object.freeze({ loaded: Boolean(lastManifest), catalogVersion: lastManifest ? lastManifest.catalogVersion : null, entries: lastManifest ? lastManifest.entries.length : 0 }),
       downloads: Object.freeze({ active: activeDownloads, maximum: MAX_ACTIVE_DOWNLOADS }),
+      requests: Object.freeze({ active: activeRequests.size }),
       policy: Object.freeze({ sameOriginOnly: true, appPathOnly: true, thirdPartyApis: false, remoteAI: false, executeManifestModules: false, automaticDownloads: false }),
       lastNetworkCheck,
       lastError
@@ -737,7 +759,7 @@ export function createNanoServerEngine(options = {}) {
   async function dispose() {
     if (disposed) return;
     disposed = true;
-    for (const controller of downloads.values()) {
+    for (const controller of Array.from(activeRequests)) {
       try { controller.abort(new Error("Nano Server बंद किया गया।")); } catch (_) {}
     }
     downloads.clear();
@@ -772,7 +794,20 @@ export function createNanoServerEngine(options = {}) {
     };
     const checks = [];
     const check = (id, passed) => checks.push({ id, passed: Boolean(passed) });
-    check("engine-version", NANO_SERVER_ENGINE_VERSION === "1.0.1");
+    check("engine-version", NANO_SERVER_ENGINE_VERSION === "1.0.2");
+    check("request-scope-tracks-and-cleans", (() => {
+      let scope;
+      try {
+        scope = createRequestScope(null);
+        const tracked = activeRequests.has(scope.controller);
+        scope.cleanup();
+        return tracked && !activeRequests.has(scope.controller);
+      } catch (_) {
+        if (scope) scope.cleanup();
+        return false;
+      }
+    })());
+    check("idle-request-count-is-zero", activeRequests.size === 0);
     check("abort-controller-unavailable-is-explicit", (() => {
       try { makeAbortScope({}, null, 0); return false; }
       catch (error) { return error.code === "ABORT_CONTROLLER_UNAVAILABLE"; }
