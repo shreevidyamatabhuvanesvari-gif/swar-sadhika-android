@@ -7,13 +7,15 @@ import {
   getKnowledgeBaseCoverage as getVedicKnowledgeBaseCoverage,
   selfTest as runVedicPronunciationSelfTest
 } from "./vedic-sanskrit-pronunciation.js";
+import { createNanoServerKnowledgeAPI } from "../nano-server/nano-server-knowledge-api-part2.js";
+import { createNanoServerTtsKnowledgeAdapter } from "../nano-server/nano-server-tts-knowledge-adapter-part2.js";
 
 /* Swar-Sadhika Local TTS Engine Manager
  * Model-independent engine. This version uses only the browser's native
  * Speech Synthesis API; it performs no network requests and loads no model.
  */
 
-export const TTS_ENGINE_VERSION = "1.1.0";
+export const TTS_ENGINE_VERSION = "1.2.0";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -22,6 +24,26 @@ export class TtsEngineError extends Error {
     this.code = code;
     this.details = details;
   }
+}
+export const TTS_LANGUAGE_OPTIONS = Object.freeze([
+  Object.freeze({ id: "sa", label: "संस्कृत", locale: "sa-IN" }),
+  Object.freeze({ id: "hi", label: "हिंदी", locale: "hi-IN" })
+]);
+const TTS_LANGUAGE_BY_ID = new Map(TTS_LANGUAGE_OPTIONS.map(item => [item.id, item]));
+function normalizeTtsLanguage(value) {
+  const raw = typeof value === "string" ? value : value && typeof value.id === "string" ? value.id : "";
+  const base = raw.trim().toLowerCase().replace(/_/g, "-").split("-")[0];
+  const language = TTS_LANGUAGE_BY_ID.get(base);
+  if (!language) throw new TtsEngineError(
+    "केवल संस्कृत और हिंदी TTS भाषाएँ समर्थित हैं।",
+    "UNSUPPORTED_TTS_LANGUAGE",
+    { requested: raw, supported: TTS_LANGUAGE_OPTIONS.map(item => item.id) }
+  );
+  return language;
+}
+function languageForVoice(voice) {
+  if (!voice || typeof voice.lang !== "string") return null;
+  try { return normalizeTtsLanguage(voice.lang); } catch (_) { return null; }
 }
 
 const EVENT_NAME_PATTERN = /^[a-z][a-z0-9:_-]{0,63}$/i;
@@ -249,12 +271,49 @@ function createNativeBackend(host) {
   };
 }
 
+export function selfTest() {
+  const checks = [];
+  const add = (id, passed) => checks.push(Object.freeze({ id, passed: Boolean(passed) }));
+  add("two-language-only", TTS_LANGUAGE_OPTIONS.length === 2 &&
+    TTS_LANGUAGE_OPTIONS[0].id === "sa" && TTS_LANGUAGE_OPTIONS[1].id === "hi");
+  add("sanskrit-locale", normalizeTtsLanguage("sa-IN").locale === "sa-IN");
+  add("hindi-locale", normalizeTtsLanguage("hi-IN").locale === "hi-IN");
+  add("reject-unsupported-language", (() => {
+    try { normalizeTtsLanguage("en-US"); return false; }
+    catch (error) { return error.code === "UNSUPPORTED_TTS_LANGUAGE"; }
+  })());
+  add("voice-language-identification", languageForVoice({ lang: "hi-IN" }).id === "hi");
+  add("unsupported-voice-identification", languageForVoice({ lang: "en-US" }) === null);
+  return Object.freeze({
+    module: "tts-engine", version: TTS_ENGINE_VERSION,
+    status: checks.every(item => item.passed) ? "PASSED" : "FAILED",
+    total: checks.length, passed: checks.filter(item => item.passed).length,
+    failed: checks.filter(item => !item.passed).length, checks: Object.freeze(checks)
+  });
+}
+
 export function createTtsEngine(options = {}) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TtsEngineError("createTtsEngine() के विकल्प Object होने चाहिए।", "INVALID_ENGINE_OPTIONS");
   }
   const host = options.target || globalThis;
   const defaultBackend = String(options.defaultBackend || "native");
+  let selectedLanguage = normalizeTtsLanguage(options.defaultLanguage || "hi");
+  let knowledgeAPI = options.knowledgeAPI || null;
+  let knowledgeAdapter = options.knowledgeAdapter || null;
+  const ownsKnowledgeAPI = !knowledgeAPI && !knowledgeAdapter;
+  const ownsKnowledgeAdapter = !knowledgeAdapter;
+  let knowledgeAdapterError = null;
+  let knowledgeAutoLoadAttempted = false;
+  if (!knowledgeAdapter) {
+    try {
+      if (!knowledgeAPI) knowledgeAPI = createNanoServerKnowledgeAPI({ engineOptions: { host } });
+      knowledgeAdapter = createNanoServerTtsKnowledgeAdapter({ knowledgeAPI });
+    } catch (error) {
+      knowledgeAdapterError = asError(error, "KNOWLEDGE_ADAPTER_UNAVAILABLE");
+      knowledgeAdapter = null;
+    }
+  }
   const backends = new Map();
   const listeners = new Map();
 
@@ -310,6 +369,9 @@ export function createTtsEngine(options = {}) {
       backendId: activeBackendId,
       backendType: backend ? backend.type : null,
       backendLabel: backend ? backend.label : null,
+      language: selectedLanguage,
+      supportedLanguages: TTS_LANGUAGE_OPTIONS,
+      knowledgeLoaded: Boolean(knowledgeAdapter && knowledgeAdapter.getDiagnostics().loaded),
       localOnly: true,
       lastError: lastError ? Object.freeze({ code: lastError.code, message: lastError.message }) : null,
       pronunciationKnowledgeBaseVersion: VEDIC_PRONUNCIATION_VERSION,
@@ -488,6 +550,20 @@ export function createTtsEngine(options = {}) {
         playback = "idle";
         lastError = null;
 
+        if (!knowledgeAutoLoadAttempted && knowledgeAdapter && options.autoLoadKnowledge !== false) {
+          knowledgeAutoLoadAttempted = true;
+          try {
+            await loadKnowledge({ downloadIfMissing: false });
+          } catch (error) {
+            if (!disposed) emit("knowledgewarning", {
+              code: error && error.code ? error.code : "KNOWLEDGE_CACHE_UNAVAILABLE",
+              message: error && error.message ? error.message : "Cached Knowledge उपलब्ध नहीं है।",
+              automaticDownload: false
+            });
+          }
+          ensureNotDisposed();
+        }
+
         if (previousBackend && previousBackend !== requestedAdapter) {
           const cleanupFailures = await cleanupBackend(previousBackend);
           ensureNotDisposed();
@@ -535,6 +611,19 @@ export function createTtsEngine(options = {}) {
     return initialize({ backendId: String(backendId || "") });
   }
 
+  function getSupportedLanguages() { ensureNotDisposed(); return TTS_LANGUAGE_OPTIONS; }
+  function getLanguage() { ensureNotDisposed(); return selectedLanguage; }
+  function setLanguage(language) {
+    ensureNotDisposed();
+    if (activeSpeech || phase === "initializing") throw new TtsEngineError(
+      "वाचन या Backend initialization के दौरान भाषा नहीं बदली जा सकती।", "LANGUAGE_CHANGE_BUSY"
+    );
+    selectedLanguage = normalizeTtsLanguage(language);
+    lastDiagnostics = null;
+    emit("languagechange", { language: selectedLanguage });
+    return selectedLanguage;
+  }
+
   async function getVoices(voiceOptions = {}) {
     ensureNotDisposed();
     if (!voiceOptions || typeof voiceOptions !== "object" || Array.isArray(voiceOptions)) {
@@ -545,10 +634,12 @@ export function createTtsEngine(options = {}) {
     if (!adapter) throw new TtsEngineError("Backend पंजीकृत नहीं है: " + backendId, "BACKEND_NOT_REGISTERED");
     const voices = await adapter.getVoices();
     ensureNotDisposed();
-    const available = Array.isArray(voices) ? voices.slice() : [];
-    return Object.freeze(adapter.type === "native"
-      ? available.filter(voice => voice && voice.localService === true)
-      : available);
+    const requestedLanguage = voiceOptions.language == null ? null : normalizeTtsLanguage(voiceOptions.language);
+    return Object.freeze((Array.isArray(voices) ? voices.slice() : []).filter(voice => {
+      if (adapter.type === "native" && (!voice || voice.localService !== true)) return false;
+      const language = languageForVoice(voice);
+      return Boolean(language && (!requestedLanguage || language.id === requestedLanguage.id));
+    }));
   }
 
   async function speak(text, speechOptions = {}) {
@@ -558,9 +649,21 @@ export function createTtsEngine(options = {}) {
     if (!speechOptions || typeof speechOptions !== "object" || Array.isArray(speechOptions)) {
       throw new TtsEngineError("speak() के विकल्प Object होने चाहिए।", "INVALID_SPEECH_OPTIONS");
     }
-    if (phase !== "ready" || !activeBackend) {
-      throw new TtsEngineError("TTS Backend तैयार नहीं है। पहले initialize() सफल होना चाहिए।", "ENGINE_NOT_READY");
-    }
+    if (phase !== "ready" || !activeBackend) throw new TtsEngineError(
+      "TTS Backend तैयार नहीं है। पहले initialize() सफल होना चाहिए।", "ENGINE_NOT_READY"
+    );
+    const voiceLanguage = speechOptions.voice ? languageForVoice(speechOptions.voice) : null;
+    if (speechOptions.voice && !voiceLanguage) throw new TtsEngineError(
+      "चुनी हुई Voice संस्कृत या हिंदी के लिए पंजीकृत नहीं है।", "UNSUPPORTED_VOICE_LANGUAGE"
+    );
+    const speechLanguage = normalizeTtsLanguage(
+      speechOptions.language || speechOptions.lang || (voiceLanguage && voiceLanguage.id) || selectedLanguage.id
+    );
+    if (voiceLanguage && voiceLanguage.id !== speechLanguage.id) throw new TtsEngineError(
+      "चुनी हुई Voice और TTS भाषा अलग-अलग हैं। उसी भाषा की स्थानीय Voice चुनें।",
+      "VOICE_LANGUAGE_MISMATCH",
+      { voiceLanguage: voiceLanguage.id, requestedLanguage: speechLanguage.id }
+    );
     if (typeof text !== "string" || !text.trim()) {
       throw new TtsEngineError("वाचन के लिए अर्थपूर्ण पाठ आवश्यक है।", "EMPTY_SPEECH_TEXT");
     }
@@ -581,7 +684,9 @@ export function createTtsEngine(options = {}) {
       : {};
     const preparedSpeech = prepareSpeech(text, pronunciationOptions);
     const analysis = preparedSpeech.analysis;
+    const knowledgeGuidance = preparedSpeech.knowledgeGuidance;
     const pronunciationSummary = Object.freeze({
+      language: speechLanguage.id,
       codePointCount: analysis.codePointCount,
       wordCount: analysis.words.length,
       knownDifficultWordCount: analysis.knownDifficultWords.length,
@@ -593,11 +698,20 @@ export function createTtsEngine(options = {}) {
       requiresBranchContext: preparedSpeech.requiresBranchContext,
       requiresAccentAwareBackend: preparedSpeech.requiresAccentAwareBackend,
       nativeTtsRecommendation: preparedSpeech.nativeTtsRecommendation,
-      originalTextPreserved: preparedSpeech.speechText === text
+      originalTextPreserved: preparedSpeech.speechText === text,
+      knowledgeMatchedTermCount: knowledgeGuidance.matches.length,
+      knowledgeContextRequiredCount: knowledgeGuidance.contextRequired.length
     });
     lastPronunciationReport = pronunciationSummary;
     lastDiagnostics = null;
     emit("pronunciationanalysis", { backendId, ...pronunciationSummary });
+    emit("knowledgeguidance", {
+      backendId,
+      language: speechLanguage.id,
+      matches: knowledgeGuidance.matches,
+      contextRequired: knowledgeGuidance.contextRequired,
+      note: knowledgeGuidance.note
+    });
     if (preparedSpeech.blockedReasons.length) {
       emit("pronunciationwarning", {
         backendId, backendType: adapter.type,
@@ -610,6 +724,8 @@ export function createTtsEngine(options = {}) {
     const backendOptions = { ...speechOptions };
     delete backendOptions.replace;
     delete backendOptions.pronunciation;
+    delete backendOptions.language;
+    backendOptions.lang = speechLanguage.locale;
     activeSpeech = { token, backendId };
     playback = "speaking";
     lastError = null;
@@ -759,8 +875,12 @@ export function createTtsEngine(options = {}) {
       }
     }
     const pronunciationKnowledgeBase = getPronunciationKnowledgeBaseInfo();
+    const knowledgeDiagnostics = getKnowledgeDiagnostics();
     lastDiagnostics = Object.freeze({
       engineVersion: TTS_ENGINE_VERSION,
+      selectedLanguage,
+      supportedLanguages: TTS_LANGUAGE_OPTIONS,
+      knowledge: knowledgeDiagnostics,
       generatedAt: new Date().toISOString(),
       phase,
       playback,
@@ -781,6 +901,61 @@ export function createTtsEngine(options = {}) {
     catch (error) { throw asError(error, "PRONUNCIATION_ANALYSIS_FAILED"); }
   }
 
+  function getKnowledgeDiagnostics() {
+    ensureNotDisposed();
+    if (knowledgeAdapter) return knowledgeAdapter.getDiagnostics();
+    return Object.freeze({
+      available: false, loaded: false, hasGuidance: false,
+      error: knowledgeAdapterError
+        ? Object.freeze({ code: knowledgeAdapterError.code, message: knowledgeAdapterError.message })
+        : Object.freeze({ code: "KNOWLEDGE_ADAPTER_UNAVAILABLE", message: "Knowledge Adapter उपलब्ध नहीं है।" })
+    });
+  }
+
+  function getKnowledgeGuidance(text, guidanceOptions = {}) {
+    ensureNotDisposed();
+    if (typeof text !== "string") throw new TtsEngineError("Knowledge text string होना चाहिए।", "INVALID_TEXT");
+    if (!knowledgeAdapter) return Object.freeze({
+      matches: Object.freeze([]), contextRequired: Object.freeze([]), matchedTermCount: 0,
+      available: false, note: "Nano Server Knowledge Adapter उपलब्ध नहीं है; मूल पाठ अक्षरशः सुरक्षित रहेगा।"
+    });
+    const guidance = knowledgeAdapter.getGuidance(text, guidanceOptions);
+    const reviewedMatches = guidance.matches.filter(item => item.reviewStatus === "reviewed");
+    return Object.freeze({
+      ...guidance,
+      matches: Object.freeze(reviewedMatches),
+      matchedTermCount: new Set(reviewedMatches.map(item => item.term)).size,
+      pendingReviewCount: guidance.matches.length - reviewedMatches.length,
+      available: true
+    });
+  }
+
+  async function loadKnowledge(loadOptions = {}) {
+    ensureNotDisposed();
+    if (!loadOptions || typeof loadOptions !== "object" || Array.isArray(loadOptions)) {
+      throw new TtsEngineError("Knowledge load options object होना चाहिए।", "INVALID_KNOWLEDGE_OPTIONS");
+    }
+    if (!knowledgeAdapter) throw new TtsEngineError(
+      knowledgeAdapterError ? knowledgeAdapterError.message : "Nano Server Knowledge Adapter उपलब्ध नहीं है।",
+      knowledgeAdapterError ? knowledgeAdapterError.code : "KNOWLEDGE_ADAPTER_UNAVAILABLE"
+    );
+    const safeLoadOptions = {
+      ...loadOptions,
+      downloadIfMissing: loadOptions.downloadIfMissing === true
+    };
+    try {
+      const result = await knowledgeAdapter.loadKnowledge(safeLoadOptions);
+      ensureNotDisposed();
+      lastDiagnostics = null;
+      emit("knowledgechange", result);
+      return result;
+    } catch (error) {
+      const wrapped = asError(error, "KNOWLEDGE_LOAD_FAILED");
+      emit("knowledgeerror", { code: wrapped.code, message: wrapped.message });
+      throw wrapped;
+    }
+  }
+
   function prepareSpeech(text, pronunciationOptions = {}) {
     ensureNotDisposed();
     let prepared;
@@ -789,7 +964,11 @@ export function createTtsEngine(options = {}) {
     if (!prepared || prepared.originalText !== text || prepared.speechText !== text || prepared.modified !== false) {
       throw new TtsEngineError("Pronunciation module ने मूल पाठ बदलने का प्रयास किया; TTS संचालन रोका गया।", "PRONUNCIATION_TEXT_MUTATION_BLOCKED");
     }
-    return prepared;
+    return Object.freeze({
+      ...prepared,
+      knowledgeGuidance: getKnowledgeGuidance(text, pronunciationOptions),
+      knowledgeAppliedToSpeech: false
+    });
   }
 
   function findPronunciation(word, pronunciationOptions = {}) {
@@ -878,10 +1057,16 @@ export function createTtsEngine(options = {}) {
       try {
         const cleanupFailures = await cleanupBackend(backend);
         cleanupFailures.forEach(cleanupError => emit("warning", {
-          code: cleanupError.code,
-          message: cleanupError.message,
-          backendId
+          code: cleanupError.code, message: cleanupError.message, backendId
         }));
+        if (ownsKnowledgeAdapter && knowledgeAdapter && typeof knowledgeAdapter.dispose === "function") {
+          try { knowledgeAdapter.dispose(); }
+          catch (error) { emit("warning", { code: "KNOWLEDGE_ADAPTER_DISPOSE_FAILED", message: asError(error).message }); }
+        }
+        if (ownsKnowledgeAPI && knowledgeAPI && typeof knowledgeAPI.dispose === "function") {
+          try { await knowledgeAPI.dispose(); }
+          catch (error) { emit("warning", { code: "KNOWLEDGE_API_DISPOSE_FAILED", message: asError(error).message }); }
+        }
       } finally {
         activeBackend = null;
         activeBackendId = null;
@@ -901,8 +1086,14 @@ export function createTtsEngine(options = {}) {
     initialize,
     getCapabilities,
     getStatus,
+    getSupportedLanguages,
+    getLanguage,
+    setLanguage,
     analyzeText,
     prepareSpeech,
+    loadKnowledge,
+    getKnowledgeGuidance,
+    getKnowledgeDiagnostics,
     findPronunciation,
     getTextPronunciationDiagnostics,
     getPronunciationKnowledgeBaseInfo,
