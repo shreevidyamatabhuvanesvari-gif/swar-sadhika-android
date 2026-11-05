@@ -1,6 +1,7 @@
 /* Swar-Sadhika — TTS page module.
- * UI and line sequencing live here; speech backends are owned by tts-engine.js.
- * Current backend: local Native Speech Synthesis only.
+ * UI and line sequencing live here; pronunciation analysis and speech backends
+ * are owned by tts-engine.js and its local Vedic pronunciation knowledge base.
+ * Current speech backend: local Native Speech Synthesis only.
  */
 import { createTtsEngine } from "../tts/tts-engine.js";
 
@@ -52,7 +53,13 @@ export async function mount(context) {
     timer: null,
     destroyed: false,
     voiceRefreshSequence: 0,
-    unsubscribeVoices: null
+    unsubscribeVoices: null,
+    unsubscribePronunciationAnalysis: null,
+    unsubscribePronunciationWarning: null,
+    pronunciationReady: false,
+    pronunciationInfo: null,
+    lastAnalysis: null,
+    lastPronunciationReport: null
   };
 
   const FEMALE_HINTS = [
@@ -71,6 +78,50 @@ export async function mount(context) {
   function setLine(message) {
     if (ui.line) ui.line.textContent = message || "";
     if (ui.overlay) ui.overlay.classList.toggle("hidden", !message);
+  }
+
+  function summarizeAnalysis(analysis) {
+    if (!analysis) return "पाठ विश्लेषण उपलब्ध नहीं है।";
+    const difficult = analysis.knownDifficultWords ? analysis.knownDifficultWords.length : 0;
+    const conjuncts = analysis.conjuncts ? analysis.conjuncts.length : 0;
+    const matras = analysis.matras ? analysis.matras.total : 0;
+    const accents = analysis.accentMarks ? analysis.accentMarks.length : 0;
+    const unknown = analysis.unclassifiedMarks ? analysis.unclassifiedMarks.length : 0;
+    return "कठिन शब्द " + difficult + " · संयुक्ताक्षर " + conjuncts +
+      " · मात्राएँ " + matras + " · वैदिक/विशेष चिह्न " + accents + " · अज्ञात चिह्न " + unknown;
+  }
+
+  function pronunciationReadyText() {
+    const info = state.pronunciationInfo;
+    if (!info || !info.selfTest) return "वैदिक उच्चारण ज्ञानकोश की स्थिति उपलब्ध नहीं है।";
+    return "वैदिक पाठ विश्लेषक " + info.selfTest.passed + "/" + info.selfTest.total + " परीक्षण सफल।";
+  }
+
+  function analyzeCurrentText() {
+    if (state.destroyed || !state.engineReady || !state.pronunciationReady || state.active) return;
+    const text = ui.input.value;
+    if (!text.trim()) {
+      state.lastAnalysis = null;
+      return;
+    }
+    try {
+      const analysis = engine.analyzeText(text);
+      state.lastAnalysis = analysis;
+      const message = "पाठ विश्लेषण: " + summarizeAnalysis(analysis) + "। " + pronunciationReadyText();
+      const warning = Boolean(analysis.needsBranchContext || (analysis.unclassifiedMarks && analysis.unclassifiedMarks.length));
+      setStatus(
+        warning
+          ? message + " वैदिक स्वराघात/अज्ञात चिह्नों का Native Voice पर शुद्ध वाचन प्रमाणित नहीं है।"
+          : message,
+        warning
+      );
+    } catch (error) {
+      setStatus("पाठ विश्लेषण त्रुटि: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+    }
+  }
+
+  function onTextInput() {
+    analyzeCurrentText();
   }
 
   function isDevanagari(value) {
@@ -168,7 +219,7 @@ export async function mount(context) {
   }
 
   function updateButtons() {
-    const canSpeak = state.engineReady && state.voiceEntries.length > 0 && !state.destroyed;
+    const canSpeak = state.engineReady && state.pronunciationReady && state.voiceEntries.length > 0 && !state.destroyed;
     ui.speak.disabled = state.active || !canSpeak;
     ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
     ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
@@ -229,6 +280,20 @@ export async function mount(context) {
     const prepared = stripTerminalVerseNumber(line);
     const speechText = prepared.text.trim();
     const voice = chooseVoice(line);
+    let lineAnalysis;
+    let speechPreparation;
+    try {
+      lineAnalysis = engine.analyzeText(line);
+      speechPreparation = engine.prepareSpeech(speechText);
+      if (!speechPreparation || speechPreparation.speechText !== speechText || speechPreparation.modified !== false) {
+        throw new Error("उच्चारण तैयारी ने मूल पंक्ति बदलने का प्रयास किया।");
+      }
+      state.lastAnalysis = lineAnalysis;
+    } catch (error) {
+      finish("संस्कृत पाठ विश्लेषण/तैयारी विफल: " +
+        (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      return;
+    }
 
     if (!speechText) {
       state.index += 1;
@@ -244,13 +309,14 @@ export async function mount(context) {
     const rate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
     const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
     const numberNotice = prepared.removed ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।" : "";
-    const specialNotice = hasVedicMarks(line)
-      ? " · वैदिक चिह्न मूल पाठ में सुरक्षित हैं; इस Native Voice से शुद्ध वैदिक स्वराघात प्रमाणित नहीं है।"
+    const specialNotice = speechPreparation.requiresAccentAwareBackend || speechPreparation.requiresBranchContext
+      ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।"
       : "";
+    const analysisNotice = " · " + summarizeAnalysis(lineAnalysis);
 
     setLine(line);
     setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
-      voice.name + " (स्थानीय Native Voice)" + numberNotice + specialNotice);
+      voice.name + " (स्थानीय Native Voice)" + numberNotice + specialNotice + analysisNotice);
     state.speechInFlight = true;
     updateButtons();
 
@@ -289,6 +355,10 @@ export async function mount(context) {
       setStatus("Native TTS Engine उपलब्ध नहीं है। Browser और Android TTS सुविधा जाँचें।", true);
       return;
     }
+    if (!state.pronunciationReady) {
+      setStatus("वैदिक उच्चारण ज्ञानकोश की Self-Test स्थिति सफल नहीं है; सुरक्षित वाचन रोक दिया गया है।", true);
+      return;
+    }
     if (!state.voiceEntries.length) {
       setStatus("कोई सत्यापित स्थानीय Voice उपलब्ध नहीं है। Android की Text-to-Speech settings में स्थानीय Hindi voice install/enable करें।", true);
       return;
@@ -297,6 +367,12 @@ export async function mount(context) {
     if (!lines.length) {
       setStatus("पहले पाठ लिखें। प्रत्येक नई पंक्ति क्रम से पढ़ी जाएगी।", true);
       ui.input.focus();
+      return;
+    }
+    try {
+      state.lastAnalysis = engine.analyzeText(lines.join("\n"));
+    } catch (error) {
+      setStatus("पाठ विश्लेषण विफल: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
       return;
     }
 
@@ -437,11 +513,12 @@ export async function mount(context) {
         return;
       }
       const selected = chooseVoice(ui.input.value);
+      const knowledgeNote = " " + pronunciationReadyText();
       if (selected && voiceGenderHint(selected) === "female") {
         setStatus("संभावित स्त्री-स्वर वाली स्थानीय Voice उपलब्ध है: " + selected.name +
-          "। वास्तविक मधुरता और उच्चारण का श्रवण परीक्षण आवश्यक है।");
+          "। वास्तविक मधुरता और उच्चारण का श्रवण परीक्षण आवश्यक है।" + knowledgeNote);
       } else {
-        setStatus(state.voiceEntries.length + " स्थानीय Speech Voices उपलब्ध हैं। नाम से स्पष्ट स्त्री-स्वर की पहचान नहीं हुई; स्वचालित चयन भाषा और उपलब्धता पर आधारित है।", true);
+        setStatus(state.voiceEntries.length + " स्थानीय Speech Voices उपलब्ध हैं। नाम से स्पष्ट स्त्री-स्वर की पहचान नहीं हुई; स्वचालित चयन भाषा और उपलब्धता पर आधारित है।" + knowledgeNote, true);
       }
     } catch (error) {
       if (state.destroyed || request !== state.voiceRefreshSequence) return;
@@ -510,9 +587,14 @@ export async function mount(context) {
     ui.stop.removeEventListener("click", stopReading);
     ui.rate.removeEventListener("input", onRateInput);
     ui.voice.removeEventListener("change", onVoiceChange);
+    ui.input.removeEventListener("input", onTextInput);
 
     if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
+    if (typeof state.unsubscribePronunciationAnalysis === "function") state.unsubscribePronunciationAnalysis();
+    if (typeof state.unsubscribePronunciationWarning === "function") state.unsubscribePronunciationWarning();
     state.unsubscribeVoices = null;
+    state.unsubscribePronunciationAnalysis = null;
+    state.unsubscribePronunciationWarning = null;
     setLine("");
     updateButtons();
     try {
@@ -530,11 +612,26 @@ export async function mount(context) {
   ui.stop.addEventListener("click", stopReading);
   ui.rate.addEventListener("input", onRateInput);
   ui.voice.addEventListener("change", onVoiceChange);
+  ui.input.addEventListener("input", onTextInput);
   onRateInput();
   updateButtons();
 
   state.unsubscribeVoices = engine.on("voiceschanged", () => {
     void refreshVoices();
+  });
+  state.unsubscribePronunciationAnalysis = engine.on("pronunciationanalysis", detail => {
+    if (state.destroyed) return;
+    state.lastPronunciationReport = detail;
+  });
+  state.unsubscribePronunciationWarning = engine.on("pronunciationwarning", detail => {
+    if (state.destroyed || !state.active) return;
+    const reasons = Array.isArray(detail && detail.reasons) ? detail.reasons.join(" ") : "";
+    setStatus(
+      "उच्चारण चेतावनी: " +
+        (detail && detail.message ? detail.message : "विशेष चिह्नों की ध्वनि की पुष्टि आवश्यक है।") +
+        (reasons ? " " + reasons : ""),
+      true
+    );
   });
 
   try {
@@ -548,7 +645,21 @@ export async function mount(context) {
       setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें।", true);
       updateButtons();
     } else {
-      await refreshVoices();
+      state.pronunciationInfo = engine.getPronunciationKnowledgeBaseInfo();
+      state.pronunciationReady = Boolean(
+        state.pronunciationInfo &&
+        state.pronunciationInfo.available &&
+        state.pronunciationInfo.selfTest &&
+        state.pronunciationInfo.selfTest.status === "PASSED" &&
+        state.pronunciationInfo.selfTest.failed === 0
+      );
+      if (!state.pronunciationReady) {
+        setStatus("वैदिक उच्चारण ज्ञानकोश की Self-Test विफल है। सुरक्षा के लिए वाचन उपलब्ध नहीं किया गया।", true);
+        updateButtons();
+      } else {
+        await refreshVoices();
+        if (ui.input.value.trim()) analyzeCurrentText();
+      }
     }
   } catch (error) {
     if (!state.destroyed) {
