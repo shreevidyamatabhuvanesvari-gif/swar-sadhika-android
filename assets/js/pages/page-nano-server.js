@@ -4,9 +4,9 @@
  * The engine fetches only same-origin app resources and never executes manifest modules.
  */
 import {
-  createNanoServerEngine,
-  NANO_SERVER_ENGINE_VERSION
-} from "../nano-server/nano-server-engine-part2.js";
+  createNanoServerKnowledgeAPI,
+  NANO_SERVER_KNOWLEDGE_API_VERSION
+} from "../nano-server/nano-server-knowledge-api-part2.js";
 
 export function mount(context) {
   if (!context || !context.root || !context.document) {
@@ -19,15 +19,12 @@ export function mount(context) {
   if (!win) throw new Error("Nano Server के लिए Browser Window उपलब्ध नहीं है।");
 
   const manifestUrl = new URL("../../knowledge/manifest.json", import.meta.url);
-  const engine = createNanoServerEngine({ host: win });
+  const api = createNanoServerKnowledgeAPI({ engineOptions: { host: win } });
   const listeners = [];
   const state = {
     destroyed: false,
     booted: false,
-    manifest: null,
     entries: [],
-    cached: [],
-    visible: true,
     busy: new Set(),
     unsubscribers: []
   };
@@ -112,7 +109,7 @@ export function mount(context) {
     throw new Error("Nano Server पेज में आवश्यक UI तत्व अनुपस्थित हैं: " + required.join(", "));
   }
 
-  ui.engine.textContent = "Nano Server Engine v" + NANO_SERVER_ENGINE_VERSION;
+  ui.engine.textContent = "Engine v" + api.engineVersion + " · Knowledge API v" + api.apiVersion;
   ui.manifestUrl.textContent = manifestUrl.href;
 
   function listen(target, type, callback) {
@@ -152,7 +149,7 @@ export function mount(context) {
 
   function renderNetwork() {
     if (state.destroyed) return;
-    const network = engine.getNetworkStatus();
+    const network = api.getNetworkStatus();
     ui.network.textContent = network.onlineHint ? "ऑनलाइन संकेत उपलब्ध" : "ऑफलाइन संकेत";
     const details = [];
     if (network.connectionType) details.push("प्रकार: " + network.connectionType);
@@ -211,7 +208,7 @@ export function mount(context) {
       readButton.dataset.action = "read-document";
       readButton.dataset.entryId = entry.id;
       readButton.textContent = "डाउनलोड करके पढ़ें";
-      readButton.disabled = !entry.enabled;
+      readButton.disabled = !entry.enabled || state.busy.has(entry.id);
       actions.appendChild(readButton);
 
       const cacheButton = doc.createElement("button");
@@ -220,7 +217,7 @@ export function mount(context) {
       cacheButton.dataset.action = "read-cache";
       cacheButton.dataset.entryId = entry.id;
       cacheButton.textContent = "केवल Cache से पढ़ें";
-      cacheButton.disabled = !entry.enabled;
+      cacheButton.disabled = !entry.enabled || state.busy.has(entry.id);
       actions.appendChild(cacheButton);
       card.appendChild(actions);
     }
@@ -260,7 +257,7 @@ export function mount(context) {
       card.appendChild(heading);
       const detail = doc.createElement("span");
       detail.className = "subtle";
-      detail.textContent = String(record.format || "text").toUpperCase() + " · " + formatBytes(record.byteLength) + " · SHA-256 सत्यापित Cache";
+      detail.textContent = String(record.format || "text").toUpperCase() + " · " + formatBytes(record.byteLength) + " · स्थानीय Cache; पढ़ते समय SHA-256 पुनः सत्यापित होगा";
       card.appendChild(detail);
       const actions = doc.createElement("div");
       actions.className = "row";
@@ -270,6 +267,10 @@ export function mount(context) {
       read.dataset.action = "read-cache";
       read.dataset.entryId = record.id;
       read.textContent = "Cache से पढ़ें";
+      const activeDocumentEntry = state.entries.find(entry =>
+        entry.id === record.id && entry.entryType === "knowledge-document" && entry.enabled
+      );
+      read.disabled = state.busy.has(record.id) || !activeDocumentEntry;
       actions.appendChild(read);
       const remove = doc.createElement("button");
       remove.type = "button";
@@ -277,22 +278,41 @@ export function mount(context) {
       remove.dataset.action = "remove-cache";
       remove.dataset.entryId = record.id;
       remove.textContent = "स्थानीय Cache हटाएँ";
+      remove.disabled = state.busy.has(record.id);
       actions.appendChild(remove);
       card.appendChild(actions);
       ui.cacheList.appendChild(card);
     });
   }
 
+  function setEntryBusy(id, busy) {
+    if (!id) return;
+    if (busy) state.busy.add(id);
+    else state.busy.delete(id);
+
+    const activeEntry = state.entries.find(entry =>
+      entry.id === id && entry.entryType === "knowledge-document" && entry.enabled
+    );
+    [ui.entryList, ui.cacheList].forEach(container => {
+      container.querySelectorAll("button[data-entry-id]").forEach(button => {
+        if (button.dataset.entryId !== id) return;
+        if (button.dataset.action === "remove-cache") button.disabled = Boolean(busy);
+        else button.disabled = Boolean(busy) || !activeEntry;
+      });
+    });
+  }
+
   async function refreshDiagnostics() {
     if (state.destroyed) return;
-    const data = await engine.getDiagnostics();
+    const data = await api.getDiagnostics();
+    if (state.destroyed) return;
     renderNetwork();
     renderDiagnostics(data);
   }
 
   async function refreshCache() {
     if (state.destroyed) return;
-    const records = await engine.getCachedEntries();
+    const records = await api.getCachedEntries();
     if (state.destroyed) return;
     renderCache(records);
     await refreshDiagnostics();
@@ -302,17 +322,18 @@ export function mount(context) {
     if (state.destroyed) return;
     ui.refreshManifest.disabled = true;
     try {
-      const manifest = await engine.refreshManifest({ allowCached: false });
+      const manifest = await api.refreshManifest({ allowCached: false });
       if (state.destroyed) return;
       state.manifest = manifest;
-      renderEntries(engine.listEntries());
+      renderEntries(api.listEntries());
       ui.manifestMeta.textContent = "Catalog " + manifest.catalogVersion + " · " + manifest.entries.length + " कुल प्रविष्टियाँ · स्रोत: ऐप का same-origin Manifest";
       setStatus("मुख्य ऐप का Knowledge Manifest सफलतापूर्वक प्राप्त और schema/path नियमों के अनुसार validate हुआ।", false);
     } catch (error) {
-      const cachedManifest = engine.getManifest();
+      if (state.destroyed) return;
+      const cachedManifest = api.getManifest();
       if (cachedManifest) {
         state.manifest = cachedManifest;
-        renderEntries(engine.listEntries());
+        renderEntries(api.listEntries());
         ui.manifestMeta.textContent = "स्थानीय cached Manifest · Catalog " + cachedManifest.catalogVersion + " · नया नेटवर्क refresh विफल रहा।";
         setStatus("नया Manifest प्राप्त नहीं हुआ; पहले से सत्यापित स्थानीय Manifest दिखाया जा रहा है। कारण: " + (error.message || "अज्ञात त्रुटि"), true);
       } else {
@@ -334,7 +355,7 @@ export function mount(context) {
     ui.checkNetwork.disabled = true;
     setStatus("ऐप के अपने Manifest URL पर वास्तविक same-origin Fetch जाँच चल रही है…");
     try {
-      const result = await engine.probeAppNetwork({ force: true });
+      const result = await api.probeAppNetwork({ force: true });
       if (state.destroyed) return;
       setStatus(result.reachable
         ? "ऐप Origin पहुँच योग्य है। HTTP स्थिति: " + result.status + "। जाँच: " + result.checkedAt
@@ -350,10 +371,11 @@ export function mount(context) {
   }
 
   async function readDocument(id, fromCacheOnly) {
-    if (state.destroyed) return;
+    if (state.destroyed || state.busy.has(id)) return;
+    setEntryBusy(id, true);
     setStatus(fromCacheOnly ? "स्थानीय Cache से दस्तावेज़ पढ़ा जा रहा है…" : "दस्तावेज़ डाउनलोड/सत्यापित/पढ़ा जा रहा है…");
     try {
-      const documentData = await engine.readDocument(id, {
+      const documentData = await api.readDocument(id, {
         downloadIfMissing: !fromCacheOnly
       });
       if (state.destroyed) return;
@@ -361,19 +383,27 @@ export function mount(context) {
       setStatus("Knowledge document पढ़ लिया गया। Engine ने SHA-256 अखंडता जाँची।", false);
     } catch (error) {
       if (!state.destroyed) setStatus("दस्तावेज़ पढ़ना विफल: " + (error.message || "अज्ञात त्रुटि") + (error.code ? " · " + error.code : ""), true);
+    } finally {
+      if (!state.destroyed) setEntryBusy(id, false);
     }
+    if (state.destroyed) return;
     await refreshCache().catch(error => setStatus("Cache सूची अपडेट विफल: " + error.message, true));
   }
 
   async function removeCached(id) {
-    if (state.destroyed) return;
+    if (state.destroyed || state.busy.has(id)) return;
+    setEntryBusy(id, true);
     try {
-      const removed = await engine.removeCachedEntry(id);
+      const removed = await api.removeCachedEntry(id);
       if (state.destroyed) return;
       setStatus(removed ? "स्थानीय Cache प्रविष्टि हटा दी गई: " + id : "यह प्रविष्टि Cache में पहले से मौजूद नहीं है: " + id, false);
-      await refreshCache();
     } catch (error) {
       if (!state.destroyed) setStatus("Cache हटाना विफल: " + error.message, true);
+    } finally {
+      if (!state.destroyed) {
+        setEntryBusy(id, false);
+        await refreshCache().catch(error => setStatus("Cache सूची अपडेट विफल: " + error.message, true));
+      }
     }
   }
 
@@ -404,17 +434,17 @@ export function mount(context) {
   listen(ui.cacheList, "click", handleCacheAction);
 
   try {
-    state.unsubscribers.push(engine.on("networkchange", () => {
+    state.unsubscribers.push(api.on("networkchange", () => {
       renderNetwork();
       refreshDiagnostics().catch(() => undefined);
     }));
-    state.unsubscribers.push(engine.on("downloadprogress", event => {
+    state.unsubscribers.push(api.on("downloadprogress", event => {
       const detail = event && event.detail;
       if (!detail) return;
       const percent = detail.total ? Math.min(100, Math.round((detail.loaded / detail.total) * 100)) + "%" : formatBytes(detail.loaded);
       setStatus("Knowledge दस्तावेज़ डाउनलोड हो रहा है: " + detail.id + " · " + percent);
     }));
-    state.unsubscribers.push(engine.on("storagewarning", event => {
+    state.unsubscribers.push(api.on("storagewarning", event => {
       const detail = event && event.detail;
       setStatus("IndexedDB उपलब्ध नहीं; अस्थायी Memory Cache सक्रिय है। " + (detail && detail.message ? detail.message : ""), true);
     }));
@@ -426,7 +456,7 @@ export function mount(context) {
     if (state.booted || state.destroyed) return;
     state.booted = true;
     try {
-      const diagnostics = await engine.initialize();
+      const diagnostics = await api.initialize();
       if (state.destroyed) return;
       renderNetwork();
       renderDiagnostics(diagnostics);
@@ -452,9 +482,7 @@ export function mount(context) {
         refreshDiagnostics().catch(error => setStatus("Diagnostics त्रुटि: " + error.message, true));
       }
     },
-    onHide() {
-      state.visible = false;
-    },
+    onHide() {},
     async unmount() {
       if (state.destroyed) return;
       state.destroyed = true;
@@ -464,7 +492,7 @@ export function mount(context) {
       state.unsubscribers.splice(0).forEach(unsubscribe => {
         try { unsubscribe(); } catch (_) {}
       });
-      await engine.dispose();
+      await api.dispose();
     }
   };
 }
@@ -472,7 +500,8 @@ export function mount(context) {
 export function selfTest() {
   const checks = [
     { id: "mount-export", passed: typeof mount === "function" },
-    { id: "engine-version-export", passed: NANO_SERVER_ENGINE_VERSION === "1.0.2" },
+    { id: "knowledge-api-export", passed: typeof createNanoServerKnowledgeAPI === "function" },
+    { id: "knowledge-api-version", passed: NANO_SERVER_KNOWLEDGE_API_VERSION === "1.0.0" },
     { id: "manifest-path-is-app-owned", passed: new URL("../../knowledge/manifest.json", import.meta.url).pathname.endsWith("/assets/knowledge/manifest.json") }
   ];
   return Object.freeze({
