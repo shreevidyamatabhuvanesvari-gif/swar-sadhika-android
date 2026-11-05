@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.0.0",
+  "catalogVersion": "1.1.0",
   "appId": "swar-sadhika-android",
   "entries": [
     {
@@ -25,6 +25,26 @@
         "Vedic-accent-analysis",
         "seed-pronunciation-dictionary"
       ],
+      "enabled": true
+    },
+    {
+      "id": "sanskrit-tts-knowledge-v1",
+      "entryType": "knowledge-document",
+      "title": "संस्कृत TTS प्रारंभिक ज्ञान-दस्तावेज़",
+      "documentVersion": "1.0.0",
+      "category": "pronunciation",
+      "language": "sa",
+      "script": "Devanagari",
+      "format": "json",
+      "path": "documents/sanskrit-tts-knowledge-v1.json",
+      "pathBase": "manifest-directory",
+      "consumer": "../js/tts/tts-engine.js",
+      "integrationMode": "nano-server-tts-knowledge-adapter",
+      "contentSchema": "swar-sadhika.sanskrit-tts-knowledge",
+      "contentSchemaVersion": 1,
+      "sha256": "47e5d151de34c02a330d8769c828fed43f57a477ea27ab8c37c72815deb3e0e7",
+      "reviewPolicy": "only-reviewed-entries-are-exposed-as-active-guidance",
+      "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
     }
   ]
