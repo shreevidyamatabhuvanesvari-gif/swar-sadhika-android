@@ -6,7 +6,7 @@
  * Knowledge-module entries are metadata only; existing consumers keep their static imports.
  */
 
-export const NANO_SERVER_ENGINE_VERSION = "1.0.0";
+export const NANO_SERVER_ENGINE_VERSION = "1.0.1";
 
 const APP_ID = "swar-sadhika-android";
 const DB_VERSION = 1;
@@ -70,28 +70,46 @@ function makeAbortScope(host, externalSignal, timeoutMs) {
   if (typeof Controller !== "function") {
     fail("इस ब्राउज़र में AbortController उपलब्ध नहीं है।", "ABORT_CONTROLLER_UNAVAILABLE");
   }
+  if (externalSignal && (
+    typeof externalSignal.addEventListener !== "function" ||
+    typeof externalSignal.removeEventListener !== "function"
+  )) {
+    fail("अनुरोध का AbortSignal अमान्य है।", "INVALID_ABORT_SIGNAL");
+  }
+
   const controller = new Controller();
   let timeoutId = null;
   let externalAbort = null;
-  if (externalSignal) {
-    if (externalSignal.aborted) controller.abort(externalSignal.reason);
-    else {
-      externalAbort = () => controller.abort(externalSignal.reason);
-      externalSignal.addEventListener("abort", externalAbort, { once: true });
-    }
-  }
-  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
-    const schedule = typeof host.setTimeout === "function" ? host.setTimeout.bind(host) : setTimeout;
-    timeoutId = schedule(() => controller.abort(new Error("अनुरोध का समय समाप्त हुआ।")), timeoutMs);
-  }
-  return {
-    controller,
-    cleanup() {
+  const cleanup = () => {
+    try {
       const cancel = typeof host.clearTimeout === "function" ? host.clearTimeout.bind(host) : clearTimeout;
       if (timeoutId !== null) cancel(timeoutId);
+    } catch (_) {}
+    try {
       if (externalSignal && externalAbort) externalSignal.removeEventListener("abort", externalAbort);
-    }
+    } catch (_) {}
+    timeoutId = null;
+    externalAbort = null;
   };
+
+  try {
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort(externalSignal.reason);
+      else {
+        externalAbort = () => controller.abort(externalSignal.reason);
+        externalSignal.addEventListener("abort", externalAbort, { once: true });
+      }
+    }
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      const schedule = typeof host.setTimeout === "function" ? host.setTimeout.bind(host) : setTimeout;
+      timeoutId = schedule(() => controller.abort(new Error("अनुरोध का समय समाप्त हुआ।")), timeoutMs);
+    }
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+
+  return { controller, cleanup };
 }
 
 function createMemoryStore() {
@@ -123,10 +141,24 @@ function createIndexedDbStore(host, name) {
       if (!db.objectStoreNames.contains("documents")) db.createObjectStore("documents", { keyPath: "id" });
       if (!db.objectStoreNames.contains("metadata")) db.createObjectStore("metadata", { keyPath: "key" });
     };
-    request.onerror = () => reject(request.error || new Error("IndexedDB खोलना विफल हुआ।"));
-    request.onblocked = () => reject(new NanoServerError("IndexedDB का पुराना कनेक्शन बंद होने की प्रतीक्षा है।", "INDEXEDDB_BLOCKED"));
+    let settled = false;
+    request.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(request.error || new Error("IndexedDB खोलना विफल हुआ।"));
+    };
+    request.onblocked = () => {
+      if (settled) return;
+      settled = true;
+      reject(new NanoServerError("IndexedDB का पुराना कनेक्शन बंद होने की प्रतीक्षा है।", "INDEXEDDB_BLOCKED"));
+    };
     request.onsuccess = () => {
       const db = request.result;
+      if (settled) {
+        try { db.close(); } catch (_) {}
+        return;
+      }
+      settled = true;
       const run = (storeName, mode, action) => new Promise((res, rej) => {
         let transaction;
         try {
@@ -259,6 +291,7 @@ export function createNanoServerEngine(options = {}) {
   }
 
   function on(type, callback) {
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     if (typeof type !== "string" || !/^[a-z][a-z0-9:_-]{0,63}$/i.test(type) || typeof callback !== "function") {
       fail("Event name या callback अमान्य है।", "INVALID_EVENT_LISTENER");
     }
@@ -369,23 +402,42 @@ export function createNanoServerEngine(options = {}) {
       if (host.navigator && host.navigator.connection && typeof host.navigator.connection.addEventListener === "function") {
         host.navigator.connection.addEventListener("change", onNetworkChange);
       }
+
+      let nextStore;
       try {
-        store = await createIndexedDbStore(host, databaseName);
-        storageReady = true;
+        nextStore = await createIndexedDbStore(host, databaseName);
       } catch (error) {
-        store = createMemoryStore();
+        nextStore = createMemoryStore();
         storageReady = false;
-        lastError = { code: error.code || "LOCAL_STORAGE_FALLBACK", message: error.message || "IndexedDB उपलब्ध नहीं; memory cache सक्रिय है।" };
-        emit("storagewarning", lastError);
+        lastError = {
+          code: error.code || "LOCAL_STORAGE_FALLBACK",
+          message: error.message || "IndexedDB उपलब्ध नहीं; memory cache सक्रिय है।"
+        };
+        if (!disposed) emit("storagewarning", lastError);
       }
+
+      if (disposed) {
+        if (nextStore && typeof nextStore.close === "function") nextStore.close();
+        fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      }
+
+      store = nextStore;
+      storageReady = store.kind === "indexeddb";
       try {
         const cached = await store.getMetadata("manifest");
         if (cached && cached.raw) lastManifest = validateManifest(cached.raw, manifestUrl);
       } catch (error) {
         lastError = { code: error.code || "CACHED_MANIFEST_INVALID", message: error.message };
       }
+
+      if (disposed) {
+        if (typeof store.close === "function") store.close();
+        fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      }
+
       initialized = true;
       const diagnostics = await getDiagnostics();
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       emit("initialized", diagnostics);
       return diagnostics;
     })();
@@ -411,6 +463,7 @@ export function createNanoServerEngine(options = {}) {
         referrerPolicy: "no-referrer",
         signal: scope.controller.signal
       });
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       const reachable = response.ok;
       if (response.body && typeof response.body.cancel === "function") {
         try { await response.body.cancel(); } catch (_) {}
@@ -418,6 +471,7 @@ export function createNanoServerEngine(options = {}) {
       lastNetworkCheck = Object.freeze({ reachable, status: response.status, checkedAt: new Date().toISOString(), target: "app-origin" });
       return lastNetworkCheck;
     } catch (error) {
+      if (disposed || error.code === "ENGINE_DISPOSED") throw error;
       lastNetworkCheck = Object.freeze({ reachable: false, checkedAt: new Date().toISOString(), reason: error.name === "AbortError" ? "timeout-or-abort" : "request-failed" });
       return lastNetworkCheck;
     } finally { scope.cleanup(); }
@@ -426,6 +480,7 @@ export function createNanoServerEngine(options = {}) {
   async function refreshManifest(options = {}) {
     if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     await initialize();
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     const scope = makeAbortScope(host, options.signal, requestTimeoutMs);
     try {
       const response = await fetchImpl(manifestUrl.href, {
@@ -438,6 +493,7 @@ export function createNanoServerEngine(options = {}) {
         headers: { Accept: "application/json" },
         signal: scope.controller.signal
       });
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       if (!response.ok) fail("Manifest डाउनलोड विफल हुआ।", "MANIFEST_HTTP_ERROR", { status: response.status });
       const bytes = await readResponseBytes(response, maxManifestBytes);
       const rawText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -445,13 +501,16 @@ export function createNanoServerEngine(options = {}) {
       try { raw = JSON.parse(rawText); }
       catch (error) { fail("Manifest JSON अमान्य है।", "MANIFEST_JSON_ERROR", { message: error.message }); }
       const validated = validateManifest(raw, manifestUrl);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       await store.putMetadata("manifest", { raw, savedAt: new Date().toISOString() });
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       lastManifest = validated;
       lastError = null;
       lastNetworkCheck = Object.freeze({ reachable: true, status: response.status, checkedAt: new Date().toISOString(), target: "app-origin" });
       emit("manifestrefreshed", { catalogVersion: validated.catalogVersion, entryCount: validated.entries.length });
       return validated;
     } catch (error) {
+      if (disposed || error.code === "ENGINE_DISPOSED") throw error;
       lastError = { code: error.code || "MANIFEST_REFRESH_FAILED", message: error.message || "Manifest refresh विफल हुआ।" };
       emit("networkerror", lastError);
       if (lastManifest && options.allowCached !== false) return lastManifest;
@@ -483,9 +542,30 @@ export function createNanoServerEngine(options = {}) {
     return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
   }
 
+  async function verifyCachedDocument(record, entry) {
+    if (!record || record.id !== entry.id || record.format !== entry.format || !record.bytes) return null;
+
+    let bytes = null;
+    if (record.bytes instanceof Uint8Array) {
+      bytes = record.bytes;
+    } else if (record.bytes instanceof ArrayBuffer) {
+      bytes = new Uint8Array(record.bytes);
+    } else if (ArrayBuffer.isView(record.bytes)) {
+      bytes = new Uint8Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength);
+    }
+    if (!bytes || bytes.byteLength > maxDocumentBytes) return null;
+
+    const expectedSha256 = normalizeSha256(entry.sha256);
+    if (normalizeSha256(record.sha256) !== expectedSha256) return null;
+    const actualSha256 = await digestSha256(bytes);
+    if (actualSha256 !== expectedSha256) return null;
+    return { ...record, bytes };
+  }
+
   async function downloadEntry(id, options = {}) {
     if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     await initialize();
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     const entry = getEntry(id);
     if (!entry) fail("यह Knowledge ID वर्तमान Manifest में नहीं है।", "ENTRY_NOT_FOUND", { id });
     if (!entry.enabled) fail("यह Knowledge entry निष्क्रिय है।", "ENTRY_DISABLED", { id });
@@ -498,8 +578,8 @@ export function createNanoServerEngine(options = {}) {
     if (url.origin !== appRootUrl.origin || !url.pathname.startsWith(appRootUrl.pathname)) {
       fail("डाउनलोड URL ऐप के अपने पथ के बाहर है।", "RESOURCE_OUTSIDE_APP", { id });
     }
-    activeDownloads += 1;
     const scope = makeAbortScope(host, options.signal, requestTimeoutMs);
+    activeDownloads += 1;
     downloads.set(id, scope.controller);
     try {
       const response = await fetchImpl(url.href, {
@@ -512,9 +592,12 @@ export function createNanoServerEngine(options = {}) {
         headers: { Accept: "application/json, text/plain, text/markdown" },
         signal: scope.controller.signal
       });
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       if (!response.ok) fail("ज्ञान-फाइल डाउनलोड विफल हुई।", "DOCUMENT_HTTP_ERROR", { id, status: response.status });
       const bytes = await readResponseBytes(response, maxDocumentBytes, progress => emit("downloadprogress", { id, ...progress }));
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       const actualSha256 = await digestSha256(bytes);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       const expectedSha256 = normalizeSha256(entry.sha256);
       if (actualSha256 !== expectedSha256) {
         fail("डाउनलोड की गई ज्ञान-फाइल का SHA-256 Manifest से मेल नहीं खाता।", "DOCUMENT_INTEGRITY_FAILED", { id, expectedSha256, actualSha256 });
@@ -531,6 +614,7 @@ export function createNanoServerEngine(options = {}) {
         downloadedAt: new Date().toISOString()
       };
       await store.putDocument(record);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       emit("downloadcomplete", { id, byteLength: bytes.byteLength, sha256: actualSha256, storage: store.kind });
       return Object.freeze({ id, title: entry.title, byteLength: bytes.byteLength, sha256: actualSha256, storage: store.kind });
     } catch (error) {
@@ -547,24 +631,51 @@ export function createNanoServerEngine(options = {}) {
 
   async function readDocument(id, options = {}) {
     await initialize();
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     const entry = getEntry(id);
     if (!entry) fail("यह Knowledge ID Manifest में उपलब्ध नहीं है।", "ENTRY_NOT_FOUND", { id });
     if (!entry.enabled) fail("यह Knowledge entry निष्क्रिय है।", "ENTRY_DISABLED", { id });
     if (entry.entryType !== "knowledge-document") {
       fail("यह Knowledge entry दस्तावेज़ नहीं, मॉड्यूल metadata है।", "NOT_A_KNOWLEDGE_DOCUMENT", { id });
     }
+
     let record = await store.getDocument(id);
-    if (record && record.sha256 !== normalizeSha256(entry.sha256)) record = null;
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    let cacheIntegrityFailed = false;
+    if (record) {
+      const verified = await verifyCachedDocument(record, entry);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+      if (verified) {
+        record = verified;
+      } else {
+        cacheIntegrityFailed = true;
+        await store.deleteDocument(id);
+        record = null;
+      }
+    }
+
     if (options.refresh === true || !record) {
       if (options.downloadIfMissing === false && !record) {
+        if (cacheIntegrityFailed) {
+          fail("स्थानीय Cache की अखंडता जाँच विफल हुई; दूषित प्रविष्टि हटाई गई।", "CACHE_INTEGRITY_FAILED", { id });
+        }
         fail("यह फाइल स्थानीय Cache में उपलब्ध नहीं है।", "OFFLINE_CACHE_MISS", { id });
       }
       await downloadEntry(id, options);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
       record = await store.getDocument(id);
+      if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     }
-    if (!record || !record.bytes) fail("स्थानीय ज्ञान-फाइल पढ़ी नहीं जा सकी।", "CACHE_READ_FAILED", { id });
-    const bytes = record.bytes instanceof Uint8Array ? record.bytes : new Uint8Array(record.bytes);
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+
+    if (!record) fail("स्थानीय ज्ञान-फाइल पढ़ी नहीं जा सकी।", "CACHE_READ_FAILED", { id });
+    const verifiedRecord = await verifyCachedDocument(record, entry);
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    if (!verifiedRecord) {
+      await store.deleteDocument(id);
+      fail("स्थानीय Cache की SHA-256 अखंडता जाँच विफल हुई।", "CACHE_INTEGRITY_FAILED", { id });
+    }
+
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(verifiedRecord.bytes);
     if (entry.format === "json") {
       try { return JSON.parse(text); }
       catch (error) { fail("स्थानीय JSON ज्ञान-फाइल अमान्य है।", "DOCUMENT_JSON_ERROR", { id, message: error.message }); }
@@ -574,7 +685,9 @@ export function createNanoServerEngine(options = {}) {
 
   async function getCachedEntries() {
     await initialize();
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     const records = await store.listDocuments();
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
     return Object.freeze(records.map(record => Object.freeze({
       id: record.id,
       title: record.title,
@@ -587,7 +700,13 @@ export function createNanoServerEngine(options = {}) {
 
   async function removeCachedEntry(id) {
     await initialize();
-    return Boolean(await store.deleteDocument(id));
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    const existing = await store.getDocument(id);
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    if (!existing) return false;
+    await store.deleteDocument(id);
+    if (disposed) fail("Nano Server बंद किया जा चुका है।", "ENGINE_DISPOSED");
+    return true;
   }
 
   async function getDiagnostics() {
@@ -653,7 +772,17 @@ export function createNanoServerEngine(options = {}) {
     };
     const checks = [];
     const check = (id, passed) => checks.push({ id, passed: Boolean(passed) });
-    check("engine-version", NANO_SERVER_ENGINE_VERSION === "1.0.0");
+    check("engine-version", NANO_SERVER_ENGINE_VERSION === "1.0.1");
+    check("abort-controller-unavailable-is-explicit", (() => {
+      try { makeAbortScope({}, null, 0); return false; }
+      catch (error) { return error.code === "ABORT_CONTROLLER_UNAVAILABLE"; }
+    })());
+    check("invalid-abort-signal-is-rejected", (() => {
+      try {
+        makeAbortScope({ AbortController: class { abort() {} } }, {}, 0);
+        return false;
+      } catch (error) { return error.code === "INVALID_ABORT_SIGNAL"; }
+    })());
     check("default-manifest-inside-app", manifestUrl.origin === appRootUrl.origin && manifestUrl.pathname.startsWith(appRootUrl.pathname));
     check("allow-manifest-relative-parent-path", safeRelativePath("../js/tts/vedic-sanskrit-pronunciation.js"));
     check("reject-absolute-path", !safeRelativePath("https://example.com/file.json"));
