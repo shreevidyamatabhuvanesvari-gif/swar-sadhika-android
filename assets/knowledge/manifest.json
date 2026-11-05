@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "1.0.0",
+  "appId": "swar-sadhika-android",
+  "entries": [
+    {
+      "id": "vedic-sanskrit-pronunciation",
+      "entryType": "knowledge-module",
+      "title": "वैदिक संस्कृत उच्चारण ज्ञान-मॉड्यूल",
+      "moduleVersion": "1.0.0",
+      "category": "pronunciation",
+      "language": "sa",
+      "script": "Devanagari",
+      "format": "javascript-es-module",
+      "path": "../js/tts/vedic-sanskrit-pronunciation.js",
+      "pathBase": "manifest-directory",
+      "consumer": "../js/tts/tts-engine.js",
+      "integrationMode": "existing-static-import",
+      "loaderPolicy": "metadata-only-do-not-dynamic-import",
+      "gitBlobSha": "a7c11490ea3382dd93b91d1d4cccaf43cdd8aa78",
+      "sourceCommit": "358fe4a413ba3bb798de7752408a92aa1da3291b",
+      "coverage": [
+        "Devanagari-and-Vedic-character-inventory",
+        "akshara-and-matra-analysis",
+        "Vedic-accent-analysis",
+        "seed-pronunciation-dictionary"
+      ],
+      "enabled": true
+    }
+  ]
+}
