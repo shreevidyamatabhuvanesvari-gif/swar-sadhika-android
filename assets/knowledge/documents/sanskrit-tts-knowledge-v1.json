@@ -1,0 +1,40 @@
+{
+  "schema": "swar-sadhika.sanskrit-tts-knowledge",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "language": "sa",
+  "entries": [
+    {
+      "id": "om-text-integrity",
+      "term": "ॐ",
+      "guidance": "मूल पाठ में दिए गए स्वर-चिह्नों और पाठ-रूप को अक्षरशः सुरक्षित रखें। केवल शब्द-मिलान से उदात्त, अनुदात्त या स्वरित का अनुमान न लगाएँ।",
+      "scope": "general",
+      "category": "vedic-text-integrity",
+      "reviewStatus": "needs-review"
+    },
+    {
+      "id": "agni-vedic-context",
+      "term": "अग्निमीळे",
+      "guidance": "वैदिक पाठ के लिए संहिता या पदपाठ, शाखा और उपलब्ध स्वर-चिह्नों का मूल स्रोत सत्यापित करें। संदर्भ पुष्ट होने तक Native TTS में विशेष स्वराघात लागू न करें।",
+      "scope": "general",
+      "category": "vedic-pronunciation-context",
+      "reviewStatus": "needs-review"
+    },
+    {
+      "id": "namah-visarga-context",
+      "term": "नमः",
+      "guidance": "विसर्ग का उच्चारण अगले ध्वनि-संदर्भ, पद-विभाजन और पाठ-परंपरा पर निर्भर हो सकता है। विशिष्ट निर्देश जोड़ने से पहले प्रमाणित पाठ-स्रोत की समीक्षा करें।",
+      "scope": "general",
+      "category": "visarga-context",
+      "reviewStatus": "needs-review"
+    },
+    {
+      "id": "svaha-mantra-context",
+      "term": "स्वाहा",
+      "guidance": "स्वर-मात्रा और पाठ-परंपरा संबंधी निर्देश मूल मन्त्र-स्रोत से सत्यापित करें। सामान्य शब्द-मिलान के आधार पर लय या मात्रा स्वतः न बदलें।",
+      "scope": "general",
+      "category": "mantra-context",
+      "reviewStatus": "needs-review"
+    }
+  ]
+}
