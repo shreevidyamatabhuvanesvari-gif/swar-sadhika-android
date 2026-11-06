@@ -768,7 +768,7 @@ export async function mount(context) {
       state.voiceEntries = [];
       updateButtons();
       notifyMusicPlayerHostChange("voices-unavailable");
-      setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: "
+      setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " +
         (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
     }
   }
