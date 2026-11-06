@@ -62,6 +62,16 @@ export async function mount(context) {
     lastPronunciationReport: null
   };
 
+  // Optional Music Player integration. The independent module is loaded only
+  // after the user opens it; a missing module must never affect ordinary TTS.
+  let musicPlayerSection = null;
+  let musicPlayerButton = null;
+  let musicPlayerStatus = null;
+  let musicPlayerRoot = null;
+  let musicPlayerInstance = null;
+  let musicPlayerLoadPromise = null;
+  let pageVisible = true;
+
   const FEMALE_HINTS = [
     "female", "woman", "zira", "heera", "lekha", "priya",
     "sangeeta", "kavya", "neerja", "raveena", "aarti", "swara",
@@ -73,6 +83,141 @@ export async function mount(context) {
     if (!ui.status) return;
     ui.status.textContent = String(message);
     ui.status.classList.toggle("warn", Boolean(warning));
+  }
+
+  function setMusicPlayerStatus(message, warning = false) {
+    if (!musicPlayerStatus) return;
+    musicPlayerStatus.textContent = String(message);
+    musicPlayerStatus.classList.toggle("warn", Boolean(warning));
+  }
+
+  function installMusicPlayerHook() {
+    if (musicPlayerSection || state.destroyed) return;
+
+    musicPlayerSection = doc.createElement("section");
+    musicPlayerSection.className = "music-player-bridge";
+    musicPlayerSection.setAttribute("aria-label", "गायन म्यूजिक प्लेयर");
+
+    const intro = doc.createElement("p");
+    intro.className = "note";
+    intro.textContent = "गायन Player स्वतंत्र मॉड्यूल से खुलेगा। सामान्य TTS इससे स्वतंत्र रहेगा।";
+
+    const actions = doc.createElement("div");
+    actions.className = "tts-actions";
+
+    musicPlayerButton = doc.createElement("button");
+    musicPlayerButton.type = "button";
+    musicPlayerButton.className = "btn primary";
+    musicPlayerButton.textContent = "♫ गायन Player खोलें";
+    musicPlayerButton.addEventListener("click", () => {
+      void loadMusicPlayer();
+    });
+
+    actions.appendChild(musicPlayerButton);
+
+    musicPlayerStatus = doc.createElement("div");
+    musicPlayerStatus.className = "status";
+    musicPlayerStatus.setAttribute("role", "status");
+    musicPlayerStatus.setAttribute("aria-live", "polite");
+    musicPlayerStatus.textContent = "गायन मॉड्यूल आवश्यकता पड़ने पर लोड होगा।";
+
+    musicPlayerRoot = doc.createElement("div");
+    musicPlayerRoot.className = "music-player-mount";
+    musicPlayerRoot.hidden = true;
+
+    musicPlayerSection.append(intro, actions, musicPlayerStatus, musicPlayerRoot);
+    root.appendChild(musicPlayerSection);
+  }
+
+  async function loadMusicPlayer() {
+    if (state.destroyed || !musicPlayerRoot) return null;
+
+    if (musicPlayerInstance) {
+      musicPlayerRoot.hidden = false;
+      if (pageVisible && typeof musicPlayerInstance.onShow === "function") {
+        try {
+          await musicPlayerInstance.onShow();
+        } catch (error) {
+          setMusicPlayerStatus(
+            "Music Player फिर सक्रिय नहीं हो सका: " +
+              (error && error.message ? error.message : "अज्ञात त्रुटि"),
+            true
+          );
+        }
+      }
+      return musicPlayerInstance;
+    }
+
+    if (musicPlayerLoadPromise) return musicPlayerLoadPromise;
+
+    musicPlayerButton.disabled = true;
+    musicPlayerButton.textContent = "गायन Player लोड हो रहा है…";
+    setMusicPlayerStatus("स्वतंत्र Music Player मॉड्यूल लोड किया जा रहा है…");
+
+    const task = (async () => {
+      const moduleUrl = new URL("../../speech-to-singing/index.js", import.meta.url);
+      const musicModule = await import(moduleUrl.href);
+      if (!musicModule || typeof musicModule.mount !== "function") {
+        throw new TypeError("Music Player में mount(context) export उपलब्ध नहीं है।");
+      }
+
+      const mounted = await musicModule.mount(Object.freeze({
+        root: musicPlayerRoot,
+        document: doc,
+        window: win,
+        getText: () => String(ui.input.value || ""),
+        getSelectedVoice: () => {
+          const voice = chooseVoice(ui.input.value);
+          return voice ? Object.freeze({
+            name: String(voice.name || ""),
+            voiceURI: String(voice.voiceURI || ""),
+            lang: String(voice.lang || ""),
+            localService: voice.localService === true
+          }) : null;
+        },
+        getSpeechSettings: () => Object.freeze({
+          rate: Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88))
+        }),
+        setStatus: setMusicPlayerStatus
+      }));
+
+      const instance = typeof mounted === "function"
+        ? { unmount: mounted }
+        : (mounted && typeof mounted === "object" ? mounted : {});
+
+      if (state.destroyed) {
+        if (typeof instance.unmount === "function") await instance.unmount();
+        return null;
+      }
+
+      musicPlayerInstance = instance;
+      musicPlayerRoot.hidden = false;
+      musicPlayerButton.disabled = false;
+      musicPlayerButton.textContent = "♫ गायन Player तैयार";
+      setMusicPlayerStatus("Music Player मुख्य TTS पेज से जुड़ गया है।");
+
+      if (!pageVisible && typeof instance.onHide === "function") {
+        await instance.onHide();
+      }
+      return instance;
+    })();
+
+    musicPlayerLoadPromise = task;
+    try {
+      return await task;
+    } catch (error) {
+      musicPlayerLoadPromise = null;
+      if (!state.destroyed) {
+        musicPlayerButton.disabled = false;
+        musicPlayerButton.textContent = "♫ गायन Player पुनः खोलें";
+        setMusicPlayerStatus(
+          "Music Player अभी लोड नहीं हुआ। स्वतंत्र मॉड्यूल की फाइल उपलब्ध होने पर इसे फिर खोलें। सामान्य TTS सुरक्षित है।" +
+            (error && error.message ? " विवरण: " + error.message : ""),
+          true
+        );
+      }
+      return null;
+    }
   }
 
   function setLine(message) {
@@ -531,6 +676,18 @@ export async function mount(context) {
   }
 
   async function onHide() {
+    pageVisible = false;
+    if (musicPlayerInstance && typeof musicPlayerInstance.onHide === "function") {
+      try {
+        await musicPlayerInstance.onHide();
+      } catch (error) {
+        setMusicPlayerStatus(
+          "Music Player को रोकने में समस्या हुई: " +
+            (error && error.message ? error.message : "अज्ञात त्रुटि"),
+          true
+        );
+      }
+    }
     if (!state.active || state.userPaused || state.navigationPaused || state.destroyed) return;
     state.navigationPaused = true;
     if (state.timer !== null) {
@@ -550,6 +707,18 @@ export async function mount(context) {
   }
 
   async function onShow() {
+    pageVisible = true;
+    if (musicPlayerInstance && typeof musicPlayerInstance.onShow === "function") {
+      try {
+        await musicPlayerInstance.onShow();
+      } catch (error) {
+        setMusicPlayerStatus(
+          "Music Player फिर सक्रिय नहीं हो सका: " +
+            (error && error.message ? error.message : "अज्ञात त्रुटि"),
+          true
+        );
+      }
+    }
     if (!state.active || !state.navigationPaused || state.destroyed) return;
     state.navigationPaused = false;
     if (state.waitingForNext) {
@@ -589,6 +758,23 @@ export async function mount(context) {
     ui.voice.removeEventListener("change", onVoiceChange);
     ui.input.removeEventListener("input", onTextInput);
 
+    if (musicPlayerButton) {
+      musicPlayerButton.disabled = true;
+      musicPlayerButton.removeEventListener("click", loadMusicPlayer);
+    }
+    if (musicPlayerInstance && typeof musicPlayerInstance.unmount === "function") {
+      try {
+        await musicPlayerInstance.unmount();
+      } catch (error) {
+        if (win.console && typeof win.console.error === "function") {
+          win.console.error("[Swar-Sadhika] Music Player cleanup failed", error);
+        }
+      }
+    }
+    musicPlayerInstance = null;
+    musicPlayerRoot = null;
+    musicPlayerSection = null;
+
     if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
     if (typeof state.unsubscribePronunciationAnalysis === "function") state.unsubscribePronunciationAnalysis();
     if (typeof state.unsubscribePronunciationWarning === "function") state.unsubscribePronunciationWarning();
@@ -605,6 +791,8 @@ export async function mount(context) {
       }
     }
   }
+
+  installMusicPlayerHook();
 
   ui.speak.addEventListener("click", startReading);
   ui.pause.addEventListener("click", pauseReading);
