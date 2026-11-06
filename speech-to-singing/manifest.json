@@ -1,0 +1,134 @@
+{
+  "manifestSchemaVersion": 1,
+  "manifestId": "swar-sadhika.speech-to-singing",
+  "application": {
+    "id": "swar-sadhika-android",
+    "name": "Swar-Sadhika Android"
+  },
+  "module": {
+    "id": "speech-to-singing",
+    "name": "Swar-Sadhika Speech-to-Singing Player",
+    "version": "0.1.0",
+    "status": "development",
+    "description": "Independent browser-side speech-to-singing player integrated with the existing TTS page."
+  },
+  "repositoryLocation": {
+    "directory": "speech-to-singing/",
+    "pathBase": "repository-root"
+  },
+  "entryPoint": {
+    "path": "index.js",
+    "format": "javascript-es-module",
+    "exportName": "mount",
+    "loadMode": "explicit-user-initiated-dynamic-import",
+    "implementationStatus": "planned"
+  },
+  "hostIntegration": {
+    "hostFile": "assets/js/pages/page-tts.js",
+    "importSpecifier": "./speech-to-singing/index.js",
+    "resolutionBase": "document.baseURI",
+    "consumedAtRuntime": false,
+    "contractVersion": 1,
+    "mount": {
+      "exportName": "mount",
+      "argumentName": "context",
+      "requiredContext": [
+        {
+          "name": "root",
+          "type": "HTMLElement",
+          "description": "Dedicated DOM container owned by the TTS page."
+        },
+        {
+          "name": "document",
+          "type": "Document",
+          "description": "Host document used to create and manage Player UI."
+        },
+        {
+          "name": "window",
+          "type": "Window",
+          "description": "The host page window."
+        },
+        {
+          "name": "getText",
+          "type": "function",
+          "returns": "string",
+          "description": "Returns the current text from the TTS input."
+        },
+        {
+          "name": "getSelectedVoice",
+          "type": "function",
+          "returns": "object|null",
+          "description": "Returns selected voice metadata; it does not promise access to PCM audio."
+        },
+        {
+          "name": "getSpeechSettings",
+          "type": "function",
+          "returns": "object",
+          "description": "Returns current speech settings; rate is supplied by the host."
+        },
+        {
+          "name": "setStatus",
+          "type": "function",
+          "description": "Reports Player status through the host TTS page."
+        }
+      ]
+    },
+    "mountResult": {
+      "acceptedForms": [
+        "object-with-optional-lifecycle-hooks",
+        "cleanup-function"
+      ],
+      "optionalLifecycleHooks": [
+        "onShow",
+        "onHide",
+        "unmount"
+      ],
+      "hooksMayBeAsync": true,
+      "hooksMustNotRequireThisBinding": true
+    }
+  },
+  "runtimePolicy": {
+    "executionEnvironment": "browser",
+    "moduleFormat": "javascript-es-module",
+    "targetPlatforms": [
+      "Android Chrome through GitHub Pages",
+      "modern desktop browsers"
+    ],
+    "dedicatedServerRequired": false,
+    "externalAiApiRequired": false,
+    "networkRequiredDuringPlayback": false,
+    "externalRuntimeDependencies": [],
+    "localModelPolicy": "Any future model asset must be explicitly documented and stored locally; inference must not depend on an external AI API or separate server."
+  },
+  "processingDesign": {
+    "status": "target-design-not-yet-implemented",
+    "targetFlow": [
+      "receive text and voice metadata from the host TTS page",
+      "obtain audio through a supported local browser or native adapter",
+      "process audio as bounded chunks",
+      "begin playback after the first usable audio chunk and minimum buffer are ready",
+      "continue processing while playback proceeds"
+    ],
+    "playbackPolicy": {
+      "startCondition": "first-usable-audio-chunk-and-minimum-buffer-ready",
+      "waitForCompleteUtteranceBeforePlayback": false,
+      "audioStartRequiresUserGesture": true
+    }
+  },
+  "safetyAndLifecycle": {
+    "manifestIsMetadataOnly": true,
+    "manifestMustNotExecuteOrEvaluateCode": true,
+    "entryPointMustOnlyLoadThroughTheHostDynamicImport": true,
+    "evalOrNewFunctionAllowed": false,
+    "remoteScriptInjectionAllowed": false,
+    "audioCaptureWithoutExplicitUserActionAllowed": false,
+    "releaseAudioNodesListenersAndObjectUrlsOnUnmount": true,
+    "modifyExistingHostTtsBackend": false,
+    "playerFailureMustNotBreakNormalTts": true
+  },
+  "pathPolicy": {
+    "entryPointMustStayInsideModuleDirectory": true,
+    "parentDirectoryTraversalAllowed": false,
+    "remoteEntryPointsAllowed": false
+  }
+}
