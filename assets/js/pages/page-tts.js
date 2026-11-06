@@ -109,9 +109,7 @@ export async function mount(context) {
     musicPlayerButton.type = "button";
     musicPlayerButton.className = "btn primary";
     musicPlayerButton.textContent = "♫ गायन Player खोलें";
-    musicPlayerButton.addEventListener("click", () => {
-      void loadMusicPlayer();
-    });
+    musicPlayerButton.addEventListener("click", loadMusicPlayer);
 
     actions.appendChild(musicPlayerButton);
 
@@ -155,7 +153,7 @@ export async function mount(context) {
     setMusicPlayerStatus("स्वतंत्र Music Player मॉड्यूल लोड किया जा रहा है…");
 
     const task = (async () => {
-      const moduleUrl = new URL("../../speech-to-singing/index.js", import.meta.url);
+      const moduleUrl = new URL("./speech-to-singing/index.js", doc.baseURI);
       const musicModule = await import(moduleUrl.href);
       if (!musicModule || typeof musicModule.mount !== "function") {
         throw new TypeError("Music Player में mount(context) export उपलब्ध नहीं है।");
