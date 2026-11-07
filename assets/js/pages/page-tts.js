@@ -33,7 +33,7 @@ export async function mount(context) {
   };
 
   const missing = Object.entries(ui)
-    .filter(([key, value]) => !value && !["overlay", "line"].includes(key))
+    .filter(([key, value]) => !value && !["overlay", "line", "layaToggle", "layaStatus"].includes(key))
     .map(([key]) => key);
   if (missing.length) {
     throw new Error("TTS interface में आवश्यक तत्व अनुपस्थित हैं: " + missing.join(", "));
