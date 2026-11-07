@@ -39,6 +39,15 @@ export async function mount(context) {
     throw new Error("TTS interface में आवश्यक तत्व अनुपस्थित हैं: " + missing.join(", "));
   }
 
+  const knowledgeStatus = doc.createElement("div");
+  knowledgeStatus.className = "status warn";
+  knowledgeStatus.setAttribute("role", "status");
+  knowledgeStatus.setAttribute("aria-live", "polite");
+  knowledgeStatus.setAttribute("data-state", "warning");
+  knowledgeStatus.textContent = "स्थानीय Knowledge की प्रारंभिक जाँच की जा रही है…";
+  const knowledgeStatusParent = ui.status.parentNode || root;
+  knowledgeStatusParent.insertBefore(knowledgeStatus, ui.status.nextSibling);
+
   const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
     voices: [],
@@ -58,6 +67,10 @@ export async function mount(context) {
     unsubscribeVoices: null,
     unsubscribePronunciationAnalysis: null,
     unsubscribePronunciationWarning: null,
+    unsubscribeKnowledgeChange: null,
+    unsubscribeKnowledgeError: null,
+    unsubscribeKnowledgeWarning: null,
+    knowledgeRefreshSequence: 0,
     pronunciationReady: false,
     pronunciationInfo: null,
     lastAnalysis: null,
@@ -93,6 +106,61 @@ export async function mount(context) {
     if (!ui.status) return;
     ui.status.textContent = String(message);
     ui.status.classList.toggle("warn", Boolean(warning));
+  }
+
+  function setKnowledgeStatus(message, warning = false) {
+    if (!knowledgeStatus || state.destroyed) return;
+    knowledgeStatus.textContent = String(message);
+    knowledgeStatus.classList.toggle("warn", Boolean(warning));
+    knowledgeStatus.setAttribute("data-state", warning ? "warning" : "success");
+  }
+
+  function renderKnowledgeStatus(diagnostics) {
+    if (!diagnostics || diagnostics.loaded !== true) {
+      setKnowledgeStatus(
+        "स्थानीय Knowledge Cache में अभी सक्रिय दस्तावेज़ उपलब्ध नहीं हैं। Nano Server पेज में JSON दस्तावेज़ डाउनलोड करें।",
+        true
+      );
+      return;
+    }
+    const documentCount = Number(diagnostics.loadedDocuments) || 0;
+    const entryCount = Number(diagnostics.loadedEntries) || 0;
+    const uniqueTermCount = Number(diagnostics.uniqueTerms) || 0;
+    setKnowledgeStatus(
+      "स्थानीय Knowledge Index सक्रिय: " + documentCount + " JSON दस्तावेज़ · " +
+        entryCount + " Entries · " + uniqueTermCount + " विशिष्ट शब्द। TTS Guidance में केवल reviewed निर्देश स्वीकार होंगे।",
+      false
+    );
+  }
+
+  async function refreshKnowledgeFromCache(reason) {
+    if (state.destroyed) return null;
+    const request = ++state.knowledgeRefreshSequence;
+    const prefix = reason ? String(reason) + " — " : "";
+    setKnowledgeStatus(prefix + "Manifest Refresh और स्थानीय Knowledge Cache की जाँच हो रही है…", false);
+    try {
+      const diagnostics = await engine.loadKnowledge({
+        refreshManifest: true,
+        downloadIfMissing: false
+      });
+      if (state.destroyed || request !== state.knowledgeRefreshSequence) return null;
+      renderKnowledgeStatus(diagnostics);
+      return diagnostics;
+    } catch (error) {
+      if (state.destroyed || request !== state.knowledgeRefreshSequence) return null;
+      let previous = null;
+      try { previous = engine.getKnowledgeDiagnostics(); } catch (_) {}
+      const previousMessage = previous && previous.loaded === true
+        ? " पिछला सफल Knowledge Index सुरक्षित रखा गया है।"
+        : " Nano Server पेज में आवश्यक JSON दस्तावेज़ डाउनलोड करके TTS पेज फिर खोलें।";
+      const code = error && error.code ? " · " + error.code : "";
+      const message = error && error.message ? error.message : "अज्ञात त्रुटि";
+      setKnowledgeStatus(
+        prefix + "नई Knowledge सक्रिय नहीं हुई: " + message + code + "." + previousMessage,
+        true
+      );
+      return null;
+    }
   }
 
   function setMusicPlayerStatus(message, warning = false) {
@@ -1014,6 +1082,8 @@ export async function mount(context) {
         );
       }
     }
+    if (state.destroyed) return;
+    await refreshKnowledgeFromCache("TTS पेज पर वापसी");
     if (!state.active || !state.navigationPaused || state.destroyed) return;
     state.navigationPaused = false;
     if (state.waitingForNext) {
@@ -1041,6 +1111,7 @@ export async function mount(context) {
     state.destroyed = true;
     state.generation += 1;
     state.voiceRefreshSequence += 1;
+    state.knowledgeRefreshSequence += 1;
     clearNextTimer();
     state.active = false;
     state.speechInFlight = false;
@@ -1084,9 +1155,16 @@ export async function mount(context) {
     if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
     if (typeof state.unsubscribePronunciationAnalysis === "function") state.unsubscribePronunciationAnalysis();
     if (typeof state.unsubscribePronunciationWarning === "function") state.unsubscribePronunciationWarning();
+    if (typeof state.unsubscribeKnowledgeChange === "function") state.unsubscribeKnowledgeChange();
+    if (typeof state.unsubscribeKnowledgeError === "function") state.unsubscribeKnowledgeError();
+    if (typeof state.unsubscribeKnowledgeWarning === "function") state.unsubscribeKnowledgeWarning();
     state.unsubscribeVoices = null;
     state.unsubscribePronunciationAnalysis = null;
     state.unsubscribePronunciationWarning = null;
+    state.unsubscribeKnowledgeChange = null;
+    state.unsubscribeKnowledgeError = null;
+    state.unsubscribeKnowledgeWarning = null;
+    if (knowledgeStatus.parentNode) knowledgeStatus.parentNode.removeChild(knowledgeStatus);
     setLine("");
     updateButtons();
     try {
@@ -1129,6 +1207,20 @@ export async function mount(context) {
       true
     );
   });
+  state.unsubscribeKnowledgeChange = engine.on("knowledgechange", detail => {
+    if (!state.destroyed) renderKnowledgeStatus(detail);
+  });
+  state.unsubscribeKnowledgeError = engine.on("knowledgeerror", detail => {
+    if (state.destroyed) return;
+    const code = detail && detail.code ? " · " + detail.code : "";
+    const message = detail && detail.message ? detail.message : "Knowledge Load विफल हुआ।";
+    setKnowledgeStatus("Knowledge Load त्रुटि: " + message + code, true);
+  });
+  state.unsubscribeKnowledgeWarning = engine.on("knowledgewarning", detail => {
+    if (state.destroyed) return;
+    const message = detail && detail.message ? detail.message : "स्थानीय Knowledge Cache उपलब्ध नहीं है।";
+    setKnowledgeStatus("Knowledge चेतावनी: " + message, true);
+  });
 
   try {
     const initialized = await engine.initialize({ backendId: "native" });
@@ -1140,6 +1232,7 @@ export async function mount(context) {
     if (!state.engineReady) {
       setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें।", true);
       updateButtons();
+      await refreshKnowledgeFromCache("प्रारंभिक Knowledge जाँच");
     } else {
       state.pronunciationInfo = engine.getPronunciationKnowledgeBaseInfo();
       state.pronunciationReady = Boolean(
@@ -1163,6 +1256,7 @@ export async function mount(context) {
       setStatus("TTS Engine initialize नहीं हो सका: " +
         (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
       updateButtons();
+      await refreshKnowledgeFromCache("TTS Initialize विफल होने के बाद Knowledge जाँच");
     }
   }
 
