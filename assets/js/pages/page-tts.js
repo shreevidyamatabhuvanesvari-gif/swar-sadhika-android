@@ -27,7 +27,9 @@ export async function mount(context) {
     stop: root.querySelector("#stop-btn"),
     status: root.querySelector("#tts-status"),
     overlay: byId("line-overlay"),
-    line: byId("rainbow-line")
+    line: byId("rainbow-line"),
+    layaToggle: null,
+    layaStatus: null
   };
 
   const missing = Object.entries(ui)
@@ -59,7 +61,11 @@ export async function mount(context) {
     pronunciationReady: false,
     pronunciationInfo: null,
     lastAnalysis: null,
-    lastPronunciationReport: null
+    lastPronunciationReport: null,
+    layaReady: false,
+    layaEngine: null,
+    layaPlan: null,
+    layaModeActive: false
   };
 
   // Optional Music Player integration. The independent module is loaded only
@@ -71,6 +77,8 @@ export async function mount(context) {
   let musicPlayerInstance = null;
   let musicPlayerLoadPromise = null;
   let pageVisible = true;
+  let layaLoadPromise = null;
+  let layaSection = null;
   const musicPlayerSubscribers = new Set();
   const MUSIC_PLAYER_HOST_CONTRACT_VERSION = 2;
 
@@ -311,6 +319,99 @@ export async function mount(context) {
     }
   }
 
+  function setLayaStatus(message, warning = false) {
+    if (!ui.layaStatus || state.destroyed) return;
+    ui.layaStatus.textContent = String(message);
+    ui.layaStatus.classList.toggle("warn", Boolean(warning));
+    ui.layaStatus.setAttribute("data-state", warning ? "warning" : "info");
+  }
+
+  function installNativeTtsLayaControl() {
+    if (layaSection || state.destroyed) return;
+    const section = doc.createElement("section");
+    section.className = "note";
+    section.setAttribute("aria-label", "Native TTS Laya Mode");
+    const label = doc.createElement("label");
+    label.className = "field";
+    const toggle = doc.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = false;
+    toggle.disabled = true;
+    toggle.addEventListener("change", onLayaModeChange);
+    const caption = doc.createElement("span");
+    caption.textContent = "♫ Native TTS Laya Mode — पाठ को लयात्मक ढंग से पढ़ें";
+    label.append(toggle, caption);
+    const status = doc.createElement("div");
+    status.className = "status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.textContent = "स्थानीय Laya Engine लोड किया जा रहा है…";
+    section.append(label, status);
+    root.insertBefore(section, ui.speak.parentElement);
+    layaSection = section;
+    ui.layaToggle = toggle;
+    ui.layaStatus = status;
+  }
+
+  function onLayaModeChange() {
+    if (!ui.layaToggle) return;
+    if (state.active) {
+      ui.layaToggle.checked = state.layaModeActive;
+      return;
+    }
+    updateButtons();
+    setLayaStatus(ui.layaToggle.checked
+      ? "Laya Mode चयनित है। Play दबाने पर वर्तमान Native Voice के साथ लयात्मक वाचन शुरू होगा।"
+      : "सामान्य Native TTS चयनित है।");
+  }
+
+  async function preloadNativeTtsLayaEngine() {
+    if (state.destroyed || state.layaReady) return state.layaEngine;
+    if (layaLoadPromise) return layaLoadPromise;
+    const task = (async () => {
+      const moduleUrl = new URL("speech-to-singing/native-tts-laya-engine.js", doc.baseURI);
+      if (moduleUrl.origin !== win.location.origin) {
+        throw new TypeError("Native TTS Laya मॉड्यूल केवल इसी GitHub Pages origin से लोड होना चाहिए।");
+      }
+      const module = await import(moduleUrl.href);
+      if (state.destroyed) return null;
+      if (!module || typeof module.createNativeTtsLayaEngine !== "function") {
+        throw new TypeError("Native TTS Laya Engine का createNativeTtsLayaEngine() export उपलब्ध नहीं है।");
+      }
+      const instance = module.createNativeTtsLayaEngine();
+      const initialized = await instance.initialize();
+      if (state.destroyed) return null;
+      if (!initialized || initialized.ready !== true || !initialized.selfTest || initialized.selfTest.status !== "PASSED") {
+        throw new Error("Native TTS Laya Engine Self-Test सफल नहीं हुआ।");
+      }
+      state.layaEngine = instance;
+      state.layaReady = true;
+      if (ui.layaToggle) ui.layaToggle.disabled = false;
+      setLayaStatus("Native TTS Laya Mode तैयार है। कोई Singing Model या बाहरी AI सेवा आवश्यक नहीं है।");
+      updateButtons();
+      return instance;
+    })();
+    layaLoadPromise = task;
+    try {
+      return await task;
+    } catch (error) {
+      if (!state.destroyed) {
+        state.layaReady = false;
+        state.layaEngine = null;
+        if (ui.layaToggle) {
+          ui.layaToggle.checked = false;
+          ui.layaToggle.disabled = true;
+        }
+        setLayaStatus("Laya Mode उपलब्ध नहीं हुआ; सामान्य Native TTS स्वतंत्र रूप से चलता रहेगा। " +
+          (error && error.message ? error.message : "अज्ञात मॉड्यूल त्रुटि"), true);
+        updateButtons();
+      }
+      return null;
+    } finally {
+      if (layaLoadPromise === task) layaLoadPromise = null;
+    }
+  }
+
   function setLine(message) {
     if (ui.line) ui.line.textContent = message || "";
     if (ui.overlay) ui.overlay.classList.toggle("hidden", !message);
@@ -457,7 +558,8 @@ export async function mount(context) {
 
   function updateButtons() {
     const canSpeak = state.engineReady && state.pronunciationReady && state.voiceEntries.length > 0 && !state.destroyed;
-    ui.speak.disabled = state.active || !canSpeak;
+    const layaUnavailable = Boolean(ui.layaToggle && ui.layaToggle.checked && !state.layaReady);
+    ui.speak.disabled = state.active || !canSpeak || layaUnavailable;
     ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
     ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
     ui.stop.disabled = !state.active;
@@ -479,6 +581,8 @@ export async function mount(context) {
     state.waitingForNext = false;
     state.lines = [];
     state.index = 0;
+    state.layaPlan = null;
+    state.layaModeActive = false;
     setLine("");
     setStatus(message, warning);
     updateButtons();
@@ -514,8 +618,9 @@ export async function mount(context) {
     }
 
     const line = state.lines[state.index];
+    const layaPhrase = state.layaModeActive && state.layaPlan ? state.layaPlan.phrases[state.index] : null;
     const prepared = stripTerminalVerseNumber(line);
-    const speechText = prepared.text.trim();
+    const speechText = (layaPhrase ? layaPhrase.text : prepared.text).trim();
     const voice = chooseVoice(line);
     let lineAnalysis;
     let speechPreparation;
@@ -543,8 +648,12 @@ export async function mount(context) {
     }
 
     const language = voice.lang || (isDevanagari(line) ? "hi-IN" : "en-IN");
-    const rate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
-    const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+    const rate = layaPhrase
+      ? Math.min(1.15, Math.max(0.65, Number(layaPhrase.rate) || 0.88))
+      : Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
+    const pitch = layaPhrase
+      ? Math.min(1.14, Math.max(0.90, Number(layaPhrase.pitch) || 1.02))
+      : (voiceGenderHint(voice) === "female" ? 1.02 : 1.07);
     const numberNotice = prepared.removed ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।" : "";
     const specialNotice = speechPreparation.requiresAccentAwareBackend || speechPreparation.requiresBranchContext
       ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।"
@@ -552,7 +661,8 @@ export async function mount(context) {
     const analysisNotice = " · " + summarizeAnalysis(lineAnalysis);
 
     setLine(line);
-    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
+    setStatus((state.layaModeActive ? "लयात्मक वाक्यांश " : "पंक्ति ") +
+      (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
       voice.name + " (स्थानीय Native Voice)" + numberNotice + specialNotice + analysisNotice);
     state.speechInFlight = true;
     updateButtons();
@@ -587,7 +697,92 @@ export async function mount(context) {
     }
   }
 
+  async function startLayaReading() {
+    if (!state.layaReady || !state.layaEngine) {
+      setLayaStatus("Laya Engine अभी तैयार नहीं है। सामान्य TTS का उपयोग करें या मॉड्यूल लोड होने की प्रतीक्षा करें।", true);
+      return;
+    }
+    if (!state.engineReady || !state.pronunciationReady || !state.voiceEntries.length) {
+      setLayaStatus("Laya Mode के लिए Native TTS, स्थानीय उच्चारण विश्लेषक और Voice का तैयार होना आवश्यक है।", true);
+      return;
+    }
+    const sourceLines = ui.input.value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean);
+    if (!sourceLines.length) {
+      setLayaStatus("पहले संस्कृत पाठ लिखें।", true);
+      ui.input.focus();
+      return;
+    }
+    const speechText = sourceLines.map(line => stripTerminalVerseNumber(line).text.trim()).filter(Boolean).join("\n");
+    if (!speechText) {
+      setLayaStatus("वाचन योग्य पाठ उपलब्ध नहीं है।", true);
+      return;
+    }
+    const voice = chooseVoice(speechText);
+    if (!voice) {
+      setLayaStatus("इस पाठ के लिए कोई स्थानीय Native Voice उपलब्ध नहीं है।", true);
+      return;
+    }
+    try {
+      state.lastAnalysis = engine.analyzeText(speechText);
+    } catch (error) {
+      setLayaStatus("पाठ विश्लेषण विफल: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      return;
+    }
+
+    state.generation += 1;
+    const generation = state.generation;
+    clearNextTimer();
+    state.active = false;
+    state.speechInFlight = false;
+    state.layaPlan = null;
+    state.layaModeActive = false;
+    updateButtons();
+    try {
+      await engine.cancel();
+    } catch (error) {
+      finish("पिछला वाचन सुरक्षित रूप से रोक नहीं सका: " +
+        (error && error.message ? error.message : "TTS त्रुटि"), true);
+      return;
+    }
+    if (generation !== state.generation || state.destroyed) return;
+
+    setLayaStatus("पाठ का स्वर-क्रम और वाक्यांश तैयार किए जा रहे हैं…");
+    let plan;
+    try {
+      const baseRate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
+      const basePitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+      plan = await state.layaEngine.createPlan(speechText, { rate: baseRate, pitch: basePitch });
+      if (!plan || plan.status !== "ready" || !Array.isArray(plan.phrases) || !plan.phrases.length) {
+        throw new Error("Laya Plan ने कोई वैध वाक्यांश नहीं बनाया।");
+      }
+    } catch (error) {
+      if (generation === state.generation && !state.destroyed) {
+        setLayaStatus("Laya Plan तैयार नहीं हुआ; सामान्य TTS सुरक्षित है। " +
+          (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      }
+      return;
+    }
+    if (generation !== state.generation || state.destroyed) return;
+
+    state.layaPlan = plan;
+    state.layaModeActive = true;
+    state.lines = plan.phrases.map(phrase => phrase.text);
+    state.index = 0;
+    state.active = true;
+    state.userPaused = false;
+    state.navigationPaused = !pageVisible;
+    state.waitingForNext = !pageVisible;
+    updateButtons();
+    setLayaStatus("Laya Mode सक्रिय है: " + plan.summary.phraseCount +
+      " वाक्यांश तैयार। यह मौजूदा Native Voice का अनुमानित लयात्मक वाचन है, वास्तविक गायन मॉडल नहीं।");
+    if (pageVisible) void speakNext(generation);
+  }
+
   async function startReading() {
+    if (ui.layaToggle && ui.layaToggle.checked) {
+      await startLayaReading();
+      return;
+    }
     if (!state.engineReady) {
       setStatus("Native TTS Engine उपलब्ध नहीं है। Browser और Android TTS सुविधा जाँचें।", true);
       return;
@@ -628,6 +823,8 @@ export async function mount(context) {
     }
     if (generation !== state.generation || state.destroyed) return;
 
+    state.layaPlan = null;
+    state.layaModeActive = false;
     state.lines = lines;
     state.index = 0;
     state.active = true;
@@ -855,6 +1052,10 @@ export async function mount(context) {
     ui.rate.removeEventListener("input", onRateInput);
     ui.voice.removeEventListener("change", onVoiceChange);
     ui.input.removeEventListener("input", onTextInput);
+    if (ui.layaToggle) ui.layaToggle.removeEventListener("change", onLayaModeChange);
+    state.layaPlan = null;
+    state.layaEngine = null;
+    state.layaReady = false;
 
     if (musicPlayerButton) {
       musicPlayerButton.disabled = true;
@@ -898,6 +1099,8 @@ export async function mount(context) {
   }
 
   installMusicPlayerHook();
+  installNativeTtsLayaControl();
+  void preloadNativeTtsLayaEngine();
 
   ui.speak.addEventListener("click", startReading);
   ui.pause.addEventListener("click", pauseReading);
