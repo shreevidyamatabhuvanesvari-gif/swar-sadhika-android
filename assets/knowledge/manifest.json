@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.2.0",
+  "catalogVersion": "1.3.0",
   "appId": "swar-sadhika-android",
   "entries": [
     {
@@ -51,7 +51,7 @@
       "id": "sanskrit-vedic-pronunciation-v1",
       "entryType": "knowledge-document",
       "title": "वैदिक संस्कृत एवं कठिन उच्चारण विस्तारित ज्ञान-दस्तावेज़",
-      "documentVersion": "1.0.0",
+      "documentVersion": "1.1.0",
       "category": "pronunciation",
       "language": "sa",
       "script": "Devanagari",
@@ -62,7 +62,7 @@
       "integrationMode": "nano-server-tts-knowledge-adapter",
       "contentSchema": "swar-sadhika.sanskrit-tts-knowledge",
       "contentSchemaVersion": 1,
-      "sha256": "dcc90945a0f6e44a188d964078ef998be058a864816703bfc90e5b8119c3bbd3",
+      "sha256": "ba7d6ec4eea6eb8022e974dcf4cdcf9575826daa76f655222a31e5aa7346b214",
       "reviewPolicy": "only-reviewed-entries-are-exposed-as-active-guidance",
       "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
