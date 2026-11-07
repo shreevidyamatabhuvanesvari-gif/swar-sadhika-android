@@ -553,7 +553,7 @@ export function createTtsEngine(options = {}) {
         if (!knowledgeAutoLoadAttempted && knowledgeAdapter && options.autoLoadKnowledge !== false) {
           knowledgeAutoLoadAttempted = true;
           try {
-            await loadKnowledge({ downloadIfMissing: false });
+            await loadKnowledge({ refreshManifest: true, downloadIfMissing: false });
           } catch (error) {
             if (!disposed) emit("knowledgewarning", {
               code: error && error.code ? error.code : "KNOWLEDGE_CACHE_UNAVAILABLE",
