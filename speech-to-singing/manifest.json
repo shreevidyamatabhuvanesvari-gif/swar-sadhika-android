@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 1,
   "manifestId": "swar-sadhika.speech-to-singing",
-  "manifestRevision": "0.2.0",
+  "manifestRevision": "0.3.0",
   "metadataOnly": true,
   "application": {
     "id": "swar-sadhika-android",
@@ -163,6 +163,19 @@
         "createStreamProcessor"
       ],
       "responsibility": "Bounded PCM chunk validation, pending queue, backpressure, Player handoff, stream completion, cancellation and disposal."
+    },
+    {
+      "path": "native-tts-laya-engine.js",
+      "importMode": "module-relative-dynamic-import-by-tts-page",
+      "moduleVersion": "1.0.0",
+      "exportNames": [
+        "createNativeTtsLayaEngine",
+        "createNativeTtsLayaPlan",
+        "runNativeTtsLayaPlan",
+        "splitNativeTtsLayaPhrases",
+        "selfTest"
+      ],
+      "responsibility": "Local phrase segmentation and score-guided bounded Native SpeechSynthesisUtterance pitch/rate planning; no PCM synthesis, no model and no external API."
     }
   ],
   "pcmTransport": {
@@ -208,7 +221,8 @@
     ],
     "requiredBrowserCapabilities": [
       "ES module dynamic import",
-      "Web Audio API (AudioContext or webkitAudioContext)"
+      "Web Audio API (AudioContext or webkitAudioContext)",
+      "Web Speech API SpeechSynthesis and SpeechSynthesisUtterance"
     ],
     "dedicatedServerRequired": false,
     "externalAiApiRequired": false,
@@ -258,7 +272,9 @@
   "limitations": [
     "The current Player and Stream Processor transport PCM only; neither module generates speech or singing.",
     "Browser SpeechSynthesisUtterance and speechSynthesis.speak() do not expose PCM samples through the standard API.",
-    "Without a PCM Producer and local Singing Voice Synthesis model, Play can initialize an empty stream but cannot generate audible singing."
+    "Without a PCM Producer and local Singing Voice Synthesis model, Play can initialize an empty stream but cannot generate audible singing.",
+    "Native TTS Laya Mode adjusts approximate phrase-level prosody on the installed Native TTS voice; it is not true singing, does not synthesize PCM and cannot guarantee exact sargam.",
+    "The device/browser Native TTS voice may clamp, ignore or render pitch/rate changes differently."
   ],
   "safetyAndLifecycle": {
     "manifestIsMetadataOnly": true,
@@ -270,7 +286,10 @@
     "audioCaptureWithoutExplicitUserActionAllowed": false,
     "releaseAudioNodesListenersSubscriptionsTimersAndPendingChunksOnUnmount": true,
     "modifyExistingHostTtsBackend": false,
-    "playerFailureMustNotBreakNormalTts": true
+    "playerFailureMustNotBreakNormalTts": true,
+    "nativeTtsLayaFailureMustNotBreakOrdinaryTts": true,
+    "nativeTtsLayaDefaultEnabled": false,
+    "nativeTtsLayaUsesExistingTtsEngineControls": true
   },
   "pathPolicy": {
     "entryPointMustStayInsideModuleDirectory": true,
@@ -279,7 +298,50 @@
     "remoteEntryPointsAllowed": false,
     "runtimeModulePaths": [
       "speech-to-singing/player.js",
-      "speech-to-singing/stream-processor.js"
+      "speech-to-singing/stream-processor.js",
+      "speech-to-singing/native-tts-laya-engine.js"
+    ],
+    "testModulePaths": [
+      "speech-to-singing/tests/native-tts-laya-engine.test.mjs"
     ]
+  },
+  "nativeTtsLaya": {
+    "status": "phrase-level-native-tts-prosody-implemented",
+    "entryPoint": "native-tts-laya-engine.js",
+    "importedBy": "assets/js/pages/page-tts.js",
+    "importMode": "same-origin-dynamic-import",
+    "preloadPolicy": "Load and self-test when the TTS page mounts; do not wait for a network/model download at the Play click.",
+    "dependencies": [
+      "phoneme-compiler.js",
+      "singing-score-engine.js",
+      "assets/js/tts/tts-engine.js"
+    ],
+    "speechBackend": "Existing Native SpeechSynthesis through the unchanged TTS Engine.",
+    "phrasePolicy": {
+      "maxWordsPerPhrase": 5,
+      "maxCharactersPerPhrase": 84,
+      "splitAtLineBoundaries": true,
+      "splitAtPunctuation": true,
+      "neverSplitInsideWord": true
+    },
+    "prosody": {
+      "pitchRange": {
+        "minimum": 0.9,
+        "maximum": 1.14
+      },
+      "rateRange": {
+        "minimum": 0.65,
+        "maximum": 1.15
+      },
+      "mapping": "Approximate phrase-level pitch/rate mapping from local score notes; browser voice may clamp or ignore values."
+    },
+    "playbackPolicy": "Sequential utterances; one pending utterance at a time; existing Native TTS pause/resume/cancel lifecycle.",
+    "createsPcm": false,
+    "synthesizesVoice": false,
+    "exactSargam": false,
+    "requiresModel": false,
+    "requiresExternalAiApi": false,
+    "requiresDedicatedServer": false,
+    "testFile": "tests/native-tts-laya-engine.test.mjs"
   }
 }
