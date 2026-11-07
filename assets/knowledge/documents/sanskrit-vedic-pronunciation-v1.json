@@ -1,7 +1,7 @@
 {
   "schema": "swar-sadhika.sanskrit-tts-knowledge",
   "schemaVersion": 1,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "language": "sa",
   "entries": [
     {
@@ -322,6 +322,1630 @@
       "guidance": "स्व और स्त संयुक्ताक्षरों में अतिरिक्त स्वर न जोड़ें। तये में त दन्त्य है; य स्पष्ट रखें। संदर्भ: ऋग्वेद शाकल 1.1.9।",
       "scope": "general",
       "category": "vedic-rigveda",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0001",
+      "term": "अ",
+      "guidance": "ह्रस्व अ; स्पष्ट, संक्षिप्त स्वर। इसे आ की तरह दीर्घ न करें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0002",
+      "term": "आ",
+      "guidance": "दीर्घ आ; मात्रा-काल ह्रस्व अ से अधिक रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0003",
+      "term": "इ",
+      "guidance": "ह्रस्व इ; ई से अलग अवधि रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0004",
+      "term": "ई",
+      "guidance": "दीर्घ ई; स्पष्ट दीर्घता बनाए रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0005",
+      "term": "उ",
+      "guidance": "ह्रस्व उ; ऊ से अलग अवधि रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0006",
+      "term": "ऊ",
+      "guidance": "दीर्घ ऊ; ओष्ठ गोल रखते हुए दीर्घ स्वर दें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0007",
+      "term": "ऋ",
+      "guidance": "स्वर ऋ; इसे स्वतः रि या रु में न बदलें। संस्कृत परंपरा का स्वर-गुण सुरक्षित रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0008",
+      "term": "ॠ",
+      "guidance": "दीर्घ ऋ; दुर्लभ वैदिक/व्याकरणिक रूप, स्रोत-संदर्भ में ही पढ़ें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0009",
+      "term": "ऌ",
+      "guidance": "स्वर ऌ; दुर्लभ वर्ण, इसे ल् + इ में यांत्रिक रूप से न तोड़ें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0010",
+      "term": "ॡ",
+      "guidance": "दीर्घ ऌ; दुर्लभ वर्ण, संदर्भानुसार पहचानें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0011",
+      "term": "ए",
+      "guidance": "दीर्घ ए; ह्रस्व इ/ऐ से अलग रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0012",
+      "term": "ऐ",
+      "guidance": "ऐ संयुक्त स्वर; इसे ए या आ-इ के दो अलग शब्दों में न बाँटें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0013",
+      "term": "ओ",
+      "guidance": "दीर्घ ओ; अवधी स्पष्ट रखें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0014",
+      "term": "औ",
+      "guidance": "औ संयुक्त स्वर; इसे ओ या आ-उ में मनमाने ढंग से न बदलें।",
+      "scope": "general",
+      "category": "vowel",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0015",
+      "term": "क",
+      "guidance": "कण्ठ्य, अघोष अल्पप्राण स्पर्श; ग से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0016",
+      "term": "ख",
+      "guidance": "कण्ठ्य, अघोष महाप्राण; क से अधिक श्वास-प्रवाह।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0017",
+      "term": "ग",
+      "guidance": "कण्ठ्य, घोष अल्पप्राण; ज का विकल्प नहीं।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0018",
+      "term": "घ",
+      "guidance": "कण्ठ्य, घोष महाप्राण; ग से अलग श्वास-प्रवाह।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0019",
+      "term": "ङ",
+      "guidance": "कण्ठ्य अनुनासिक; ङ्ग में ग से पहले नासिक्य बंद बनाएँ।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0020",
+      "term": "च",
+      "guidance": "तालव्य, अघोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0021",
+      "term": "छ",
+      "guidance": "तालव्य, अघोष महाप्राण; च से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0022",
+      "term": "ज",
+      "guidance": "तालव्य, घोष अल्पप्राण स्पर्श-संघर्षी; इसे कण्ठ्य ग की तरह न पढ़ें। भुजङ्ग में ज स्पष्ट 'ज' ही रहे।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0023",
+      "term": "झ",
+      "guidance": "तालव्य, घोष महाप्राण; ज से अलग श्वास-प्रवाह।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0024",
+      "term": "ञ",
+      "guidance": "तालव्य अनुनासिक; ञ्च/ञ्ज जैसे संयोगों में इसका स्थान सुरक्षित रखें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0025",
+      "term": "ट",
+      "guidance": "मूर्धन्य, अघोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0026",
+      "term": "ठ",
+      "guidance": "मूर्धन्य, अघोष महाप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0027",
+      "term": "ड",
+      "guidance": "मूर्धन्य, घोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0028",
+      "term": "ढ",
+      "guidance": "मूर्धन्य, घोष महाप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0029",
+      "term": "ण",
+      "guidance": "मूर्धन्य अनुनासिक; दन्त्य न से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0030",
+      "term": "त",
+      "guidance": "दन्त्य, अघोष अल्पप्राण; ट से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0031",
+      "term": "थ",
+      "guidance": "दन्त्य, अघोष महाप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0032",
+      "term": "द",
+      "guidance": "दन्त्य, घोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0033",
+      "term": "ध",
+      "guidance": "दन्त्य, घोष महाप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0034",
+      "term": "न",
+      "guidance": "दन्त्य अनुनासिक; ण और ङ से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0035",
+      "term": "प",
+      "guidance": "ओष्ठ्य, अघोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0036",
+      "term": "फ",
+      "guidance": "ओष्ठ्य, अघोष महाप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0037",
+      "term": "ब",
+      "guidance": "ओष्ठ्य, घोष अल्पप्राण।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0038",
+      "term": "भ",
+      "guidance": "ओष्ठ्य, घोष महाप्राण; म्भ में म् के बाद स्पष्ट भ।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0039",
+      "term": "म",
+      "guidance": "ओष्ठ्य अनुनासिक।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0040",
+      "term": "य",
+      "guidance": "तालव्य अन्तःस्थ; व्यंजन-प्रवाह में अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0041",
+      "term": "र",
+      "guidance": "मूर्धन्य स्पर्शी/कम्पित परंपरागत र; संयुक्ताक्षर में स्पष्ट रखें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0042",
+      "term": "ल",
+      "guidance": "दन्त्य पार्श्विक; ळ से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0043",
+      "term": "व",
+      "guidance": "दन्तोष्ठ्य/ओष्ठ-दन्त्य निकट उच्चारण; ब या व के बीच मनमाना बदलाव न करें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0044",
+      "term": "श",
+      "guidance": "तालव्य ऊष्म; ष और स से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0045",
+      "term": "ष",
+      "guidance": "मूर्धन्य ऊष्म; श या स में न बदलें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0046",
+      "term": "स",
+      "guidance": "दन्त्य ऊष्म; श/ष से अलग रखें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0047",
+      "term": "ह",
+      "guidance": "कण्ठ्य ऊष्म; विसर्ग से भिन्न।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0048",
+      "term": "ळ",
+      "guidance": "मूर्धन्य पार्श्विक; वैदिक/क्षेत्रीय पाठ-स्रोत से पुष्टि करें।",
+      "scope": "general",
+      "category": "consonant",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0049",
+      "term": "ा",
+      "guidance": "आ की मात्रा; पूर्ववर्ती व्यंजन के साथ जोड़कर दीर्घ आ पढ़ें।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0050",
+      "term": "ि",
+      "guidance": "ह्रस्व इ की मात्रा; दृश्य क्रम से पहले लगती है, पर ध्वनि पूर्ववर्ती व्यंजन के बाद आती है।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0051",
+      "term": "ी",
+      "guidance": "दीर्घ ई की मात्रा; ह्रस्व इ से अलग अवधि।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0052",
+      "term": "ु",
+      "guidance": "ह्रस्व उ की मात्रा; पूर्ववर्ती व्यंजन से संबद्ध।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0053",
+      "term": "ू",
+      "guidance": "दीर्घ ऊ की मात्रा; अवधि स्पष्ट रखें।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0054",
+      "term": "ृ",
+      "guidance": "ऋ की मात्रा; इसे रि न पढ़ें।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0055",
+      "term": "ॄ",
+      "guidance": "दीर्घ ऋ की मात्रा; दुर्लभ पाठ-रूप।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0056",
+      "term": "ॢ",
+      "guidance": "ऌ की मात्रा; दुर्लभ वैदिक/व्याकरणिक रूप।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0057",
+      "term": "ॣ",
+      "guidance": "दीर्घ ऌ की मात्रा; दुर्लभ रूप।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0058",
+      "term": "े",
+      "guidance": "ए की मात्रा; दीर्घ स्वर।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0059",
+      "term": "ै",
+      "guidance": "ऐ की मात्रा; संयुक्त स्वर।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0060",
+      "term": "ो",
+      "guidance": "ओ की मात्रा; दीर्घ स्वर।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0061",
+      "term": "ौ",
+      "guidance": "औ की मात्रा; संयुक्त स्वर।",
+      "scope": "general",
+      "category": "vowel-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0062",
+      "term": "ँ",
+      "guidance": "चन्द्रबिन्दु: स्वर की अनुनासिकता; अनुस्वार से अलग पहचानें।",
+      "scope": "general",
+      "category": "nasalization-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0063",
+      "term": "ं",
+      "guidance": "अनुस्वार: संदर्भ-सापेक्ष नासिक्य; इसे मौन बिन्दु न मानें और हर जगह एक ही नासिक्य में न बदलें।",
+      "scope": "general",
+      "category": "nasalization-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0064",
+      "term": "ः",
+      "guidance": "विसर्ग: पद और अगले वर्ण के अनुसार व्यवहार बदल सकता है; इसे स्वतः ह/स न करें।",
+      "scope": "general",
+      "category": "visarga-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0065",
+      "term": "्",
+      "guidance": "हलन्त/विराम: व्यंजन का अंतर्निहित अ हटाता है; संयुक्ताक्षर में बीच का अतिरिक्त स्वर रोकें।",
+      "scope": "general",
+      "category": "virama-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0066",
+      "term": "ऽ",
+      "guidance": "अवग्रह: संधि/स्वर-लोप का लेखन-संकेत; इसका नाम बोलकर न पढ़ें।",
+      "scope": "general",
+      "category": "avagraha-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0067",
+      "term": "॑",
+      "guidance": "उदात्त-चिह्न; स्वराघात शाखा और पाठ-परंपरा के अनुसार ही लागू करें।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0068",
+      "term": "॒",
+      "guidance": "अनुदात्त-चिह्न; शाखा-सापेक्ष स्वराघात, सामान्य विराम नहीं।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0069",
+      "term": "᳚",
+      "guidance": "वैदिक स्वरित/स्वराघात-संबंधी चिह्न; सटीक पाठ-परंपरा जाँचे बिना स्वर-नियम अनुमानित न करें।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0070",
+      "term": "᳐",
+      "guidance": "वैदिक स्वर-चिह्न; Unicode पहचान और शाखा-संदर्भ आवश्यक।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0071",
+      "term": "᳒",
+      "guidance": "वैदिक स्वर-चिह्न; इसे सामान्य अक्षर या विराम न समझें।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0072",
+      "term": "᳓",
+      "guidance": "वैदिक स्वर-चिह्न; पाठ-स्रोत से सत्यापन आवश्यक।",
+      "scope": "general",
+      "category": "vedic-accent-sign",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0073",
+      "term": "।",
+      "guidance": "दण्ड: पाठ-विराम; स्वयं कोई शब्द-ध्वनि नहीं।",
+      "scope": "general",
+      "category": "punctuation",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0074",
+      "term": "॥",
+      "guidance": "द्विदण्ड: श्लोक/मंत्र-खंड का विराम; स्वयं कोई शब्द-ध्वनि नहीं।",
+      "scope": "general",
+      "category": "punctuation",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0075",
+      "term": "अङ्ग",
+      "guidance": "ङ्ग में ङ् कण्ठ्य अनुनासिक और ग कण्ठ्य घोष है; दोनों के बीच अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0076",
+      "term": "अङ्गार",
+      "guidance": "ङ्ग में ङ् + ग का कण्ठ्य संयोग सुरक्षित रखें; आ दीर्घ है।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0077",
+      "term": "गङ्गा",
+      "guidance": "गङ्गा में पहला ग और ङ्ग का कण्ठ्य नासिक्य-घोष संयोग स्पष्ट रखें; अन्तिम आ दीर्घ है।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0078",
+      "term": "मङ्गल",
+      "guidance": "ङ्ग में ङ् कण्ठ्य है; इसे न् न पढ़ें।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0079",
+      "term": "शङ्ख",
+      "guidance": "ङ्ख में ङ् कण्ठ्य नासिक्य और ख कण्ठ्य महाप्राण है।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0080",
+      "term": "सङ्घ",
+      "guidance": "ङ्घ में ङ् कण्ठ्य नासिक्य के बाद घ महाप्राण घोष है।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0081",
+      "term": "सङ्कल्प",
+      "guidance": "ङ्क में ङ् कण्ठ्य नासिक्य और क अघोष है; ल्प समूह स्पष्ट रखें।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0082",
+      "term": "सङ्गीत",
+      "guidance": "ङ्ग में कण्ठ्य नासिक्य + घोष ग; ई दीर्घ है।",
+      "scope": "general",
+      "category": "velar-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0083",
+      "term": "पङ्कज",
+      "guidance": "ङ्क कण्ठ्य संयोग है; ज अन्तिम तालव्य वर्ण है, उसे ग न पढ़ें।",
+      "scope": "general",
+      "category": "velar-palatal-contrast",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0084",
+      "term": "अञ्जलि",
+      "guidance": "ञ्ज में ञ् तालव्य अनुनासिक है; ज तालव्य है। लि में इ ह्रस्व है।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0085",
+      "term": "पञ्च",
+      "guidance": "ञ्च में ञ् तालव्य अनुनासिक + च तालव्य अघोष; बीच में स्वर न डालें।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0086",
+      "term": "पञ्चमी",
+      "guidance": "ञ्च तालव्य संयोग; मी में ई दीर्घ है।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0087",
+      "term": "सञ्चय",
+      "guidance": "ञ्च में ञ् + च का संयोग और य स्पष्ट रखें।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0088",
+      "term": "सञ्चित",
+      "guidance": "ञ्च तालव्य संयोग; चि में इ ह्रस्व और त दन्त्य है।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0089",
+      "term": "सञ्जय",
+      "guidance": "ञ्ज में ञ् तालव्य अनुनासिक और ज तालव्य घोष है; ज को ग में न बदलें।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0090",
+      "term": "युञ्जीत",
+      "guidance": "ञ्ज में तालव्य अनुनासिक + ज; ई दीर्घ है।",
+      "scope": "general",
+      "category": "palatal-nasal",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0091",
+      "term": "ज्ञान",
+      "guidance": "ज्ञ संयुक्ताक्षर का परंपरागत संस्कृत उच्चारण ज् + ञ् ध्वनि-समूह पर आधारित है; इसे सरल आधुनिक 'ग्य' मानकर न बदलें।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0092",
+      "term": "अज्ञान",
+      "guidance": "ज्ञ में ज् + ञ् का संयोग; आरम्भिक अ स्पष्ट रखें।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0093",
+      "term": "विज्ञान",
+      "guidance": "ज्ञ संयुक्ताक्षर में ज् + ञ् का परंपरागत ध्वनि-क्रम सुरक्षित रखें; वि का इ ह्रस्व है।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0094",
+      "term": "प्रज्ञा",
+      "guidance": "ज्ञ में ज् + ञ्; ज्ञा का आ दीर्घ है।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0095",
+      "term": "आज्ञा",
+      "guidance": "ज्ञ में ज् + ञ् का समूह; आ दीर्घ दोनों स्थानों पर है।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0096",
+      "term": "कृतज्ञ",
+      "guidance": "ज्ञ में ज् + ञ्; कृत् के त् को अतिरिक्त स्वर न दें।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0097",
+      "term": "ज्ञातृ",
+      "guidance": "ज्ञ संयुक्ताक्षर और ऋ स्वर दोनों सुरक्षित रखें; ऋ को रि न पढ़ें।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0098",
+      "term": "विज्ञप्ति",
+      "guidance": "ज्ञ और प्ति दोनों संयुक्ताक्षर हैं; इनके बीच अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "jnya-conjunct",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0099",
+      "term": "क्षत्रिय",
+      "guidance": "क्ष संयुक्ताक्षर और त्र संयुक्ताक्षर अलग-अलग स्पष्ट रखें; क्ष को केवल क्-ष् में विराम देकर न तोड़ें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0100",
+      "term": "क्षमा",
+      "guidance": "क्ष संयुक्ताक्षर के बाद मा में आ दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0101",
+      "term": "अक्षर",
+      "guidance": "क्ष संयुक्ताक्षर स्पष्ट रखें; र का अंतर्निहित अ सुरक्षित रहे।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0102",
+      "term": "लक्ष्मी",
+      "guidance": "क्ष्म संयुक्ताक्षर-समूह में क्ष और म् का क्रम सुरक्षित रखें; ई दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0103",
+      "term": "क्षेत्र",
+      "guidance": "क्षे में क्ष संयुक्ताक्षर और ए दीर्घ; त्र में त् + र का संयोग।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0104",
+      "term": "वृक्ष",
+      "guidance": "वृ में ऋ स्वर; क्ष संयुक्ताक्षर में अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0105",
+      "term": "पक्षी",
+      "guidance": "क्ष संयुक्ताक्षर; ई दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0106",
+      "term": "त्र्यम्बक",
+      "guidance": "त्र्य और म्ब संयुक्ताक्षर; अम्ब में म् के बाद ब स्पष्ट हो।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0107",
+      "term": "त्रिपुर",
+      "guidance": "त्र संयुक्ताक्षर; त् + र का संयोग बनाए रखें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0108",
+      "term": "त्रैलोक्य",
+      "guidance": "त्रै संयुक्ताक्षर-संयोग और ल्य; ऐ दीर्घ संयुक्त स्वर है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0109",
+      "term": "स्त्रिया",
+      "guidance": "स्त्र में स् + त् + र का क्रम स्पष्ट; बीच में स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0110",
+      "term": "स्त्री",
+      "guidance": "स्त्र संयुक्ताक्षर; ई दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0111",
+      "term": "शास्त्र",
+      "guidance": "स्त्र संयुक्ताक्षर; आ दीर्घ और श तालव्य है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0112",
+      "term": "मन्त्र",
+      "guidance": "न्त्र में न् + त् + र का क्रम सुरक्षित रखें; अनावश्यक स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0113",
+      "term": "तन्त्र",
+      "guidance": "न्त्र संयुक्ताक्षर; त दन्त्य है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0114",
+      "term": "यन्त्र",
+      "guidance": "यन्त्र में न्त्र संयुक्ताक्षर-समूह स्पष्ट रखें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0115",
+      "term": "स्तोत्र",
+      "guidance": "त्र संयुक्ताक्षर; ओ दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0116",
+      "term": "सूत्र",
+      "guidance": "त्र संयुक्ताक्षर; ऊ दीर्घ है।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0117",
+      "term": "शुश्रूषा",
+      "guidance": "शु-श्रू-षा में श तालव्य, ष मूर्धन्य; ऊ और आ दीर्घ हैं।",
+      "scope": "general",
+      "category": "sibilant-contrast",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0118",
+      "term": "श्रुति",
+      "guidance": "श्र संयुक्ताक्षर; श तालव्य है, ऋ नहीं बल्कि उ ह्रस्व है।",
+      "scope": "general",
+      "category": "sibilant-contrast",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0119",
+      "term": "श्रेष्ठ",
+      "guidance": "श्र और ष्ठ संयुक्ताक्षर; ष मूर्धन्य, ठ महाप्राण मूर्धन्य।",
+      "scope": "general",
+      "category": "sibilant-contrast",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0120",
+      "term": "कृष्ण",
+      "guidance": "ष्ण में ष मूर्धन्य और ण मूर्धन्य अनुनासिक; दोनों को श्न न करें।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0121",
+      "term": "तृष्णा",
+      "guidance": "ऋ स्वर, ष्ण मूर्धन्य समूह और आ दीर्घ सुरक्षित रखें।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0122",
+      "term": "दृष्टि",
+      "guidance": "दृ में ऋ मात्रा; ष्ट मूर्धन्य समूह; टि में इ ह्रस्व।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0123",
+      "term": "सृष्टि",
+      "guidance": "सृ में ऋ मात्रा; ष्ट मूर्धन्य समूह स्पष्ट रखें।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0124",
+      "term": "कष्ट",
+      "guidance": "ष्ट में ष् + ट् मूर्धन्य समूह; अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0125",
+      "term": "षष्ठी",
+      "guidance": "दोनों ष मूर्धन्य हैं; ष्ठ में ठ महाप्राण; ई दीर्घ।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0126",
+      "term": "राष्ट्र",
+      "guidance": "ष्ट्र में ष् + ट् + र् का क्रम सुरक्षित रखें; बीच में स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0127",
+      "term": "मूर्धन्य",
+      "guidance": "र्ध में र् + ध; ध महाप्राण घोष; ण्य में ण मूर्धन्य।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0128",
+      "term": "पृथ्वी",
+      "guidance": "पृ में ऋ मात्रा; थ्व संयोग में थ महाप्राण और व स्पष्ट; ई दीर्घ।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0129",
+      "term": "ऋषि",
+      "guidance": "ऋ स्वर; ष मूर्धन्य ऊष्म; इ ह्रस्व।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0130",
+      "term": "ऋतु",
+      "guidance": "ऋ स्वर और तु में उ ह्रस्व; ऋ को रि न करें।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0131",
+      "term": "ऋत्विज्",
+      "guidance": "ऋ स्वर; त्वि और ज् का क्रम स्पष्ट; अन्तिम ज् हलन्त है।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0132",
+      "term": "ऋद्धि",
+      "guidance": "ऋ स्वर और द्धि में द् + ध् + इ का क्रम; ध महाप्राण।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0133",
+      "term": "वृद्धि",
+      "guidance": "वृ में ऋ स्वर; द्धि में द् + ध् का संयोग।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0134",
+      "term": "स्मृति",
+      "guidance": "स्म संयुक्ताक्षर; ऋ स्वर को रि न बदलें।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0135",
+      "term": "मृत्यु",
+      "guidance": "मृ में ऋ स्वर; त्यु में त् + य का संयोग।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0136",
+      "term": "अमृत",
+      "guidance": "मृ में ऋ स्वर; त दन्त्य है।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0137",
+      "term": "हृदय",
+      "guidance": "हृ में ऋ स्वर; दय में द दन्त्य है।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0138",
+      "term": "हृद्गत",
+      "guidance": "हृ में ऋ स्वर; द्ग में द् + ग का संयुक्त उच्चारण, अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "vocalic-r",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0139",
+      "term": "ह्रस्व",
+      "guidance": "ह्र में ह् + र का संयोग; स्व में स् + व; दोनों समूह स्पष्ट रखें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0140",
+      "term": "दीर्घ",
+      "guidance": "दीर्घ में ई दीर्घ; र्घ में र् + घ महाप्राण घोष।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0141",
+      "term": "द्वन्द्व",
+      "guidance": "द्व और न्द्व समूहों में द् + व तथा न् + द् + व का क्रम सुरक्षित रखें।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0142",
+      "term": "उद्घोष",
+      "guidance": "द्घ में द् + घ; घ महाप्राण घोष है।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0143",
+      "term": "उद्गीथ",
+      "guidance": "द्ग में द् + ग; ग कण्ठ्य घोष; ई दीर्घ।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0144",
+      "term": "बुद्ध",
+      "guidance": "द्ध में द् + ध; ध महाप्राण घोष, द से अलग।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0145",
+      "term": "मुद्गर",
+      "guidance": "द्ग में द् + ग का संयोग; अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0146",
+      "term": "अध्वर्यु",
+      "guidance": "ध्व में ध महाप्राण घोष + व; यु में उ ह्रस्व।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0147",
+      "term": "ध्वनि",
+      "guidance": "ध्व संयुक्ताक्षर; ध महाप्राण घोष।",
+      "scope": "general",
+      "category": "aspiration",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0148",
+      "term": "ब्रह्म",
+      "guidance": "ह्म में ह् + म का क्रम स्पष्ट; ब्र में ब् + र का संयोग।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0149",
+      "term": "ब्रह्मचर्य",
+      "guidance": "ब्रह्म और चर्य दोनों समूह स्पष्ट रखें; च तालव्य, र्य संयुक्त प्रवाह।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0150",
+      "term": "ब्रह्माण्ड",
+      "guidance": "ह्म और ण्ड समूह; ण मूर्धन्य, ड मूर्धन्य।",
+      "scope": "general",
+      "category": "retroflex",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0151",
+      "term": "सन्ध्या",
+      "guidance": "न्ध्य में न् + ध् + य; ध महाप्राण और य स्पष्ट।",
+      "scope": "general",
+      "category": "conjunct-clusters",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0152",
+      "term": "अन्तःकरण",
+      "guidance": "विसर्ग के बाद कण्ठ्य क है; पाठ-परंपरा के अनुसार विसर्ग-संधि लागू हो सकती है।",
+      "scope": "general",
+      "category": "visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0153",
+      "term": "नमस्कारः",
+      "guidance": "अन्तिम विसर्ग को पहचानें; इसे स्वतः ह या स न करें।",
+      "scope": "general",
+      "category": "visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0154",
+      "term": "दुःख",
+      "guidance": "विसर्ग के बाद क-वर्ग है; जिह्वामूलीय-संबंधी परंपरा का संदर्भ हो सकता है, पर सामान्य TTS रूपांतरण अनुमान से न करें।",
+      "scope": "general",
+      "category": "visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0155",
+      "term": "दुःस्वप्न",
+      "guidance": "विसर्ग के बाद स्; पद-संधि और पाठानुसार ध्वनि-व्यवहार रखें।",
+      "scope": "general",
+      "category": "visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0156",
+      "term": "अहंकार",
+      "guidance": "अनुस्वार नासिक्य है; क से पहले कण्ठ्य नासिक्य-सदृश ध्वनि संदर्भानुसार हो सकती है।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0157",
+      "term": "संस्कृत",
+      "guidance": "अनुस्वार के बाद स्-क समूह; अनुस्वार का स्थान संदर्भानुसार पहचानें, और स्कृत समूह में अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0158",
+      "term": "संस्कृति",
+      "guidance": "संस्कृ में अनुस्वार, स्-क संयोग और ऋ मात्रा; तीनों स्पष्ट रखें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0159",
+      "term": "संस्मरण",
+      "guidance": "अनुस्वार के बाद स्म संयुक्ताक्षर; अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0160",
+      "term": "संयम",
+      "guidance": "अनुस्वार के बाद य; नासिक्य ध्वनि का स्थान संदर्भ से निर्धारित करें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0161",
+      "term": "चन्द्र",
+      "guidance": "न्द्र में न् + द् + र का क्रम सुरक्षित रखें; चन्द्रबिन्दु से भ्रमित न करें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0162",
+      "term": "चन्द्रमा",
+      "guidance": "न्द्र समूह और चन्द्रमा के पद-प्रवाह को स्पष्ट रखें; आ दीर्घ है।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0163",
+      "term": "अनुनासिक",
+      "guidance": "नु-ना-सि-क; अनुनासिकता स्वर/व्यंजन की नासिक्य विशेषता है, केवल बिन्दु का नाम नहीं।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0164",
+      "term": "अनुस्वार",
+      "guidance": "अनुस्वार चिह्न का ध्वनि-रूप अगले वर्ण और पाठ-परंपरा से प्रभावित होता है।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0165",
+      "term": "चन्द्रबिन्दु",
+      "guidance": "चन्द्रबिन्दु स्वर की अनुनासिकता का संकेत है; इसे अनुस्वार से अलग पहचानें।",
+      "scope": "general",
+      "category": "nasalization",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0166",
+      "term": "जिह्वामूलीय",
+      "guidance": "जिह्वामूलीय विसर्ग का विशेष allophone है; केवल परंपरागत क-वर्ग संदर्भ में, हर ः पर नहीं।",
+      "scope": "general",
+      "category": "vedic-visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0167",
+      "term": "उपध्मानीय",
+      "guidance": "उपध्मानीय विसर्ग का विशेष allophone है; केवल परंपरागत प-वर्ग संदर्भ में, हर ः पर नहीं।",
+      "scope": "general",
+      "category": "vedic-visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0168",
+      "term": "उदात्त",
+      "guidance": "उदात्त स्वराघात-श्रेणी है; वास्तविक चिह्न/उच्चारण शाखा-विशिष्ट है।",
+      "scope": "general",
+      "category": "vedic-accent",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0169",
+      "term": "अनुदात्त",
+      "guidance": "अनुदात्त स्वराघात-श्रेणी; इसे ह्रस्व मात्रा या विराम न समझें।",
+      "scope": "general",
+      "category": "vedic-accent",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0170",
+      "term": "स्वरित",
+      "guidance": "स्वरित वैदिक pitch/accent श्रेणी है; सामान्य संगीत-स्वर से समान न मानें।",
+      "scope": "general",
+      "category": "vedic-accent",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0171",
+      "term": "प्लुत",
+      "guidance": "प्लुत स्वर की त्रिमात्रिक दीर्घता का संकेत; संदर्भ में मात्रा-काल स्पष्ट रखें।",
+      "scope": "general",
+      "category": "vedic-accent",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0172",
+      "term": "संहितापाठ",
+      "guidance": "संहिता-पाठ में संधि-प्रवाह; शब्दों को कृत्रिम रूप से अलग न करें।",
+      "scope": "general",
+      "category": "vedic-recitation",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0173",
+      "term": "पदपाठ",
+      "guidance": "पद-पाठ में पद-सीमा स्पष्ट; संहितापाठ के संधि-रूप से अलग रखें।",
+      "scope": "general",
+      "category": "vedic-recitation",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0174",
+      "term": "स्वराघात",
+      "guidance": "वैदिक उदात्त-अनुदात्त-स्वरित प्रणाली के अनुसार; शाखा-सापेक्ष।",
+      "scope": "general",
+      "category": "vedic-accent",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0175",
+      "term": "होतृ",
+      "guidance": "हो में ओ दीर्घ; तृ में ऋ स्वर।",
+      "scope": "general",
+      "category": "vedic-roles",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0176",
+      "term": "उद्गातृ",
+      "guidance": "द्ग में द् + ग; ग घोष कण्ठ्य; तृ में ऋ स्वर।",
+      "scope": "general",
+      "category": "vedic-roles",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0177",
+      "term": "ऋष्यशृङ्ग",
+      "guidance": "ऋ और शृ दोनों में ऋ-स्वर; ङ्ग में ङ् कण्ठ्य अनुनासिक + ग।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0178",
+      "term": "हिरण्यगर्भ",
+      "guidance": "ण्य में ण मूर्धन्य; र्भ में र् + भ महाप्राण; भ को ब न करें।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0179",
+      "term": "बृहस्पति",
+      "guidance": "बृ में ऋ स्वर; हस्-प समूह स्पष्ट; ति में इ ह्रस्व।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0180",
+      "term": "ब्रह्मणस्पति",
+      "guidance": "ब्रह्म और णस्-प समूह; ण मूर्धन्य, स् दन्त्य।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0181",
+      "term": "अङ्गिरस्",
+      "guidance": "ङ्ग में ङ् कण्ठ्य; रस् में स दन्त्य।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0182",
+      "term": "त्वष्टृ",
+      "guidance": "त्व और ष्ट संयुक्ताक्षर; ष मूर्धन्य; तृ में ऋ स्वर।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0183",
+      "term": "दधिक्राव्ण",
+      "guidance": "धि-क्रा-व्ण समूह; क्र में क् + र; व्ण में ण मूर्धन्य।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0184",
+      "term": "नासत्य",
+      "guidance": "नासत्य में स दन्त्य और त्य में त् + य का संयोग।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0185",
+      "term": "विश्वामित्र",
+      "guidance": "श्व में श् + व; त्र में त् + र; आ और ई? शब्द में आ दीर्घ है।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0186",
+      "term": "हिरण्यवर्ण",
+      "guidance": "ण्य में ण मूर्धन्य; र्ण में र् + ण का संयोग।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0187",
+      "term": "पुरुषसूक्त",
+      "guidance": "ष मूर्धन्य; षसू में पद-प्रवाह रखें; ऊ दीर्घ।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0188",
+      "term": "नृसिंह",
+      "guidance": "नृ में ऋ स्वर; सिंह में स दन्त्य और ह कण्ठ्य।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0189",
+      "term": "अश्वमेध",
+      "guidance": "श्व संयुक्ताक्षर; ध महाप्राण घोष।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0190",
+      "term": "यजुर्वेद",
+      "guidance": "जु में ज तालव्य है; इसे ग न पढ़ें; र्व में र् + व संयोग।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0191",
+      "term": "सामवेद",
+      "guidance": "स दन्त्य; मावेद में आ दीर्घ; व स्पष्ट।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0192",
+      "term": "अथर्ववेद",
+      "guidance": "थ महाप्राण अघोष; र्व संयोग और व स्पष्ट।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0193",
+      "term": "वेदाङ्ग",
+      "guidance": "ङ्ग में ङ् कण्ठ्य अनुनासिक; आ दीर्घ।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0194",
+      "term": "शिक्षा",
+      "guidance": "श तालव्य; क्ष संयुक्ताक्षर; आ दीर्घ।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0195",
+      "term": "व्याकरण",
+      "guidance": "व्य में व् + य; करण में ण मूर्धन्य।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0196",
+      "term": "निरुक्त",
+      "guidance": "रु में उ ह्रस्व; क्त संयुक्ताक्षर में अतिरिक्त स्वर न जोड़ें।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0197",
+      "term": "छन्दस्",
+      "guidance": "छ महाप्राण; न्द संयुक्ताक्षर; अन्तिम स् हलन्त है।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0198",
+      "term": "ज्योतिष्टोम",
+      "guidance": "ज्यो में ज तालव्य; ष्ट मूर्धन्य; स्तो में ओ दीर्घ।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0199",
+      "term": "अश्वत्थ",
+      "guidance": "श्व और त्थ समूह; थ महाप्राण।",
+      "scope": "general",
+      "category": "vedic-words",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0200",
+      "term": "भक्तिः",
+      "guidance": "क्त संयुक्ताक्षर; अन्तिम विसर्ग का पाठ-संदर्भ सुरक्षित रखें।",
+      "scope": "general",
+      "category": "visarga",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0201",
+      "term": "भुजङ",
+      "guidance": "यह अपूर्ण/संदिग्ध लेखन है; यदि आशय 'भुजङ्ग' है तो पूर्ण रूप 'भु-जङ्-ग' रखें। इसमें ज तालव्य है और ग कण्ठ्य—ज को ग पढ़ना ध्वन्यात्मक त्रुटि है।",
+      "scope": "general",
+      "category": "palatal-velar-correction",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0202",
+      "term": "भुजङ्गः",
+      "guidance": "भु-जङ्-गः; ज तालव्य, ङ् कण्ठ्य अनुनासिक, ग कण्ठ्य घोष और अन्तिम विसर्ग अलग चिह्न है।",
+      "scope": "general",
+      "category": "palatal-velar-correction",
+      "reviewStatus": "reviewed"
+    },
+    {
+      "id": "vedic-extra-0203",
+      "term": "भुजङ्गम",
+      "guidance": "भु-जङ्-ग-म; ज तालव्य है और ङ्ग में ङ् + ग कण्ठ्य समूह है।",
+      "scope": "general",
+      "category": "palatal-velar-correction",
       "reviewStatus": "reviewed"
     }
   ]
