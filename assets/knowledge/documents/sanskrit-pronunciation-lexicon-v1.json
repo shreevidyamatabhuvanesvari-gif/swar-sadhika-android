@@ -1,0 +1,399 @@
+{
+  "schema": "swar-sadhika.sanskrit-pronunciation-lexicon",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "language": "sa",
+  "script": "Devanagari",
+  "identificationCode": "SWR-TTS-LEXICON-01",
+  "purpose": "स्रोत-सत्यापित संस्कृत शब्दों के लिए Structured Phonetic Reference और Android Chrome Native TTS Voice-specific वाचन-रूप का नियंत्रित Lexicon।",
+  "phoneticReference": {
+    "notation": "IPA",
+    "note": "IPA एक विश्लेषण/संदर्भ संकेत है; इसे सीधे Native SpeechSynthesis में नहीं भेजना है।"
+  },
+  "reviewPolicy": {
+    "allowedStatuses": [
+      "draft",
+      "needs-review",
+      "reviewed"
+    ],
+    "defaultStatus": "needs-review",
+    "activationRequires": [
+      "reviewStatus=reviewed",
+      "source.primarySourceVerified=true",
+      "phoneticStructure.status=verified",
+      "phonemeReference.status=verified",
+      "nativeSpeechText is a non-empty string",
+      "voiceLocales contains the tested locale",
+      "voiceProfile.testStatus=passed",
+      "context and match rule have been reviewed"
+    ],
+    "unreviewedEntriesActive": false,
+    "fallback": "मूल संस्कृत पाठ को ज्यों का त्यों Native TTS को दें।"
+  },
+  "matchingPolicy": {
+    "unicodeNormalization": "NFC",
+    "matchTypes": [
+      "exact",
+      "contextual-exact"
+    ],
+    "substringMatching": false,
+    "fuzzyMatching": false,
+    "duplicateIdentity": "term + scope + shakha + requiredSequence + voiceLocales",
+    "conflictingActiveEntries": "किसी भी अस्पष्ट या परस्पर-विरोधी सक्रिय Entry को अस्वीकार करें।"
+  },
+  "entries": [
+    {
+      "id": "bhujanga-conjunct",
+      "term": "भुजङ्ग",
+      "matchType": "exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": null,
+        "patha": null,
+        "requiredSequence": null,
+        "precedingWords": [],
+        "followingWords": [],
+        "notes": "सामान्य शब्द-मिलान; वास्तविक ध्वनि और Voice रूप की समीक्षा लंबित है।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "shiv-bhujanga-core",
+        "reportedReference": null,
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "ङ्ग संयुक्ताक्षर के कण्ठ्य अनुनासिक तथा घोष व्यंजन संबंधी मार्गदर्शन की स्रोत-समीक्षा आवश्यक है。"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    },
+    {
+      "id": "vijrimbhana-long-form",
+      "term": "विजृम्भणामधुव्रतम्",
+      "matchType": "exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": null,
+        "patha": null,
+        "requiredSequence": null,
+        "precedingWords": [],
+        "followingWords": [],
+        "notes": "लंबे संयुक्त पाठ-रूप का शब्द-सीमांकन सत्यापित करना आवश्यक है।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "shiv-vijrimbhana",
+        "reportedReference": null,
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "जृ में ऋ-स्वर, म्भ महाप्राण घोष और मूर्धन्य ण संबंधी मार्गदर्शन की समीक्षा आवश्यक है।"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    },
+    {
+      "id": "sadashivam-context",
+      "term": "सदाशिवं",
+      "matchType": "contextual-exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": null,
+        "patha": null,
+        "requiredSequence": [
+          "सदाशिवं",
+          "भजे"
+        ],
+        "precedingWords": [],
+        "followingWords": [
+          "भजे"
+        ],
+        "notes": "अगले शब्द 'भजे' के संदर्भ में दिया गया निर्देश; अन्य पद-स्थितियों पर स्वतः लागू नहीं होगा।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "shiv-sadashivam",
+        "reportedReference": null,
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "अनुस्वार के संदर्भ-सापेक्ष नासिक्य रूप का सत्यापन आवश्यक है।"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    },
+    {
+      "id": "agnih-visarga",
+      "term": "अग्निः",
+      "matchType": "exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": "shaakala",
+        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "requiredSequence": null,
+        "precedingWords": [],
+        "followingWords": [],
+        "notes": "शाखा और पाठ-रूप निश्चित होने तक कोई विशेष वाचन रूप लागू नहीं होगा।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "rv-agnim",
+        "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "ग्नि संयुक्ताक्षर और पदान्त विसर्ग के निर्देश की मूल ऋग्वेदीय पाठ से पुष्टि आवश्यक है।"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    },
+    {
+      "id": "devaam-anunasika",
+      "term": "देवाँ",
+      "matchType": "exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": "shaakala",
+        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "requiredSequence": null,
+        "precedingWords": [],
+        "followingWords": [],
+        "notes": "चन्द्रबिन्दु और अनुस्वार को समान मानकर प्रतिस्थापित नहीं करना है।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "rv-devam",
+        "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "चन्द्रबिन्दु और नासिक्य स्वर के ध्वन्यात्मक स्वरूप की पुष्टि आवश्यक है।"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    },
+    {
+      "id": "nutanairuta-vowel-sequence",
+      "term": "नूतनैरुत",
+      "matchType": "exact",
+      "phoneticStructure": {
+        "status": "pending-review",
+        "orthographicUnits": [],
+        "phonemeSequence": [],
+        "syllableBoundaries": [],
+        "analysisSource": "assets/js/tts/vedic-sanskrit-pronunciation.js",
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "phonemeReference": {
+        "system": "IPA",
+        "value": null,
+        "status": "pending-review",
+        "source": null
+      },
+      "ipa": null,
+      "nativeSpeechText": null,
+      "voiceLocales": [],
+      "voiceProfile": {
+        "engine": "Web Speech API SpeechSynthesis",
+        "platform": "Android Chrome",
+        "voiceName": null,
+        "voiceURI": null,
+        "locale": null,
+        "testStatus": "not-tested",
+        "testEvidence": null,
+        "testedAt": null
+      },
+      "context": {
+        "scope": "general",
+        "shakha": "shaakala",
+        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "requiredSequence": null,
+        "precedingWords": [],
+        "followingWords": [],
+        "notes": "स्वर-क्रम और पाठ-सीमा की समीक्षा लंबित है।"
+      },
+      "scope": "general",
+      "source": {
+        "type": "existing-knowledge-document",
+        "documentId": "sanskrit-vedic-pronunciation-v1",
+        "documentVersion": "1.1.0",
+        "entryId": "rv-nutanairuta",
+        "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
+        "primarySourceVerified": false,
+        "sourceReviewStatus": "reviewed",
+        "sourceNote": "दीर्घ ऊ, ऐ और स्वर-संयोग के क्रम की पुष्टि आवश्यक है।"
+      },
+      "reviewStatus": "needs-review",
+      "activation": {
+        "enabled": false,
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+      }
+    }
+  ]
+}
