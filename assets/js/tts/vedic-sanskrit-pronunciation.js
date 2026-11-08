@@ -1,9 +1,9 @@
 /* Swar-Sadhika — Vedic Sanskrit Pronunciation Knowledge Base
- * Version 1.0.0. Model-independent, non-destructive analysis only.
+ * Version 1.1.0. Model-independent, non-destructive structured orthographic analysis.
  * No audio synthesis, network access, external model, Worker or text rewriting.
  */
 
-export const VEDIC_PRONUNCIATION_VERSION = "1.0.0";
+export const VEDIC_PRONUNCIATION_VERSION = "1.1.0";
 export const UNICODE_REFERENCE_VERSION = "18.0.0";
 const cp = hex => String.fromCodePoint(parseInt(hex, 16));
 const codePointOf = character => "U+" + character.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
@@ -279,11 +279,208 @@ const VIRAMA = "्", NUKTA = "़";
 const JOINERS = new Set(["‍","‌"]);
 const MARK_SET = new Set([
   ...VOWEL_SIGN_SET,
-  ...CORE_SCRIPT_SIGNS.filter(item=>["nasalization","special-nasalization","orthographic-mark","virama","vedic-accent","accent-or-transliteration-mark"].includes(item.category)).map(item=>item.character),
+  ...CORE_SCRIPT_SIGNS.filter(item=>["nasalization","special-nasalization","visarga","orthographic-mark","virama","vedic-accent","accent-or-transliteration-mark"].includes(item.category)).map(item=>item.character),
   ...VEDIC_EXTENSIONS.filter(item=>item.category.includes("accent")||item.category.includes("tone")||item.category.includes("nasalization")||item.category.includes("visarga")).map(item=>item.character),
   ...DEVANAGARI_EXTENDED.filter(item=>item.category.includes("cantillation")||item.category==="nasalization").map(item=>item.character),
   NUKTA
 ]);
+
+
+export const VEDIC_PRONUNCIATION_CONTRACT_VERSION = "1.1.0";
+
+const CONSONANT_FEATURE_BY_CHARACTER = new Map();
+CONSONANT_GROUPS.forEach((group, groupIndex) => {
+  group.characters.forEach((character, characterIndex) => {
+    let feature;
+    if (groupIndex <= 4) {
+      if (characterIndex === 4) {
+        feature = {placeId:group.id,place:group.place,manner:"nasal",voicing:"voiced",aspiration:"unaspirated",series:"fifth-nasal",evidenceLevel:"traditional-articulation-class"};
+      } else {
+        const series=[
+          {voicing:"voiceless",aspiration:"unaspirated"},
+          {voicing:"voiceless",aspiration:"aspirated"},
+          {voicing:"voiced",aspiration:"unaspirated"},
+          {voicing:"voiced",aspiration:"aspirated"}
+        ][characterIndex];
+        feature={placeId:group.id,place:group.place,manner:"stop",voicing:series.voicing,aspiration:series.aspiration,series:["first","second","third","fourth"][characterIndex],evidenceLevel:"traditional-articulation-class"};
+      }
+    } else if (groupIndex===5) {
+      const places={"य":"palatal","र":"retroflex","ल":"dental","व":"labiodental-or-labial"};
+      feature={placeId:places[character],manner:"approximant",voicing:"voiced",aspiration:"not-applicable",evidenceLevel:"traditional-articulation-class"};
+    } else {
+      const places={"श":"palatal","ष":"retroflex","स":"dental","ह":"glottal-or-context-dependent"};
+      feature={placeId:places[character],manner:"fricative",voicing:character==="ह"?"context-dependent":"voiceless",aspiration:"not-applicable",evidenceLevel:character==="ह"?"requires-context-review":"traditional-articulation-class"};
+    }
+    CONSONANT_FEATURE_BY_CHARACTER.set(character,Object.freeze(feature));
+  });
+});
+const VOWEL_INFO_BY_CHARACTER=new Map(VOWELS.map(item=>[item.character,item]));
+const VOWEL_SIGN_INFO_BY_CHARACTER=new Map(VOWEL_SIGNS.map(item=>[item.character,item]));
+const POSTPOSED_SIGN_CATEGORIES=new Set(["nasalization","special-nasalization","visarga","vedic-accent","accent-or-transliteration-mark"]);
+const SHAKHA_ALIASES=Object.freeze({"shaakala":"rigveda-shakala","shakala":"rigveda-shakala","rigveda-shakala":"rigveda-shakala"});
+function normalizeShakhaIdentifier(value){
+  if(typeof value!=="string"||!value.trim())return null;
+  const normalized=value.trim().toLowerCase();
+  return SHAKHA_ALIASES[normalized]||normalized;
+}
+function getVowelFeature(character,source){
+  const independent=VOWEL_INFO_BY_CHARACTER.get(character);
+  if(independent)return Object.freeze({character,vowelId:independent.id,label:independent.label,length:independent.teachingMatras===1?"short":"long",teachingMatras:independent.teachingMatras,source,evidenceLevel:"orthographic-vowel-identity"});
+  const sign=VOWEL_SIGN_INFO_BY_CHARACTER.get(character);
+  if(sign){
+    const vowel=VOWEL_INFO_BY_CHARACTER.get(sign.vowel);
+    return Object.freeze({character,vowel:sign.vowel,vowelId:vowel?vowel.id:null,label:sign.label,length:vowel&&vowel.teachingMatras===1?"short":"long",teachingMatras:vowel?vowel.teachingMatras:null,source,evidenceLevel:"orthographic-vowel-sign"});
+  }
+  return null;
+}
+function analyzeOrthographicUnit(unit,unitIndex){
+  const characters=Array.from(unit.text),consonants=[],signs=[],vowelSigns=[];
+  let independentVowel=null;
+  characters.forEach((character,localIndex)=>{
+    const consonant=CONSONANT_FEATURE_BY_CHARACTER.get(character);
+    if(consonant)consonants.push(Object.freeze({character,localCodePointIndex:localIndex,codePoint:codePointOf(character),...consonant}));
+    const info=CHARACTER_INFO.get(character);
+    if(info&&POSTPOSED_SIGN_CATEGORIES.has(info.category))signs.push(Object.freeze({character,codePoint:codePointOf(character),category:info.category,name:info.name||null,localCodePointIndex:localIndex}));
+    const vowelSign=getVowelFeature(character,"vowel-sign");
+    if(vowelSign&&VOWEL_SIGN_INFO_BY_CHARACTER.has(character))vowelSigns.push(vowelSign);
+    if(localIndex===0&&VOWEL_INFO_BY_CHARACTER.has(character))independentVowel=getVowelFeature(character,"independent-vowel");
+  });
+  let vowelNucleus=null;
+  if(vowelSigns.length)vowelNucleus=vowelSigns[vowelSigns.length-1];
+  else if(independentVowel)vowelNucleus=independentVowel;
+  else if(consonants.length&&characters[characters.length-1]!==VIRAMA){
+    const inherent=VOWEL_INFO_BY_CHARACTER.get("अ");
+    vowelNucleus=Object.freeze({character:null,vowel:"अ",vowelId:inherent.id,label:inherent.label,length:"short",teachingMatras:1,source:"inherent-vowel",evidenceLevel:"orthographic-inherent-vowel"});
+  }
+  return Object.freeze({
+    index:unitIndex,text:unit.text,startCodePointIndex:unit.startCodePointIndex,endCodePointIndex:unit.endCodePointIndex,codePointLength:unit.codePointLength,
+    consonants:Object.freeze(consonants),vowelNucleus,vowelSigns:Object.freeze(vowelSigns),postposedSigns:Object.freeze(signs),
+    endsInVirama:characters[characters.length-1]===VIRAMA,
+    phonemeSequence:null,phonemeSequenceStatus:"not-inferred",syllableBoundary:null,syllableBoundaryStatus:"not-inferred",
+    analysisLevel:"orthographic-feature-analysis"
+  });
+}
+export function analyzeAksharaPhonetics(text,options={}){
+  if(typeof text!=="string")throw new TypeError("analyzeAksharaPhonetics() में text string आवश्यक है।");
+  if(!options||typeof options!=="object"||Array.isArray(options))throw new TypeError("analyzeAksharaPhonetics() के options Object होने चाहिए।");
+  const segmented=segmentDevanagariAksharas(text);
+  const orthographicUnits=Object.freeze(segmented.map(analyzeOrthographicUnit));
+  return Object.freeze({
+    originalText:text,originalTextPreserved:true,analysisLevel:"orthographic-feature-analysis",orthographicUnits,
+    aksharaCount:orthographicUnits.length,
+    consonantFeatureCount:orthographicUnits.reduce((n,u)=>n+u.consonants.length,0),
+    vowelNucleusCount:orthographicUnits.filter(u=>u.vowelNucleus).length,
+    postposedSignCount:orthographicUnits.reduce((n,u)=>n+u.postposedSigns.length,0),
+    phonemeSequence:null,phonemeSequenceStatus:"not-inferred",
+    syllableBoundaries:Object.freeze([]),syllableBoundaryStatus:"not-inferred",
+    ipa:null,ipaStatus:"not-inferred",shakha:normalizeShakhaIdentifier(options.shakha),
+    note:"यह देवनागरी orthography से निकला structured feature analysis है; यह पूर्ण phonetic transcription, IPA या श्रव्य उच्चारण का प्रमाण नहीं है।"
+  });
+}
+function tokenizePronunciationWords(text){
+  const matcher=/[\u0900-\u097F\uA8E0-\uA8FF\u{11B00}-\u{11B0A}\u{1CD0}-\u{1CFA}]+/gu;
+  return Array.from(text.matchAll(matcher),match=>{
+    const startCodePointIndex=Array.from(text.slice(0,match.index)).length;
+    const endUtf16Index=match.index+match[0].length;
+    return Object.freeze({text:match[0],normalized:match[0].normalize("NFC"),startUtf16Index:match.index,endUtf16Index,startCodePointIndex,endCodePointIndex:startCodePointIndex+Array.from(match[0]).length});
+  });
+}
+function candidateSequence(entry){
+  const raw=entry&&entry.context&&entry.context.requiredSequence;
+  if(!Array.isArray(raw)||!raw.length||raw.some(item=>typeof item!=="string"||!item.trim()))return [];
+  return raw.map(item=>item.normalize("NFC").trim());
+}
+function findCandidateOccurrences(tokens,entry){
+  const term=String(entry.term||"").normalize("NFC").trim();
+  if(!term)return [];
+  const matchType=entry.matchType||"exact";
+  if(matchType==="exact")return tokens.filter(token=>token.normalized===term).map(token=>({first:token,last:token,termToken:token,sequence:[term]}));
+  if(matchType!=="contextual-exact")return [];
+  const sequence=candidateSequence(entry);
+  if(!sequence.length||sequence.filter(item=>item===term).length!==1)return [];
+  const matches=[];
+  for(let start=0;start<=tokens.length-sequence.length;start++){
+    let valid=true;
+    for(let offset=0;offset<sequence.length;offset++){
+      if(tokens[start+offset].normalized!==sequence[offset]){valid=false;break;}
+    }
+    if(valid){
+      const termOffset=sequence.indexOf(term);
+      matches.push({first:tokens[start],last:tokens[start+sequence.length-1],termToken:tokens[start+termOffset],sequence});
+    }
+  }
+  return matches;
+}
+export function analyzePronunciationCandidates(text,candidates,options={}){
+  if(typeof text!=="string")throw new TypeError("analyzePronunciationCandidates() में text string आवश्यक है।");
+  if(!Array.isArray(candidates))throw new TypeError("Pronunciation candidates Array होना चाहिए।");
+  if(!options||typeof options!=="object"||Array.isArray(options))throw new TypeError("analyzePronunciationCandidates() के options Object होने चाहिए।");
+  const tokens=tokenizePronunciationWords(text),requestedShakha=normalizeShakhaIdentifier(options.shakha);
+  const matches=[],contextRequired=[],rejected=[],conflicts=[],inactive=[],seenIds=new Set(),seenIdentities=new Set();
+  candidates.forEach((entry,candidateIndex)=>{
+    if(!entry||typeof entry!=="object"||Array.isArray(entry)||typeof entry.id!=="string"||!entry.id.trim()||typeof entry.term!=="string"||!entry.term.trim()){
+      rejected.push(Object.freeze({candidateIndex,reason:"invalid-candidate-shape"}));return;
+    }
+    if(seenIds.has(entry.id)){conflicts.push(Object.freeze({id:entry.id,reason:"duplicate-candidate-id"}));return;}
+    seenIds.add(entry.id);
+    if(!entry.activation||entry.activation.enabled!==true||entry.activation.lookupEnabled!==true){
+      inactive.push(Object.freeze({id:entry.id,reason:"candidate-lookup-disabled"}));return;
+    }
+    const scope=entry.scope||(entry.context&&entry.context.scope)||"general";
+    const shakha=normalizeShakhaIdentifier(entry.context&&entry.context.shakha);
+    if(!["general","shakha-specific"].includes(scope)||(scope==="shakha-specific"&&!shakha)||(scope==="general"&&shakha)){
+      rejected.push(Object.freeze({id:entry.id,reason:"invalid-scope-or-shakha"}));return;
+    }
+    const identity=[
+      entry.term.normalize("NFC"),entry.matchType||"exact",scope,shakha||"",
+      candidateSequence(entry).join("|"),
+      Array.isArray(entry.voiceLocales)?entry.voiceLocales.join("|"):"",
+      entry.voiceProfile&&entry.voiceProfile.engine||"",
+      entry.voiceProfile&&entry.voiceProfile.voiceURI||"",
+      entry.voiceProfile&&entry.voiceProfile.locale||""
+    ].join("\u0000");
+    if(seenIdentities.has(identity)){conflicts.push(Object.freeze({id:entry.id,reason:"duplicate-candidate-identity"}));return;}
+    seenIdentities.add(identity);
+    const occurrences=findCandidateOccurrences(tokens,entry);
+    if(!occurrences.length)return;
+    if(scope==="shakha-specific"&&!requestedShakha){
+      contextRequired.push(Object.freeze({id:entry.id,term:entry.term,requiredShakha:shakha,reason:"explicit-shakha-required",
+        occurrences:Object.freeze(occurrences.map(item=>Object.freeze({startCodePointIndex:item.termToken.startCodePointIndex,endCodePointIndex:item.termToken.endCodePointIndex})))}));
+      return;
+    }
+    if(scope==="shakha-specific"&&requestedShakha!==shakha){
+      rejected.push(Object.freeze({id:entry.id,term:entry.term,reason:"shakha-mismatch",requiredShakha:shakha,requestedShakha}));return;
+    }
+    occurrences.forEach(item=>matches.push(Object.freeze({
+      id:entry.id,term:entry.term,matchType:entry.matchType||"exact",scope,shakha,sequence:Object.freeze(item.sequence.slice()),
+      startUtf16Index:item.first.startUtf16Index,endUtf16Index:item.last.endUtf16Index,
+      startCodePointIndex:item.first.startCodePointIndex,endCodePointIndex:item.last.endCodePointIndex,
+      termStartCodePointIndex:item.termToken.startCodePointIndex,termEndCodePointIndex:item.termToken.endCodePointIndex,
+      candidateOnly:true,speechApplicationEnabled:Boolean(entry.speechApplication&&entry.speechApplication.enabled===true)
+    })));
+  });
+  const ranges=new Map();
+  matches.forEach(match=>{
+    const key=String(match.startCodePointIndex)+":"+String(match.endCodePointIndex);
+    const values=ranges.get(key)||[];values.push(match);ranges.set(key,values);
+  });
+  const conflictedIds=new Set();
+  ranges.forEach((values,range)=>{
+    if(values.length>1){
+      values.forEach(item=>conflictedIds.add(item.id));
+      conflicts.push(Object.freeze({range,reason:"overlapping-candidate-matches",candidateIds:Object.freeze(values.map(item=>item.id))}));
+    }
+  });
+  const safeMatches=matches.filter(item=>!conflictedIds.has(item.id));
+  return Object.freeze({
+    originalText:text,originalTextPreserved:true,candidateCount:candidates.length,matchedCount:safeMatches.length,
+    matches:Object.freeze(safeMatches),contextRequired:Object.freeze(contextRequired),rejected:Object.freeze(rejected),
+    inactive:Object.freeze(inactive),conflicts:Object.freeze(conflicts),
+    unmatchedCandidateCount:Math.max(0,candidates.length-safeMatches.length-contextRequired.length-rejected.length-inactive.length-conflicts.filter(item=>item.id).length),
+    speechText:text,speechTextModified:false,
+    note:"Candidate matching केवल lookup और analysis है; इससे Native TTS output बदलने की अनुमति नहीं मिलती।"
+  });
+}
 
 export function getCharacterInfo(character){
   if(typeof character!=="string"||Array.from(character).length!==1) return Object.freeze({found:false,error:"एक Unicode code point वाला character दें।"});
@@ -401,11 +598,14 @@ export function analyzeVedicText(text,options={}){
   });
   const words=findWords(text),knownWords=words.filter(item=>item.dictionaryEntry);
   const conjuncts=analyzeConjuncts(text),matras=analyzeMatras(text),accents=analyzeAccentMarks(text,options);
+  const phoneticStructure=analyzeAksharaPhonetics(text,options);
   const hasVedicExtensions=characters.some(character=>{const point=character.codePointAt(0);return point>=0x1cd0&&point<=0x1cfa;});
   const hasSamavedaExtended=characters.some(character=>{const point=character.codePointAt(0);return point>=0xa8e0&&point<=0xa8f7;});
   return Object.freeze({
     originalText:text,originalCodePoints:Object.freeze(codePoints),codePointCount:characters.length,
     characterCounts:Object.freeze({...characterCounts}),blockCounts:Object.freeze({...blockCounts}),
+    aksharas:phoneticStructure.orthographicUnits,phoneticStructure,
+    phoneticStructureStatus:phoneticStructure.analysisLevel,
     vowels:Object.freeze(codePoints.filter(item=>item.category==="vowel")),
     consonants:Object.freeze(codePoints.filter(item=>item.category==="consonant"||item.category==="vedic-additional-consonant")),
     words:Object.freeze(words),knownDifficultWords:Object.freeze(knownWords),
@@ -436,7 +636,9 @@ export function getPronunciationDiagnostics(text,options={}){
   const analysis=analyzeVedicText(text,options);
   return Object.freeze({
     version:VEDIC_PRONUNCIATION_VERSION,unicodeVersion:UNICODE_REFERENCE_VERSION,generatedAt:new Date().toISOString(),
-    codePointCount:analysis.codePointCount,wordCount:analysis.words.length,knownDifficultWordCount:analysis.knownDifficultWords.length,
+    codePointCount:analysis.codePointCount,wordCount:analysis.words.length,aksharaCount:analysis.aksharas.length,
+    phoneticStructureStatus:analysis.phoneticStructureStatus,phonemeSequenceInferred:false,syllableBoundariesInferred:false,
+    knownDifficultWordCount:analysis.knownDifficultWords.length,
     unlistedWordCount:analysis.unlistedWords.length,conjunctCount:analysis.conjuncts.length,matraCount:analysis.matras.total,
     accentMarkCount:analysis.accentMarks.length,unclassifiedMarkCount:analysis.unclassifiedMarks.length,
     requiresBranchContext:analysis.needsBranchContext,originalTextPreserved:analysis.originalTextPreserved,
@@ -494,6 +696,48 @@ export function selfTest(){
   add("PUNCT-001-DANDA",getCharacterInfo("।").category==="punctuation","दण्ड की पहचान।");
   add("PUNCT-002-DOUBLE-DANDA",getCharacterInfo("॥").category==="punctuation","द्विदण्ड की पहचान।");
   add("DIAG-001-COVERAGE",getKnowledgeBaseCoverage().vedicExtensions===43&&getKnowledgeBaseCoverage().devanagariExtended===32,"कवरेज मेटाडेटा सूची से मेल खाता है।");
+
+  const candidateFixtures=[
+    {id:"bhujanga-conjunct",term:"भुजङ्ग",matchType:"exact",scope:"general",context:{scope:"general",shakha:null,requiredSequence:null},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}},
+    {id:"vijrimbhana-long-form",term:"विजृम्भणामधुव्रतम्",matchType:"exact",scope:"general",context:{scope:"general",shakha:null,requiredSequence:null},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}},
+    {id:"sadashivam-context",term:"सदाशिवं",matchType:"contextual-exact",scope:"general",context:{scope:"general",shakha:null,requiredSequence:["सदाशिवं","भजे"]},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}},
+    {id:"agnih-visarga",term:"अग्निः",matchType:"exact",scope:"shakha-specific",context:{scope:"shakha-specific",shakha:"shaakala",requiredSequence:null},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}},
+    {id:"devaam-anunasika",term:"देवाँ",matchType:"exact",scope:"shakha-specific",context:{scope:"shakha-specific",shakha:"shaakala",requiredSequence:null},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}},
+    {id:"nutanairuta-vowel-sequence",term:"नूतनैरुत",matchType:"exact",scope:"shakha-specific",context:{scope:"shakha-specific",shakha:"shaakala",requiredSequence:null},activation:{enabled:true,lookupEnabled:true},speechApplication:{enabled:false}}
+  ];
+  const sixAnalyses=candidateFixtures.map(candidate=>({candidate,result:analyzeAksharaPhonetics(candidate.term,{shakha:candidate.context.shakha||null})}));
+  sixAnalyses.forEach(({candidate,result})=>{
+    add("LEX-"+candidate.id.toUpperCase()+"-AKSHARA-ANALYSIS",
+      result.originalTextPreserved&&result.orthographicUnits.length>0&&result.phonemeSequence===null,
+      "Candidate का orthographic feature analysis; phoneme sequence अनुमानित नहीं।");
+  });
+  const candidateInputs=[["भुजङ्ग",{}],["विजृम्भणामधुव्रतम्",{}],["सदाशिवं भजे",{}],["अग्निः",{shakha:"shaakala"}],["देवाँ",{shakha:"rigveda-shakala"}],["नूतनैरुत",{shakha:"shaakala"}]];
+  candidateInputs.forEach(([text,options],index)=>{
+    const result=analyzePronunciationCandidates(text,[candidateFixtures[index]],options);
+    add("LEX-CANDIDATE-"+String(index+1).padStart(2,"0")+"-MATCH",
+      result.matches.length===1&&result.matches[0].candidateOnly&&result.speechText===text&&result.speechTextModified===false,
+      "सटीक candidate mapping; speech text अपरिवर्तित।");
+  });
+  const missingShakha=analyzePronunciationCandidates("अग्निः",[candidateFixtures[3]],{});
+  add("LEX-SHAKHA-REQUIRED",missingShakha.matches.length===0&&missingShakha.contextRequired.length===1,"शाखा-विशिष्ट candidate बिना स्पष्ट शाखा सक्रिय match नहीं होता।");
+  const mismatchedShakha=analyzePronunciationCandidates("अग्निः",[candidateFixtures[3]],{shakha:"kathaka"});
+  add("LEX-SHAKHA-MISMATCH",mismatchedShakha.matches.length===0&&mismatchedShakha.rejected.some(item=>item.reason==="shakha-mismatch"),"गलत शाखा पर candidate अस्वीकार।");
+  const substringOnly=analyzePronunciationCandidates("भुजङ्गतुङ्ग",[candidateFixtures[0]],{});
+  add("LEX-EXACT-TOKEN-ONLY",substringOnly.matches.length===0,"बड़े शब्द के भीतर substring match स्वीकार नहीं।");
+  const contextualMismatch=analyzePronunciationCandidates("सदाशिवं नमः",[candidateFixtures[2]],{});
+  add("LEX-CONTEXT-REQUIRED-SEQUENCE",contextualMismatch.matches.length===0,"Contextual candidate में निर्धारित पूरा शब्द-क्रम आवश्यक।");
+  const visargaSegments=segmentDevanagariAksharas("अग्निः").map(item=>item.text);
+  add("AKSHARA-VISARGA-ATTACHED",visargaSegments.includes("ग्निः")&&!visargaSegments.includes("ः"),"विसर्ग को पूर्ववर्ती अक्षर-खंड के साथ रखा गया।");
+  const phoneticBhujanga=analyzeAksharaPhonetics("भुजङ्ग");
+  const ngaFeature=phoneticBhujanga.orthographicUnits.flatMap(item=>item.consonants).find(item=>item.character==="ङ");
+  add("PHONETIC-VELAR-NASAL",Boolean(ngaFeature&&ngaFeature.placeId==="velar"&&ngaFeature.manner==="nasal"),"ङ को कण्ठ्य अनुनासिक feature के रूप में पहचाना।");
+  const phoneticRitva=analyzeAksharaPhonetics("विजृम्भणामधुव्रतम्");
+  add("PHONETIC-R-VOWEL",phoneticRitva.orthographicUnits.some(item=>item.vowelNucleus&&item.vowelNucleus.vowelId==="vocalic-r"),"ऋ-मात्रा को vocalic-r vowel identity से पहचाना।");
+  const nasalCompare=analyzeAksharaPhonetics("देवाँ");
+  add("PHONETIC-CANDRABINDU",nasalCompare.orthographicUnits.some(item=>item.postposedSigns.some(mark=>mark.character==="ँ"&&mark.category==="nasalization")),"चन्द्रबिन्दु को अलग postposed nasalization sign के रूप में पहचाना।");
+  const immutable=analyzeAksharaPhonetics("अ॑ग्निमीळे");
+  add("PHONETIC-ORIGINAL-PRESERVED",immutable.originalText==="अ॑ग्निमीळे"&&immutable.phonemeSequence===null&&immutable.ipa===null,"विशेष चिह्नों सहित मूल पाठ सुरक्षित; IPA/phoneme अनुमान नहीं।");
+
   const failed=results.filter(item=>!item.passed);
   return Object.freeze({
     module:"vedic-sanskrit-pronunciation",version:VEDIC_PRONUNCIATION_VERSION,
@@ -506,5 +750,6 @@ export const VEDIC_PRONUNCIATION_API = Object.freeze({
   version:VEDIC_PRONUNCIATION_VERSION,unicodeVersion:UNICODE_REFERENCE_VERSION,
   getCharacterInfo,getVedicAccentInfo,findPronunciation,segmentDevanagariAksharas,
   analyzeConjuncts,analyzeMatras,analyzeAccentMarks,analyzeVedicText,prepareVedicSpeech,
-  getPronunciationDiagnostics,getKnowledgeBaseCoverage,selfTest
+  getPronunciationDiagnostics,getKnowledgeBaseCoverage,analyzeAksharaPhonetics,
+  analyzePronunciationCandidates,selfTest
 });
