@@ -1,7 +1,7 @@
 {
   "schema": "swar-sadhika.sanskrit-pronunciation-lexicon",
   "schemaVersion": 1,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "language": "sa",
   "script": "Devanagari",
   "identificationCode": "SWR-TTS-LEXICON-01",
@@ -28,7 +28,35 @@
       "context and match rule have been reviewed"
     ],
     "unreviewedEntriesActive": false,
-    "fallback": "मूल संस्कृत पाठ को ज्यों का त्यों Native TTS को दें।"
+    "fallback": "जब तक speechApplication की सभी शर्तें प्रमाणित न हों, मूल संस्कृत पाठ को ज्यों का त्यों Native TTS को दें।",
+    "candidateActivation": {
+      "enabled": true,
+      "meaning": "सभी छह वैध Entries candidate lookup, phonetic analysis और review workflow के लिए सक्रिय रहेंगी। यह Native TTS में उच्चारण-परिवर्तन की अनुमति नहीं है।",
+      "appliesToStatuses": [
+        "draft",
+        "needs-review",
+        "reviewed"
+      ],
+      "doesNotAuthorizeSpeechRewrite": true,
+      "candidateMustRemainTraceable": true
+    },
+    "speechApplicationRequires": [
+      "reviewStatus=reviewed",
+      "source.primarySourceVerified=true",
+      "source.primarySource is a complete verified primary-source citation",
+      "phoneticStructure.status=verified",
+      "phoneticStructure.orthographicUnits and phonemeSequence are non-empty",
+      "phonemeReference.status=verified",
+      "nativeSpeechText is a non-empty string",
+      "voiceLocales contains voiceProfile.locale",
+      "voiceProfile.testStatus=passed",
+      "voiceProfile.testEvidence records reproducible Android Chrome listening test",
+      "context and match rule have been reviewed",
+      "no conflicting active entry exists"
+    ],
+    "activationSemantics": "activation.enabled=true का अर्थ केवल candidate lookup, analysis और review के लिए उपलब्ध होना है। Native TTS output में परिवर्तन केवल speechApplication.enabled=true और सभी speechApplicationRequires शर्तें पूरी होने पर अनुमत है।",
+    "unreviewedEntriesCandidateActive": true,
+    "unreviewedEntriesSpeechActive": false
   },
   "matchingPolicy": {
     "unicodeNormalization": "NFC",
@@ -38,8 +66,14 @@
     ],
     "substringMatching": false,
     "fuzzyMatching": false,
-    "duplicateIdentity": "term + scope + shakha + requiredSequence + voiceLocales",
-    "conflictingActiveEntries": "किसी भी अस्पष्ट या परस्पर-विरोधी सक्रिय Entry को अस्वीकार करें।"
+    "duplicateIdentity": "term + matchType + scope + context.shakha + context.requiredSequence + voiceLocales + voiceProfile.engine + voiceProfile.voiceURI + voiceProfile.locale",
+    "conflictingActiveEntries": "किसी भी अस्पष्ट या परस्पर-विरोधी सक्रिय Entry को अस्वीकार करें।",
+    "exactRule": "NFC-normalized complete-token equality only; substring and fuzzy matching prohibited.",
+    "contextualExactRule": "NFC-normalized complete-token sequence equality; term must occur exactly once in context.requiredSequence.",
+    "scopeRules": {
+      "general": "context.shakha must be null.",
+      "shakha-specific": "context.shakha must be non-empty and must match an explicitly selected Shakha before contextual use."
+    }
   },
   "entries": [
     {
@@ -92,12 +126,22 @@
         "reportedReference": null,
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "ङ्ग संयुक्ताक्षर के कण्ठ्य अनुनासिक तथा घोष व्यंजन संबंधी मार्गदर्शन की स्रोत-समीक्षा आवश्यक है。"
+        "sourceNote": "ङ्ग संयुक्ताक्षर के कण्ठ्य अनुनासिक तथा घोष व्यंजन संबंधी मार्गदर्शन की स्रोत-समीक्षा आवश्यक है。",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     },
     {
@@ -150,12 +194,22 @@
         "reportedReference": null,
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "जृ में ऋ-स्वर, म्भ महाप्राण घोष और मूर्धन्य ण संबंधी मार्गदर्शन की समीक्षा आवश्यक है।"
+        "sourceNote": "जृ में ऋ-स्वर, म्भ महाप्राण घोष और मूर्धन्य ण संबंधी मार्गदर्शन की समीक्षा आवश्यक है।",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     },
     {
@@ -213,12 +267,22 @@
         "reportedReference": null,
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "अनुस्वार के संदर्भ-सापेक्ष नासिक्य रूप का सत्यापन आवश्यक है।"
+        "sourceNote": "अनुस्वार के संदर्भ-सापेक्ष नासिक्य रूप का सत्यापन आवश्यक है।",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     },
     {
@@ -254,15 +318,15 @@
         "testedAt": null
       },
       "context": {
-        "scope": "general",
+        "scope": "shakha-specific",
         "shakha": "shaakala",
-        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "patha": null,
         "requiredSequence": null,
         "precedingWords": [],
         "followingWords": [],
         "notes": "शाखा और पाठ-रूप निश्चित होने तक कोई विशेष वाचन रूप लागू नहीं होगा।"
       },
-      "scope": "general",
+      "scope": "shakha-specific",
       "source": {
         "type": "existing-knowledge-document",
         "documentId": "sanskrit-vedic-pronunciation-v1",
@@ -271,12 +335,22 @@
         "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "ग्नि संयुक्ताक्षर और पदान्त विसर्ग के निर्देश की मूल ऋग्वेदीय पाठ से पुष्टि आवश्यक है।"
+        "sourceNote": "ग्नि संयुक्ताक्षर और पदान्त विसर्ग के निर्देश की मूल ऋग्वेदीय पाठ से पुष्टि आवश्यक है।",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     },
     {
@@ -312,15 +386,15 @@
         "testedAt": null
       },
       "context": {
-        "scope": "general",
+        "scope": "shakha-specific",
         "shakha": "shaakala",
-        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "patha": null,
         "requiredSequence": null,
         "precedingWords": [],
         "followingWords": [],
         "notes": "चन्द्रबिन्दु और अनुस्वार को समान मानकर प्रतिस्थापित नहीं करना है।"
       },
-      "scope": "general",
+      "scope": "shakha-specific",
       "source": {
         "type": "existing-knowledge-document",
         "documentId": "sanskrit-vedic-pronunciation-v1",
@@ -329,12 +403,22 @@
         "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "चन्द्रबिन्दु और नासिक्य स्वर के ध्वन्यात्मक स्वरूप की पुष्टि आवश्यक है।"
+        "sourceNote": "चन्द्रबिन्दु और नासिक्य स्वर के ध्वन्यात्मक स्वरूप की पुष्टि आवश्यक है।",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     },
     {
@@ -370,15 +454,15 @@
         "testedAt": null
       },
       "context": {
-        "scope": "general",
+        "scope": "shakha-specific",
         "shakha": "shaakala",
-        "patha": "संहिता-पाठ संदर्भ अभी स्वतंत्र रूप से सत्यापित नहीं",
+        "patha": null,
         "requiredSequence": null,
         "precedingWords": [],
         "followingWords": [],
         "notes": "स्वर-क्रम और पाठ-सीमा की समीक्षा लंबित है।"
       },
-      "scope": "general",
+      "scope": "shakha-specific",
       "source": {
         "type": "existing-knowledge-document",
         "documentId": "sanskrit-vedic-pronunciation-v1",
@@ -387,13 +471,89 @@
         "reportedReference": "ऋग्वेद शाकल 1.1.2 (मौजूदा Guidance में दर्ज; प्राथमिक पाठ से स्वतंत्र पुष्टि लंबित)",
         "primarySourceVerified": false,
         "sourceReviewStatus": "reviewed",
-        "sourceNote": "दीर्घ ऊ, ऐ और स्वर-संयोग के क्रम की पुष्टि आवश्यक है।"
+        "sourceNote": "दीर्घ ऊ, ऐ और स्वर-संयोग के क्रम की पुष्टि आवश्यक है।",
+        "primarySource": null
       },
       "reviewStatus": "needs-review",
       "activation": {
+        "enabled": true,
+        "mode": "candidate-only",
+        "lookupEnabled": true,
+        "analysisEnabled": true,
+        "reviewEnabled": true,
+        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+      },
+      "speechApplication": {
         "enabled": false,
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Native Voice पर वाचन परीक्षण अभी प्रमाणित नहीं हैं।"
+        "status": "pending-verification",
+        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
       }
     }
-  ]
+  ],
+  "contextPolicy": {
+    "pathaValues": [
+      "samhita",
+      "pada",
+      "krama",
+      "other"
+    ],
+    "unknownPatha": null,
+    "sequenceNormalization": "NFC",
+    "note": "व्याख्यात्मक टिप्पणी context.notes में रखें; patha में केवल मानकीकृत पाठ-प्रकार रखें।"
+  },
+  "sourceReviewPolicy": {
+    "sourceReviewStatusMeaning": "source.sourceReviewStatus केवल upstream Knowledge Entry का reviewStatus दर्ज करता है; यह प्राथमिक स्रोत का स्वतंत्र सत्यापन नहीं है।",
+    "primarySourceVerificationMeaning": "केवल source.primarySourceVerified=true और पूर्ण source.primarySource citation प्राथमिक स्रोत सत्यापन माने जाएँगे।",
+    "existingKnowledgeEntriesAreSecondaryReferences": true
+  },
+  "voiceProfilePolicy": {
+    "requiredEngine": "Web Speech API SpeechSynthesis",
+    "targetPlatform": "Android Chrome",
+    "allowedTestStatuses": [
+      "not-tested",
+      "passed",
+      "failed",
+      "inconclusive"
+    ],
+    "passRequires": [
+      "voiceName and voiceURI identify the tested local voice",
+      "locale is present and included in voiceLocales",
+      "testEvidence records test date, exact test phrase, observed result and reviewer",
+      "the recorded pronunciation is explicitly accepted for this exact nativeSpeechText"
+    ]
+  },
+  "entryContract": {
+    "requiredFields": [
+      "id",
+      "term",
+      "matchType",
+      "phoneticStructure",
+      "phonemeReference",
+      "ipa",
+      "nativeSpeechText",
+      "voiceLocales",
+      "voiceProfile",
+      "context",
+      "scope",
+      "source",
+      "reviewStatus",
+      "activation",
+      "speechApplication"
+    ],
+    "matchTypes": [
+      "exact",
+      "contextual-exact"
+    ],
+    "scopes": [
+      "general",
+      "shakha-specific"
+    ],
+    "reviewStatuses": [
+      "draft",
+      "needs-review",
+      "reviewed"
+    ],
+    "candidateActivation": "activation.enabled=true enables lookup/analysis/review only.",
+    "speechActivation": "speechApplication.enabled=true is the sole permission for compiler output replacement and requires every speechApplicationRequires condition."
+  }
 }
