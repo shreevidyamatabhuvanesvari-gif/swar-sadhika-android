@@ -31,7 +31,7 @@
       "id": "sanskrit-tts-knowledge-v1",
       "entryType": "knowledge-document",
       "title": "संस्कृत TTS प्रारंभिक ज्ञान-दस्तावेज़",
-      "documentVersion": "1.0.0",
+      "documentVersion": "1.0.1",
       "category": "pronunciation",
       "language": "sa",
       "script": "Devanagari",
@@ -42,7 +42,7 @@
       "integrationMode": "nano-server-tts-knowledge-adapter",
       "contentSchema": "swar-sadhika.sanskrit-tts-knowledge",
       "contentSchemaVersion": 1,
-      "sha256": "47e5d151de34c02a330d8769c828fed43f57a477ea27ab8c37c72815deb3e0e7",
+      "sha256": "fd05a607e6f3462cddb10af6375dd5bd941c89a48256f344f6ed27911c48f12a",
       "reviewPolicy": "only-reviewed-entries-are-exposed-as-active-guidance",
       "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
