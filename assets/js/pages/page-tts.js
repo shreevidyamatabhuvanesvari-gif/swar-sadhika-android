@@ -90,6 +90,7 @@ export async function mount(context) {
     pronunciationReady: false,
     pronunciationInfo: null,
     previewEntries: [],
+    currentSpeech: null,
     unsubscribeSpeechPreparation: null
   };
 
@@ -115,33 +116,35 @@ export async function mount(context) {
 
   function renderKnowledgeStatus(diagnostics) {
     if (!diagnostics || diagnostics.loaded !== true) {
-      setKnowledgeStatus(
-        "स्थानीय Knowledge Cache में अभी सक्रिय दस्तावेज़ उपलब्ध नहीं हैं। Nano Server पेज में JSON दस्तावेज़ डाउनलोड करें।",
-        true
-      );
+      setKnowledgeStatus("Repository Manifest में पंजीकृत JSON Knowledge दस्तावेज़ अभी सक्रिय Cache में उपलब्ध नहीं हैं। TTS उन्हें सुरक्षित रूप से Sync करने का प्रयास कर रहा है।", true);
       return;
     }
     const documentCount = Number(diagnostics.loadedDocuments) || 0;
-    const entryCount = Number(diagnostics.loadedEntries) || 0;
+    const guidanceCount = Number(diagnostics.loadedGuidanceEntries) || Number(diagnostics.loadedEntries) || 0;
+    const candidateCount = Number(diagnostics.loadedPronunciationCandidates) || 0;
+    const readyCount = Number(diagnostics.activePronunciationEntries) || 0;
     const uniqueTermCount = Number(diagnostics.uniqueTerms) || 0;
-    setKnowledgeStatus(
-      "स्थानीय Knowledge Index सक्रिय: " + documentCount + " JSON दस्तावेज़ · " +
-        entryCount + " Guidance Entries · " + uniqueTermCount + " विशिष्ट शब्द · " +
-        (diagnostics.hasPronunciationLexicon ? "Pronunciation Lexicon उपलब्ध" : "Pronunciation Lexicon अनुपलब्ध") +
-        "। वाचन में केवल Compiler द्वारा independently validated Voice-specific Rules लागू होंगे।",
-      false
-    );
+    const documentStates = Array.isArray(diagnostics.documentStates) ? diagnostics.documentStates : [];
+    const failedDocuments = documentStates.filter(item => item && item.status === "error").length;
+    const partial = diagnostics.status === "PARTIAL" || diagnostics.status === "FAILED" || failedDocuments > 0;
+    const lexiconText = diagnostics.hasPronunciationLexicon ? "Pronunciation Lexicon " + candidateCount + " Candidates" : "Pronunciation Lexicon अनुपलब्ध";
+    const message = "स्थानीय Knowledge Index सक्रिय: " + documentCount + " JSON दस्तावेज़ · " +
+      guidanceCount + " Guidance Entries · " + uniqueTermCount + " विशिष्ट शब्द · " +
+      lexiconText + " · " + readyCount + " Compiler-ready Rules। " +
+      (partial ? failedDocuments + " दस्तावेज़ों की Sync जाँच लंबित/विफल; उपलब्ध Index सुरक्षित है।" : "Manifest में पंजीकृत सभी सक्रिय JSON दस्तावेज़ पढ़े गए।") +
+      " वाचन में केवल स्वतंत्र रूप से सत्यापित Voice-specific Rules लागू होंगे।";
+    setKnowledgeStatus(message, partial || readyCount === 0);
   }
 
   async function refreshKnowledgeFromCache(reason) {
     if (state.destroyed) return null;
     const request = ++state.knowledgeRefreshSequence;
     const prefix = reason ? String(reason) + " — " : "";
-    setKnowledgeStatus(prefix + "Manifest Refresh और स्थानीय Knowledge Cache की जाँच हो रही है…", false);
+    setKnowledgeStatus(prefix + "Repository Manifest Refresh और सभी सक्रिय JSON Knowledge दस्तावेज़ों की SHA-256-सत्यापित स्थानीय Sync हो रही है…", false);
     try {
       const diagnostics = await engine.loadKnowledge({
         refreshManifest: true,
-        downloadIfMissing: false
+        downloadIfMissing: true
       });
       if (state.destroyed || request !== state.knowledgeRefreshSequence) return null;
       renderKnowledgeStatus(diagnostics);
@@ -212,7 +215,8 @@ export async function mount(context) {
   function isDevanagari(value) {
     return Array.from(String(value)).some(character => {
       const code = character.codePointAt(0);
-      return code >= 0x0900 && code <= 0x097f;
+      return (code >= 0x0900 && code <= 0x097f) || (code >= 0xa8e0 && code <= 0xa8ff) ||
+        (code >= 0x11b00 && code <= 0x11b0a) || (code >= 0x1cd0 && code <= 0x1cfa);
     });
   }
 
@@ -441,6 +445,7 @@ export async function mount(context) {
     state.userPaused = false;
     state.navigationPaused = false;
     state.waitingForNext = false;
+    state.currentSpeech = null;
     state.lines = [];
     state.index = 0;
     setLine("");
@@ -479,37 +484,22 @@ export async function mount(context) {
       return;
     }
     if (!voice || voice.localService !== true) {
-      finish("इस पंक्ति के लिए कोई उपलब्ध स्थानीय Native Voice चयनित नहीं है। Android TTS settings जाँचें।", true);
+      finish("इस पंक्ति के लिए कोई उपलब्ध स्थानीय Hindi/Sanskrit Voice चयनित नहीं है। Android TTS settings जाँचें।", true);
       return;
     }
 
-    let lineAnalysis = null, speechPreparation = null;
-    try {
-      lineAnalysis = engine.analyzeText(speechSourceText);
-      speechPreparation = engine.prepareSpeech(speechSourceText, compilerOptionsForVoice(voice));
-    } catch (error) {
-      setStatus("उच्चारण Preview उपलब्ध नहीं; Engine में मूल पाठ Fallback जाँचा जाएगा। " +
-        (error && error.message ? error.message : ""), true);
-    }
-    const validated = Boolean(speechPreparation && speechPreparation.compilerValidation &&
-      speechPreparation.compilerValidation.valid === true && speechPreparation.originalText === speechSourceText);
-    const appliedCount = validated && speechPreparation.knowledgeAppliedToSpeech ? speechPreparation.appliedRules.length : 0;
-    const confidence = validated ? speechPreparation.pronunciationConfidence : "fallback";
+    let lineAnalysis = null;
+    try { lineAnalysis = engine.analyzeText(speechSourceText); }
+    catch (error) { setStatus("पाठ विश्लेषण उपलब्ध नहीं; Engine का सुरक्षित मूल-पाठ Fallback जारी रहेगा। " + (error && error.message ? error.message : ""), true); }
     const rateValue = Number(ui.rate.value);
     const rate = Number.isFinite(rateValue) ? Math.min(1.15, Math.max(0.65, rateValue)) : 0.88;
     const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
-    const specialNotice = speechPreparation &&
-      (speechPreparation.requiresAccentAwareBackend || speechPreparation.requiresBranchContext)
-      ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।" : "";
-    const compilerNotice = appliedCount
-      ? " · " + appliedCount + " अनुमोदित Lexicon नियम लागू।"
-      : " · " + confidence + " — मूल पाठ सुरक्षित।";
     setLine(line);
-    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length +
-      " पढ़ी जा रही है: " + voice.name + " (स्थानीय Native Voice)" +
-      (numbered.removed ? " · अंतिम श्लोक-संख्या वाचन से छोड़ी गई।" : "") +
-      compilerNotice + specialNotice + (lineAnalysis ? " · " + summarizeAnalysis(lineAnalysis) : ""),
-      Boolean(confidence === "ambiguous" || (speechPreparation && speechPreparation.fallbackRules.length)));
+    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ने की तैयारी: " + voice.name +
+      " (स्थानीय Native Voice)" + (numbered.removed ? " · अंतिम श्लोक-संख्या वाचन से छोड़ी गई।" : "") +
+      (lineAnalysis ? " · " + summarizeAnalysis(lineAnalysis) : ""),
+      Boolean(lineAnalysis && (lineAnalysis.needsBranchContext || (lineAnalysis.unclassifiedMarks && lineAnalysis.unclassifiedMarks.length))));
+    state.currentSpeech = { generation, index: state.index, sourceText: speechSourceText, voice, analysis: lineAnalysis };
     state.speechInFlight = true;
     updateButtons();
     try {
@@ -521,6 +511,7 @@ export async function mount(context) {
       });
       if (generation !== state.generation || !state.active || state.destroyed) return;
       state.speechInFlight = false;
+      state.currentSpeech = null;
       if (result && result.status === "cancelled") { finish("वाचन रद्द हो गया।", true); return; }
       state.index += 1;
       if (state.navigationPaused || state.userPaused) {
@@ -530,6 +521,7 @@ export async function mount(context) {
     } catch (error) {
       if (generation !== state.generation || state.destroyed) return;
       state.speechInFlight = false;
+      state.currentSpeech = null;
       finish("पंक्ति " + (state.index + 1) + " पढ़ते समय TTS त्रुटि: " +
         (error && error.message ? error.message : "अज्ञात TTS त्रुटि"), true);
     }
@@ -541,7 +533,7 @@ export async function mount(context) {
       return;
     }
     if (!state.voiceEntries.length) {
-      setStatus("कोई सत्यापित स्थानीय Voice उपलब्ध नहीं है। Android की Text-to-Speech settings में स्थानीय Hindi voice install/enable करें।", true);
+      setStatus("कोई उपलब्ध स्थानीय Hindi/Sanskrit Voice नहीं मिली। Android की Text-to-Speech settings में स्थानीय Voice install/enable करें।", true);
       return;
     }
     const lines = ui.input.value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean);
@@ -561,6 +553,7 @@ export async function mount(context) {
     clearNextTimer();
     state.active = false;
     state.speechInFlight = false;
+    state.currentSpeech = null;
     updateButtons();
     try {
       await engine.cancel();
@@ -661,9 +654,16 @@ export async function mount(context) {
     const request = ++state.voiceRefreshSequence;
     const previousKey = ui.voice.value;
     try {
-      const voices = await engine.getVoices({ backendId: "native" });
+      let voices = [];
+      const retryDelays = [0, 140, 320, 620];
+      for (const delay of retryDelays) {
+        if (delay) await new Promise(resolve => win.setTimeout(resolve, delay));
+        if (state.destroyed || request !== state.voiceRefreshSequence) return;
+        voices = await engine.getVoices({ backendId: "native" });
+        if (Array.isArray(voices) && voices.some(voice => voice && voice.localService === true)) break;
+      }
       if (state.destroyed || request !== state.voiceRefreshSequence) return;
-      state.voices = voices.filter(voice => voice && voice.localService === true);
+      state.voices = (Array.isArray(voices) ? voices : []).filter(voice => voice && voice.localService === true);
       state.voiceEntries = createVoiceEntries(state.voices);
       ui.voice.replaceChildren();
 
@@ -692,7 +692,7 @@ export async function mount(context) {
 
       if (!state.engineReady) return;
       if (!state.voiceEntries.length) {
-        setStatus("Speech Synthesis उपलब्ध है, लेकिन कोई सत्यापित localService=true Voice नहीं मिली। Android TTS settings में स्थानीय Hindi voice install/enable करें।", true);
+        setStatus("Speech Synthesis उपलब्ध है, लेकिन कोई स्थानीय Hindi/Sanskrit Voice सूचीबद्ध नहीं हुई। Android TTS settings में Voice install/enable करें।", true);
         return;
       }
       const selected = chooseVoice(ui.input.value);
@@ -822,13 +822,36 @@ export async function mount(context) {
     );
   });
   state.unsubscribeSpeechPreparation = engine.on("speechpreparationdiagnostics", detail => {
-    if (state.destroyed) return;
-    const current = state.previewEntries[state.index];
-    if (current && detail && detail.originalText === current.speechSourceText &&
-        detail.validation && detail.validation.valid === true && typeof detail.speechText === "string") {
-      current.speechText = detail.speechText;
-      current.applied = detail.knowledgeAppliedToSpeech === true;
+    const current = state.currentSpeech;
+    if (!current || state.destroyed || !state.active || current.generation !== state.generation ||
+        current.index !== state.index || !detail || detail.originalText !== current.sourceText) return;
+    const valid = Boolean(detail.validation && detail.validation.valid === true &&
+      typeof detail.speechText === "string" && detail.speechText.trim());
+    const speechText = valid ? detail.speechText : current.sourceText;
+    const rules = Array.isArray(detail.appliedRules) ? detail.appliedRules : [];
+    const warnings = Array.isArray(detail.fallbackRules) ? detail.fallbackRules : [];
+    const diagnostics = detail.diagnostics || {};
+    const confidence = valid && diagnostics.compilerConfidence ? diagnostics.compilerConfidence : "fallback";
+    const applied = valid && detail.knowledgeAppliedToSpeech === true && rules.length > 0 && speechText !== current.sourceText;
+    const entry = state.previewEntries.find(item => item && item.index === current.index && item.speechSourceText === current.sourceText);
+    if (entry) {
+      entry.validated = valid; entry.speechText = speechText; entry.confidence = confidence;
+      entry.applied = applied; entry.rules = rules; entry.warnings = warnings;
+      entry.status = applied ? "Validated Lexicon Rule लागू" :
+        confidence === "ambiguous" ? "Ambiguous — मूल पाठ सुरक्षित" :
+        confidence === "verified" ? "Validated — मूल पाठ यथावत" : "Fallback — मूल पाठ सुरक्षित";
+      const row = previewList.querySelector('[data-line-index="' + current.index + '"]');
+      if (row) row.replaceWith(renderPreviewEntry(entry));
     }
+    const compilerNotice = applied ? " · " + rules.length + " सत्यापित Lexicon नियम लागू।" : " · " + confidence + " — मूल पाठ सुरक्षित।";
+    const specialNotice = current.analysis && (current.analysis.needsBranchContext ||
+      (current.analysis.accentMarks && current.analysis.accentMarks.length) ||
+      current.analysis.hasVedicExtensions || current.analysis.hasSamavedaExtended)
+      ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।" : "";
+    setStatus("पंक्ति " + (current.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
+      (current.voice && current.voice.name || "स्थानीय Native Voice") + compilerNotice + specialNotice +
+      (current.analysis ? " · " + summarizeAnalysis(current.analysis) : ""),
+      confidence === "ambiguous" || warnings.length > 0);
   });
   state.unsubscribeKnowledgeChange = engine.on("knowledgechange", detail => {
     if (!state.destroyed) {
