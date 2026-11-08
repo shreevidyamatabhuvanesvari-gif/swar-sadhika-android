@@ -515,11 +515,30 @@ export function compileSanskritSpeech(input, options = {}) {
       context: request.context || {}
     };
 
-    const candidates = adapter.getPronunciationEntries(originalText, pronunciationOptions);
-    if (!Array.isArray(candidates)) {
-      warnings.push(makeWarning("LEXICON_RESULT_INVALID", "Adapter ने वैध Pronunciation Entry सूची नहीं दी; मूल पाठ सुरक्षित रखा गया।", "warning"));
-      return fallbackResult(originalText, warnings, analysis);
+    const requestedShakha = pronunciationOptions.shakha;
+    const shakhaQueries = requestedShakha
+      ? Array.from(new Set([
+          requestedShakha,
+          normalizeShakha(requestedShakha),
+          normalizeShakha(requestedShakha) === "rigveda-shakala" ? "shaakala" : requestedShakha,
+          normalizeShakha(requestedShakha) === "rigveda-shakala" ? "shakala" : requestedShakha
+        ]))
+      : [null];
+    const candidateMap = new Map();
+    for (const queryShakha of shakhaQueries) {
+      const queryOptions = { ...pronunciationOptions, shakha: queryShakha || undefined };
+      const batch = adapter.getPronunciationEntries(originalText, queryOptions);
+      if (!Array.isArray(batch)) {
+        warnings.push(makeWarning("LEXICON_RESULT_INVALID", "Adapter ने वैध Pronunciation Entry सूची नहीं दी; मूल पाठ सुरक्षित रखा गया।", "warning"));
+        return fallbackResult(originalText, warnings, analysis);
+      }
+      for (const entry of batch) {
+        if (isObject(entry) && isNonEmptyString(entry.id) && !candidateMap.has(entry.id)) {
+          candidateMap.set(entry.id, entry);
+        }
+      }
     }
+    const candidates = Array.from(candidateMap.values());
     if (!candidates.length) {
       warnings.push(makeWarning("NO_VERIFIED_LEXICON_MATCH", "चयनित Voice और Context के लिए कोई सत्यापित Pronunciation Entry उपलब्ध नहीं है; Native TTS Fallback लागू है।", "warning"));
       return fallbackResult(originalText, warnings, analysis);
