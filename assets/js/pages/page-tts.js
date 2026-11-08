@@ -1,7 +1,6 @@
-/* Swar-Sadhika — TTS page module.
- * UI and line sequencing live here; pronunciation analysis and speech backends
- * are owned by tts-engine.js and its local Vedic pronunciation knowledge base.
- * Current speech backend: local Native Speech Synthesis only.
+/* Swar-Sadhika — Compiler-backed Native TTS page.
+ * Original Sanskrit is retained for display; only Engine-validated compiled
+ * speech text may be submitted to the local Native Speech Synthesis backend.
  */
 import { createTtsEngine } from "../tts/tts-engine.js";
 
@@ -27,13 +26,11 @@ export async function mount(context) {
     stop: root.querySelector("#stop-btn"),
     status: root.querySelector("#tts-status"),
     overlay: byId("line-overlay"),
-    line: byId("rainbow-line"),
-    layaToggle: null,
-    layaStatus: null
+    line: byId("rainbow-line")
   };
 
   const missing = Object.entries(ui)
-    .filter(([key, value]) => !value && !["overlay", "line", "layaToggle", "layaStatus"].includes(key))
+    .filter(([key, value]) => !value && !["overlay", "line"].includes(key))
     .map(([key]) => key);
   if (missing.length) {
     throw new Error("TTS interface में आवश्यक तत्व अनुपस्थित हैं: " + missing.join(", "));
@@ -47,6 +44,26 @@ export async function mount(context) {
   knowledgeStatus.textContent = "स्थानीय Knowledge की प्रारंभिक जाँच की जा रही है…";
   const knowledgeStatusParent = ui.status.parentNode || root;
   knowledgeStatusParent.insertBefore(knowledgeStatus, ui.status.nextSibling);
+
+  const pronunciationPreview = doc.createElement("section");
+  pronunciationPreview.className = "note tts-pronunciation-preview";
+  pronunciationPreview.setAttribute("aria-label", "उच्चारण Compiler Preview");
+  pronunciationPreview.setAttribute("data-role", "pronunciation-preview");
+  const previewHeading = doc.createElement("h3");
+  previewHeading.textContent = "उच्चारण Compiler Preview";
+  const previewIntro = doc.createElement("p");
+  previewIntro.className = "note";
+  previewIntro.textContent = "मूल संस्कृत पंक्ति स्क्रीन पर यथावत रहेगी। वाचन-पाठ केवल सभी Compiler Validation शर्तें सफल होने पर बदलेगा; अन्यथा Native TTS को मूल पंक्ति दी जाएगी।";
+  const previewSummary = doc.createElement("div");
+  previewSummary.className = "status";
+  previewSummary.setAttribute("role", "status");
+  previewSummary.setAttribute("aria-live", "polite");
+  previewSummary.textContent = "पाठ दर्ज करने पर प्रत्येक पंक्ति का उच्चारण Preview दिखेगा।";
+  const previewList = doc.createElement("div");
+  previewList.className = "tts-pronunciation-preview-list";
+  pronunciationPreview.append(previewHeading, previewIntro, previewSummary, previewList);
+  if (ui.input.parentNode) ui.input.parentNode.insertBefore(pronunciationPreview, ui.input.nextSibling);
+  else root.appendChild(pronunciationPreview);
 
   const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
@@ -65,7 +82,6 @@ export async function mount(context) {
     destroyed: false,
     voiceRefreshSequence: 0,
     unsubscribeVoices: null,
-    unsubscribePronunciationAnalysis: null,
     unsubscribePronunciationWarning: null,
     unsubscribeKnowledgeChange: null,
     unsubscribeKnowledgeError: null,
@@ -73,27 +89,9 @@ export async function mount(context) {
     knowledgeRefreshSequence: 0,
     pronunciationReady: false,
     pronunciationInfo: null,
-    lastAnalysis: null,
-    lastPronunciationReport: null,
-    layaReady: false,
-    layaEngine: null,
-    layaPlan: null,
-    layaModeActive: false
+    previewEntries: [],
+    unsubscribeSpeechPreparation: null
   };
-
-  // Optional Music Player integration. The independent module is loaded only
-  // after the user opens it; a missing module must never affect ordinary TTS.
-  let musicPlayerSection = null;
-  let musicPlayerButton = null;
-  let musicPlayerStatus = null;
-  let musicPlayerRoot = null;
-  let musicPlayerInstance = null;
-  let musicPlayerLoadPromise = null;
-  let pageVisible = true;
-  let layaLoadPromise = null;
-  let layaSection = null;
-  const musicPlayerSubscribers = new Set();
-  const MUSIC_PLAYER_HOST_CONTRACT_VERSION = 2;
 
   const FEMALE_HINTS = [
     "female", "woman", "zira", "heera", "lekha", "priya",
@@ -128,7 +126,9 @@ export async function mount(context) {
     const uniqueTermCount = Number(diagnostics.uniqueTerms) || 0;
     setKnowledgeStatus(
       "स्थानीय Knowledge Index सक्रिय: " + documentCount + " JSON दस्तावेज़ · " +
-        entryCount + " Entries · " + uniqueTermCount + " विशिष्ट शब्द। TTS Guidance में केवल reviewed निर्देश स्वीकार होंगे।",
+        entryCount + " Guidance Entries · " + uniqueTermCount + " विशिष्ट शब्द · " +
+        (diagnostics.hasPronunciationLexicon ? "Pronunciation Lexicon उपलब्ध" : "Pronunciation Lexicon अनुपलब्ध") +
+        "। वाचन में केवल Compiler द्वारा independently validated Voice-specific Rules लागू होंगे।",
       false
     );
   }
@@ -163,323 +163,6 @@ export async function mount(context) {
     }
   }
 
-  function setMusicPlayerStatus(message, warning = false) {
-    if (!musicPlayerStatus || state.destroyed) return;
-    musicPlayerStatus.textContent = String(message);
-    musicPlayerStatus.classList.toggle("warn", Boolean(warning));
-    musicPlayerStatus.setAttribute("data-state", warning ? "warning" : "info");
-  }
-
-  function getMusicPlayerText() {
-    return String(ui.input.value || "");
-  }
-
-  function getMusicPlayerVoiceMetadata() {
-    const voice = chooseVoice(getMusicPlayerText());
-    if (!voice) return null;
-    return Object.freeze({
-      name: String(voice.name || ""),
-      voiceURI: String(voice.voiceURI || ""),
-      lang: String(voice.lang || ""),
-      localService: voice.localService === true,
-      default: voice.default === true,
-      genderHint: voiceGenderHint(voice)
-    });
-  }
-
-  function getMusicPlayerSpeechSettings() {
-    const value = Number(ui.rate.value);
-    const rate = Number.isFinite(value) ? Math.min(1.15, Math.max(0.65, value)) : 0.88;
-    const voice = getMusicPlayerVoiceMetadata();
-    return Object.freeze({
-      rate,
-      lang: voice && voice.lang ? voice.lang : (isDevanagari(getMusicPlayerText()) ? "hi-IN" : "en-IN"),
-      voiceName: voice ? voice.name : "",
-      voiceGenderHint: voice ? voice.genderHint : "unknown"
-    });
-  }
-
-  function notifyMusicPlayerHostChange(reason) {
-    if (state.destroyed || musicPlayerSubscribers.size === 0) return;
-    const detail = Object.freeze({
-      reason: String(reason || "host-update"),
-      text: getMusicPlayerText(),
-      selectedVoice: getMusicPlayerVoiceMetadata(),
-      speechSettings: getMusicPlayerSpeechSettings(),
-      pronunciationReady: state.pronunciationReady
-    });
-    for (const listener of Array.from(musicPlayerSubscribers)) {
-      try {
-        listener(detail);
-      } catch (error) {
-        if (win.console && typeof win.console.warn === "function") {
-          win.console.warn("[Swar-Sadhika] Music Player host subscriber failed", error);
-        }
-      }
-    }
-  }
-
-  function createMusicPlayerHostContext(mountRoot) {
-    return Object.freeze({
-      root: mountRoot,
-      document: doc,
-      window: win,
-      hostContractVersion: MUSIC_PLAYER_HOST_CONTRACT_VERSION,
-      // Native TTS voice metadata is descriptive only; it is not PCM audio.
-      getText: getMusicPlayerText,
-      getSelectedVoice: getMusicPlayerVoiceMetadata,
-      getSpeechSettings: getMusicPlayerSpeechSettings,
-      // Local pronunciation services provide analysis, not audio samples.
-      analyzeText(text) {
-        if (!state.engineReady || !state.pronunciationReady) {
-          throw new Error("स्थानीय Sanskrit pronunciation engine अभी तैयार नहीं है।");
-        }
-        return engine.analyzeText(text == null ? getMusicPlayerText() : String(text));
-      },
-      prepareSpeech(text) {
-        if (!state.engineReady || !state.pronunciationReady) {
-          throw new Error("स्थानीय Sanskrit pronunciation engine अभी तैयार नहीं है।");
-        }
-        return engine.prepareSpeech(text == null ? getMusicPlayerText() : String(text));
-      },
-      getPronunciationKnowledgeBaseInfo() {
-        return state.pronunciationInfo || engine.getPronunciationKnowledgeBaseInfo();
-      },
-      isPronunciationReady() {
-        return Boolean(state.engineReady && state.pronunciationReady);
-      },
-      subscribe(listener) {
-        if (typeof listener !== "function") {
-          throw new TypeError("Music Player host subscriber एक function होना चाहिए।");
-        }
-        if (state.destroyed) return () => {};
-        musicPlayerSubscribers.add(listener);
-        let subscribed = true;
-        return () => {
-          if (!subscribed) return;
-          subscribed = false;
-          musicPlayerSubscribers.delete(listener);
-        };
-      },
-      setStatus(message, warning = false) {
-        setMusicPlayerStatus(message, warning);
-      }
-    });
-  }
-
-  function normalizeMusicPlayerInstance(mounted) {
-    let instance;
-    if (typeof mounted === "function") {
-      instance = { unmount: mounted };
-    } else if (mounted && typeof mounted === "object") {
-      instance = mounted;
-    } else {
-      throw new TypeError("Music Player mount(context) को lifecycle object या cleanup function लौटाना चाहिए।");
-    }
-    const hooks = ["onShow", "onHide", "unmount"];
-    for (const name of hooks) {
-      if (instance[name] != null && typeof instance[name] !== "function") {
-        throw new TypeError("Music Player lifecycle hook " + name + " function होना चाहिए।");
-      }
-    }
-    if (!hooks.some(name => typeof instance[name] === "function")) {
-      throw new TypeError("Music Player ने कोई lifecycle hook या cleanup function उपलब्ध नहीं कराया।");
-    }
-    return instance;
-  }
-
-  function installMusicPlayerHook() {
-    if (musicPlayerSection || state.destroyed) return;
-    musicPlayerSection = doc.createElement("section");
-    musicPlayerSection.className = "music-player-bridge";
-    musicPlayerSection.setAttribute("aria-label", "गायन म्यूजिक प्लेयर");
-    const intro = doc.createElement("p");
-    intro.className = "note";
-    intro.textContent = "यह स्वतंत्र Local Singing Player है। पाठ और संस्कृत उच्चारण विश्लेषण मुख्य TTS पेज से मिलेंगे; गायन निर्माण और PCM Playback की readiness Player अलग से बताएगा।";
-    const actions = doc.createElement("div");
-    actions.className = "tts-actions";
-    musicPlayerButton = doc.createElement("button");
-    musicPlayerButton.type = "button";
-    musicPlayerButton.className = "btn primary";
-    musicPlayerButton.textContent = "♫ गायन Player खोलें";
-    musicPlayerButton.addEventListener("click", loadMusicPlayer);
-    actions.appendChild(musicPlayerButton);
-    musicPlayerStatus = doc.createElement("div");
-    musicPlayerStatus.className = "status";
-    musicPlayerStatus.setAttribute("role", "status");
-    musicPlayerStatus.setAttribute("aria-live", "polite");
-    musicPlayerStatus.setAttribute("data-state", "info");
-    musicPlayerStatus.textContent = "Music Player आवश्यकता पड़ने पर लोड होगा।";
-    musicPlayerRoot = doc.createElement("div");
-    musicPlayerRoot.className = "music-player-mount";
-    musicPlayerRoot.hidden = true;
-    musicPlayerSection.append(intro, actions, musicPlayerStatus, musicPlayerRoot);
-    root.appendChild(musicPlayerSection);
-  }
-
-  async function loadMusicPlayer() {
-    if (state.destroyed || !musicPlayerRoot) return null;
-    if (musicPlayerInstance) {
-      musicPlayerRoot.hidden = false;
-      if (pageVisible && typeof musicPlayerInstance.onShow === "function") {
-        try { await musicPlayerInstance.onShow(); }
-        catch (error) {
-          setMusicPlayerStatus("Music Player फिर सक्रिय नहीं हो सका: " +
-            (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-        }
-      }
-      return musicPlayerInstance;
-    }
-    if (musicPlayerLoadPromise) return musicPlayerLoadPromise;
-    const mountRoot = musicPlayerRoot;
-    musicPlayerButton.disabled = true;
-    musicPlayerButton.textContent = "गायन Player लोड हो रहा है…";
-    setMusicPlayerStatus("स्वतंत्र Music Player मॉड्यूल लोड किया जा रहा है…");
-    const task = (async () => {
-      const moduleUrl = new URL("speech-to-singing/index.js", doc.baseURI);
-      if (moduleUrl.origin !== win.location.origin) {
-        throw new TypeError("Music Player मॉड्यूल केवल इसी GitHub Pages origin से लोड होना चाहिए।");
-      }
-      const musicModule = await import(moduleUrl.href);
-      if (state.destroyed || !mountRoot) return null;
-      if (!musicModule || typeof musicModule.mount !== "function") {
-        throw new TypeError("Music Player में mount(context) export उपलब्ध नहीं है।");
-      }
-      const mounted = await musicModule.mount(createMusicPlayerHostContext(mountRoot));
-      let instance;
-      try { instance = normalizeMusicPlayerInstance(mounted); }
-      catch (error) {
-        const cleanup = typeof mounted === "function" ? mounted :
-          (mounted && typeof mounted.unmount === "function" ? mounted.unmount.bind(mounted) : null);
-        if (cleanup) { try { await cleanup(); } catch (_) {} }
-        throw error;
-      }
-      if (state.destroyed) {
-        if (typeof instance.unmount === "function") await instance.unmount();
-        return null;
-      }
-      musicPlayerInstance = instance;
-      mountRoot.hidden = false;
-      musicPlayerButton.disabled = false;
-      musicPlayerButton.textContent = "♫ गायन Player खोलें";
-      notifyMusicPlayerHostChange("player-mounted");
-      setMusicPlayerStatus("Music Player UI मुख्य TTS पेज से जुड़ गया है। Singing Synthesis और PCM Producer की readiness अलग से सत्यापित होगी।");
-      if (!pageVisible && typeof instance.onHide === "function") {
-        try { await instance.onHide(); }
-        catch (error) {
-          setMusicPlayerStatus("पेज छिपा है, लेकिन Player onHide में समस्या आई: " +
-            (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-        }
-      }
-      return instance;
-    })();
-    musicPlayerLoadPromise = task;
-    try { return await task; }
-    catch (error) {
-      musicPlayerLoadPromise = null;
-      if (!state.destroyed) {
-        musicPlayerButton.disabled = false;
-        musicPlayerButton.textContent = "♫ गायन Player पुनः खोलें";
-        setMusicPlayerStatus("Music Player लोड नहीं हो सका। मुख्य TTS स्वतंत्र है।" +
-          (error && error.message ? " विवरण: " + error.message : ""), true);
-      }
-      return null;
-    }
-  }
-
-  function setLayaStatus(message, warning = false) {
-    if (!ui.layaStatus || state.destroyed) return;
-    ui.layaStatus.textContent = String(message);
-    ui.layaStatus.classList.toggle("warn", Boolean(warning));
-    ui.layaStatus.setAttribute("data-state", warning ? "warning" : "info");
-  }
-
-  function installNativeTtsLayaControl() {
-    if (layaSection || state.destroyed) return;
-    const section = doc.createElement("section");
-    section.className = "note";
-    section.setAttribute("aria-label", "Native TTS Laya Mode");
-    const label = doc.createElement("label");
-    label.className = "field";
-    const toggle = doc.createElement("input");
-    toggle.type = "checkbox";
-    toggle.checked = false;
-    toggle.disabled = true;
-    toggle.addEventListener("change", onLayaModeChange);
-    const caption = doc.createElement("span");
-    caption.textContent = "♫ Native TTS Laya Mode — पाठ को लयात्मक ढंग से पढ़ें";
-    label.append(toggle, caption);
-    const status = doc.createElement("div");
-    status.className = "status";
-    status.setAttribute("role", "status");
-    status.setAttribute("aria-live", "polite");
-    status.textContent = "स्थानीय Laya Engine लोड किया जा रहा है…";
-    section.append(label, status);
-    root.insertBefore(section, ui.speak.parentElement);
-    layaSection = section;
-    ui.layaToggle = toggle;
-    ui.layaStatus = status;
-  }
-
-  function onLayaModeChange() {
-    if (!ui.layaToggle) return;
-    if (state.active) {
-      ui.layaToggle.checked = state.layaModeActive;
-      return;
-    }
-    updateButtons();
-    setLayaStatus(ui.layaToggle.checked
-      ? "Laya Mode चयनित है। Play दबाने पर वर्तमान Native Voice के साथ लयात्मक वाचन शुरू होगा।"
-      : "सामान्य Native TTS चयनित है।");
-  }
-
-  async function preloadNativeTtsLayaEngine() {
-    if (state.destroyed || state.layaReady) return state.layaEngine;
-    if (layaLoadPromise) return layaLoadPromise;
-    const task = (async () => {
-      const moduleUrl = new URL("speech-to-singing/native-tts-laya-engine.js", doc.baseURI);
-      if (moduleUrl.origin !== win.location.origin) {
-        throw new TypeError("Native TTS Laya मॉड्यूल केवल इसी GitHub Pages origin से लोड होना चाहिए।");
-      }
-      const module = await import(moduleUrl.href);
-      if (state.destroyed) return null;
-      if (!module || typeof module.createNativeTtsLayaEngine !== "function") {
-        throw new TypeError("Native TTS Laya Engine का createNativeTtsLayaEngine() export उपलब्ध नहीं है।");
-      }
-      const instance = module.createNativeTtsLayaEngine();
-      const initialized = await instance.initialize();
-      if (state.destroyed) return null;
-      if (!initialized || initialized.ready !== true || !initialized.selfTest || initialized.selfTest.status !== "PASSED") {
-        throw new Error("Native TTS Laya Engine Self-Test सफल नहीं हुआ।");
-      }
-      state.layaEngine = instance;
-      state.layaReady = true;
-      if (ui.layaToggle) ui.layaToggle.disabled = false;
-      setLayaStatus("Native TTS Laya Mode तैयार है। कोई Singing Model या बाहरी AI सेवा आवश्यक नहीं है।");
-      updateButtons();
-      return instance;
-    })();
-    layaLoadPromise = task;
-    try {
-      return await task;
-    } catch (error) {
-      if (!state.destroyed) {
-        state.layaReady = false;
-        state.layaEngine = null;
-        if (ui.layaToggle) {
-          ui.layaToggle.checked = false;
-          ui.layaToggle.disabled = true;
-        }
-        setLayaStatus("Laya Mode उपलब्ध नहीं हुआ; सामान्य Native TTS स्वतंत्र रूप से चलता रहेगा। " +
-          (error && error.message ? error.message : "अज्ञात मॉड्यूल त्रुटि"), true);
-        updateButtons();
-      }
-      return null;
-    } finally {
-      if (layaLoadPromise === task) layaLoadPromise = null;
-    }
-  }
-
   function setLine(message) {
     if (ui.line) ui.line.textContent = message || "";
     if (ui.overlay) ui.overlay.classList.toggle("hidden", !message);
@@ -503,32 +186,28 @@ export async function mount(context) {
   }
 
   function analyzeCurrentText() {
-    if (state.destroyed || !state.engineReady || !state.pronunciationReady || state.active) return;
-    const text = ui.input.value;
-    if (!text.trim()) {
-      state.lastAnalysis = null;
+    if (state.destroyed) return;
+    if (!state.engineReady || state.active) {
+      renderSpeechPreview();
       return;
     }
+    const text = ui.input.value;
+    if (!text.trim()) { renderSpeechPreview(); return; }
     try {
       const analysis = engine.analyzeText(text);
-      state.lastAnalysis = analysis;
       const message = "पाठ विश्लेषण: " + summarizeAnalysis(analysis) + "। " + pronunciationReadyText();
       const warning = Boolean(analysis.needsBranchContext || (analysis.unclassifiedMarks && analysis.unclassifiedMarks.length));
-      setStatus(
-        warning
-          ? message + " वैदिक स्वराघात/अज्ञात चिह्नों का Native Voice पर शुद्ध वाचन प्रमाणित नहीं है।"
-          : message,
-        warning
-      );
+      setStatus(warning
+        ? message + " वैदिक स्वराघात/अज्ञात चिह्नों का Native Voice पर प्रमाणित वाचन उपलब्ध नहीं है; मूल पाठ सुरक्षित रहेगा।"
+        : message, warning);
     } catch (error) {
-      setStatus("पाठ विश्लेषण त्रुटि: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
+      setStatus("पाठ विश्लेषण उपलब्ध नहीं; Native TTS सुरक्षित मूल-पाठ Fallback उपयोग करेगा। " +
+        (error && error.message ? error.message : ""), true);
     }
+    renderSpeechPreview();
   }
 
-  function onTextInput() {
-    analyzeCurrentText();
-    notifyMusicPlayerHostChange("text-changed");
-  }
+  function onTextInput() { analyzeCurrentText(); }
 
   function isDevanagari(value) {
     return Array.from(String(value)).some(character => {
@@ -569,10 +248,6 @@ export async function mount(context) {
       };
     }
     return { text: line, removed: false, number: "" };
-  }
-
-  function hasVedicMarks(value) {
-    return /[\u0951\u0952\u1cda-\u1cde\u1cdf-\u1ce0]/u.test(value);
   }
 
   function voiceGenderHint(voice) {
@@ -624,10 +299,129 @@ export async function mount(context) {
     return sorted.length ? sorted[0].voice : null;
   }
 
+  function nativeVoiceProfile(voice) {
+    const userAgent = String(win.navigator && win.navigator.userAgent || "");
+    const platform = /Android/i.test(userAgent) && /(?:Chrome|CriOS)\//i.test(userAgent)
+      ? "Android Chrome" : "";
+    return {
+      engine: "Web Speech API SpeechSynthesis",
+      platform,
+      voiceName: String(voice && voice.name || ""),
+      voiceURI: String(voice && voice.voiceURI || ""),
+      locale: String(voice && voice.lang || "")
+    };
+  }
+
+  function compilerOptionsForVoice(voice) {
+    return { backendType: "native", voice, voiceProfile: nativeVoiceProfile(voice), context: Object.freeze({}) };
+  }
+
+  function previewEntryForLine(originalLine, index, voice) {
+    const numbered = stripTerminalVerseNumber(originalLine);
+    const speechSourceText = numbered.text.trim();
+    let prepared = null, failure = null;
+    if (speechSourceText && state.engineReady && voice) {
+      try { prepared = engine.prepareSpeech(speechSourceText, compilerOptionsForVoice(voice)); }
+      catch (error) { failure = error && error.message ? error.message : String(error); }
+    }
+    const validated = Boolean(prepared && prepared.compilerValidation &&
+      prepared.compilerValidation.valid === true && prepared.originalText === speechSourceText &&
+      typeof prepared.speechText === "string");
+    const speechText = validated ? prepared.speechText : speechSourceText;
+    const rules = validated && Array.isArray(prepared.appliedRules) ? prepared.appliedRules : [];
+    const warnings = validated && Array.isArray(prepared.fallbackRules) ? prepared.fallbackRules : [];
+    const confidence = validated && prepared.pronunciationConfidence ? prepared.pronunciationConfidence : "fallback";
+    const applied = validated && prepared.knowledgeAppliedToSpeech === true && rules.length > 0 && speechText !== speechSourceText;
+    const status = applied ? "Validated Lexicon Rule लागू" :
+      confidence === "ambiguous" ? "Ambiguous — मूल पाठ सुरक्षित" :
+      confidence === "verified" ? "Validated — मूल पाठ यथावत" : "Fallback — मूल पाठ सुरक्षित";
+    return {
+      index, originalLine, speechSourceText, speechText, validated, confidence, applied, status,
+      rules, warnings, prepared, voiceURI: voice && voice.voiceURI || null,
+      numberRemoved: numbered.removed, failure
+    };
+  }
+
+  function renderPreviewEntry(entry) {
+    const row = doc.createElement("article");
+    row.className = "tts-preview-line";
+    row.setAttribute("data-line-index", String(entry.index));
+    row.setAttribute("data-confidence", entry.confidence);
+    const title = doc.createElement("div");
+    title.className = "tts-preview-line-title";
+    title.textContent = "पंक्ति " + (entry.index + 1) + " — " + entry.status;
+    const original = doc.createElement("p");
+    original.className = "tts-preview-original";
+    original.textContent = "मूल संस्कृत: " + entry.originalLine;
+    const compiled = doc.createElement("p");
+    compiled.className = "tts-preview-compiled";
+    compiled.textContent = "वाचन पाठ: " + entry.speechText;
+    row.append(title, original, compiled);
+    const meta = doc.createElement("p");
+    meta.className = "tts-preview-meta";
+    meta.textContent = "Confidence: " + entry.confidence +
+      (entry.numberRemoved ? " · अंतिम श्लोक-संख्या वाचन से छोड़ी गई" : "") +
+      (entry.voiceURI ? " · Voice: " + entry.voiceURI : " · Voice चयन लंबित");
+    row.appendChild(meta);
+    if (entry.applied && entry.rules.length) {
+      const applied = doc.createElement("p");
+      applied.className = "tts-preview-applied";
+      applied.textContent = "Applied Lexicon: " + entry.rules.map(rule =>
+        String(rule.term || rule.originalForm || "") + " → " + String(rule.nativeSpeechText || "")
+      ).join(" · ");
+      row.appendChild(applied);
+    } else if (entry.prepared && Array.isArray(entry.prepared.matchedLexiconEntries) &&
+        entry.prepared.matchedLexiconEntries.length) {
+      const matches = doc.createElement("p");
+      matches.className = "tts-preview-matches";
+      matches.textContent = "मिलान हुए Lexicon: " + entry.prepared.matchedLexiconEntries.map(item => item.term).join(" · ") +
+        " (Speech Text में परिवर्तन अधिकृत नहीं हुआ)";
+      row.appendChild(matches);
+    }
+    if (entry.failure) {
+      const failure = doc.createElement("p");
+      failure.className = "status warn";
+      failure.textContent = "Compiler Preview Fallback: " + entry.failure;
+      row.appendChild(failure);
+    }
+    for (const warning of entry.warnings) {
+      const warningNode = doc.createElement("p");
+      warningNode.className = "status warn";
+      warningNode.textContent = (warning.code ? warning.code + ": " : "") +
+        (warning.message || "उच्चारण नियम लागू नहीं हुआ।");
+      row.appendChild(warningNode);
+    }
+    return row;
+  }
+
+  function renderSpeechPreview() {
+    if (state.destroyed) return;
+    const lines = ui.input.value.split(/\r?\n/u).filter(line => line.trim());
+    const voice = chooseVoice(ui.input.value);
+    state.previewEntries = lines.map((line, index) => previewEntryForLine(line.trim(), index, voice));
+    previewList.replaceChildren();
+    if (!state.previewEntries.length) {
+      previewSummary.textContent = "पाठ दर्ज करने पर प्रत्येक पंक्ति का उच्चारण Preview दिखेगा।";
+      const empty = doc.createElement("p");
+      empty.className = "note";
+      empty.textContent = "अभी कोई संस्कृत पंक्ति उपलब्ध नहीं है।";
+      previewList.appendChild(empty);
+      return;
+    }
+    const appliedCount = state.previewEntries.filter(entry => entry.applied).length;
+    const ambiguousCount = state.previewEntries.filter(entry => entry.confidence === "ambiguous").length;
+    const fallbackCount = state.previewEntries.filter(entry => entry.confidence === "fallback").length;
+    const verifiedCount = state.previewEntries.filter(entry => entry.confidence === "verified").length;
+    previewSummary.textContent = state.previewEntries.length + " पंक्तियाँ · " +
+      appliedCount + " पर वास्तविक Lexicon परिवर्तन · " + verifiedCount + " Validated · " +
+      ambiguousCount + " Ambiguous · " + fallbackCount + " मूल-पाठ Fallback। " +
+      (voice ? "चयनित Voice: " + voice.name : "स्थानीय Voice चयन उपलब्ध नहीं।");
+    state.previewEntries.forEach(entry => previewList.appendChild(renderPreviewEntry(entry)));
+  }
+
   function updateButtons() {
-    const canSpeak = state.engineReady && state.pronunciationReady && state.voiceEntries.length > 0 && !state.destroyed;
-    const layaUnavailable = Boolean(ui.layaToggle && ui.layaToggle.checked && !state.layaReady);
-    ui.speak.disabled = state.active || !canSpeak || layaUnavailable;
+    const canSpeak = state.engineReady && state.voiceEntries.length > 0 && !state.destroyed;
+    ui.speak.disabled = state.active || !canSpeak;
     ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
     ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
     ui.stop.disabled = !state.active;
@@ -649,8 +443,6 @@ export async function mount(context) {
     state.waitingForNext = false;
     state.lines = [];
     state.index = 0;
-    state.layaPlan = null;
-    state.layaModeActive = false;
     setLine("");
     setStatus(message, warning);
     updateButtons();
@@ -671,192 +463,81 @@ export async function mount(context) {
 
   async function speakNext(generation) {
     if (generation !== state.generation || !state.active || state.destroyed) return;
-    if (state.navigationPaused || state.userPaused) {
-      state.waitingForNext = true;
-      return;
-    }
+    if (state.navigationPaused || state.userPaused) { state.waitingForNext = true; return; }
     if (state.index >= state.lines.length) {
-      const total = state.lines.length;
-      finish("सभी " + total + " पंक्तियों का पाठ पूरा हो गया।");
+      finish("सभी " + state.lines.length + " पंक्तियों का पाठ पूरा हो गया।");
       return;
     }
-    if (!state.engineReady) {
-      finish("TTS Engine अभी तैयार नहीं है।", true);
-      return;
-    }
-
+    if (!state.engineReady) { finish("TTS Engine अभी तैयार नहीं है।", true); return; }
     const line = state.lines[state.index];
-    const layaPhrase = state.layaModeActive && state.layaPlan ? state.layaPlan.phrases[state.index] : null;
-    const prepared = stripTerminalVerseNumber(line);
-    const speechText = (layaPhrase ? layaPhrase.text : prepared.text).trim();
+    const numbered = stripTerminalVerseNumber(line);
+    const speechSourceText = numbered.text.trim();
     const voice = chooseVoice(line);
-    let lineAnalysis;
-    let speechPreparation;
-    try {
-      lineAnalysis = engine.analyzeText(line);
-      speechPreparation = engine.prepareSpeech(speechText);
-      if (!speechPreparation || speechPreparation.speechText !== speechText || speechPreparation.modified !== false) {
-        throw new Error("उच्चारण तैयारी ने मूल पंक्ति बदलने का प्रयास किया।");
-      }
-      state.lastAnalysis = lineAnalysis;
-    } catch (error) {
-      finish("संस्कृत पाठ विश्लेषण/तैयारी विफल: " +
-        (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-      return;
-    }
-
-    if (!speechText) {
+    if (!speechSourceText) {
       state.index += 1;
       scheduleNext(generation);
       return;
     }
-    if (!voice) {
-      finish("इस पाठ के लिए कोई उपलब्ध स्थानीय Voice चयनित नहीं है। Android की Text-to-Speech settings जाँचें।", true);
+    if (!voice || voice.localService !== true) {
+      finish("इस पंक्ति के लिए कोई उपलब्ध स्थानीय Native Voice चयनित नहीं है। Android TTS settings जाँचें।", true);
       return;
     }
 
-    const language = voice.lang || (isDevanagari(line) ? "hi-IN" : "en-IN");
-    const rate = layaPhrase
-      ? Math.min(1.15, Math.max(0.65, Number(layaPhrase.rate) || 0.88))
-      : Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
-    const pitch = layaPhrase
-      ? Math.min(1.14, Math.max(0.90, Number(layaPhrase.pitch) || 1.02))
-      : (voiceGenderHint(voice) === "female" ? 1.02 : 1.07);
-    const numberNotice = prepared.removed ? " · अंत की श्लोक-संख्या वाचन से छोड़ी गई।" : "";
-    const specialNotice = speechPreparation.requiresAccentAwareBackend || speechPreparation.requiresBranchContext
-      ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।"
-      : "";
-    const analysisNotice = " · " + summarizeAnalysis(lineAnalysis);
-
+    let lineAnalysis = null, speechPreparation = null;
+    try {
+      lineAnalysis = engine.analyzeText(speechSourceText);
+      speechPreparation = engine.prepareSpeech(speechSourceText, compilerOptionsForVoice(voice));
+    } catch (error) {
+      setStatus("उच्चारण Preview उपलब्ध नहीं; Engine में मूल पाठ Fallback जाँचा जाएगा। " +
+        (error && error.message ? error.message : ""), true);
+    }
+    const validated = Boolean(speechPreparation && speechPreparation.compilerValidation &&
+      speechPreparation.compilerValidation.valid === true && speechPreparation.originalText === speechSourceText);
+    const appliedCount = validated && speechPreparation.knowledgeAppliedToSpeech ? speechPreparation.appliedRules.length : 0;
+    const confidence = validated ? speechPreparation.pronunciationConfidence : "fallback";
+    const rateValue = Number(ui.rate.value);
+    const rate = Number.isFinite(rateValue) ? Math.min(1.15, Math.max(0.65, rateValue)) : 0.88;
+    const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+    const specialNotice = speechPreparation &&
+      (speechPreparation.requiresAccentAwareBackend || speechPreparation.requiresBranchContext)
+      ? " · वैदिक/विशेष चिह्न पहचाने गए; Native Voice पर शुद्ध स्वराघात प्रमाणित नहीं है।" : "";
+    const compilerNotice = appliedCount
+      ? " · " + appliedCount + " अनुमोदित Lexicon नियम लागू।"
+      : " · " + confidence + " — मूल पाठ सुरक्षित।";
     setLine(line);
-    setStatus((state.layaModeActive ? "लयात्मक वाक्यांश " : "पंक्ति ") +
-      (state.index + 1) + " / " + state.lines.length + " पढ़ी जा रही है: " +
-      voice.name + " (स्थानीय Native Voice)" + numberNotice + specialNotice + analysisNotice);
+    setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length +
+      " पढ़ी जा रही है: " + voice.name + " (स्थानीय Native Voice)" +
+      (numbered.removed ? " · अंतिम श्लोक-संख्या वाचन से छोड़ी गई।" : "") +
+      compilerNotice + specialNotice + (lineAnalysis ? " · " + summarizeAnalysis(lineAnalysis) : ""),
+      Boolean(confidence === "ambiguous" || (speechPreparation && speechPreparation.fallbackRules.length)));
     state.speechInFlight = true;
     updateButtons();
-
     try {
-      const result = await engine.speak(speechText, {
-        voice,
-        lang: language,
-        rate,
-        pitch,
-        volume: 1,
-        replace: false
+      const result = await engine.speak(speechSourceText, {
+        voice, voiceProfile: nativeVoiceProfile(voice),
+        pronunciation: { context: Object.freeze({}) },
+        lang: voice.lang || (isDevanagari(line) ? "hi-IN" : "en-IN"),
+        rate, pitch, volume: 1, replace: false
       });
       if (generation !== state.generation || !state.active || state.destroyed) return;
       state.speechInFlight = false;
-      if (result && result.status === "cancelled") {
-        finish("वाचन रद्द हो गया।", true);
-        return;
-      }
+      if (result && result.status === "cancelled") { finish("वाचन रद्द हो गया।", true); return; }
       state.index += 1;
       if (state.navigationPaused || state.userPaused) {
         state.waitingForNext = true;
         updateButtons();
-      } else {
-        scheduleNext(generation);
-      }
+      } else scheduleNext(generation);
     } catch (error) {
       if (generation !== state.generation || state.destroyed) return;
       state.speechInFlight = false;
-      const message = error && error.message ? error.message : "अज्ञात TTS त्रुटि";
-      finish("पंक्ति " + (state.index + 1) + " पढ़ते समय TTS त्रुटि: " + message, true);
+      finish("पंक्ति " + (state.index + 1) + " पढ़ते समय TTS त्रुटि: " +
+        (error && error.message ? error.message : "अज्ञात TTS त्रुटि"), true);
     }
-  }
-
-  async function startLayaReading() {
-    if (!state.layaReady || !state.layaEngine) {
-      setLayaStatus("Laya Engine अभी तैयार नहीं है। सामान्य TTS का उपयोग करें या मॉड्यूल लोड होने की प्रतीक्षा करें।", true);
-      return;
-    }
-    if (!state.engineReady || !state.pronunciationReady || !state.voiceEntries.length) {
-      setLayaStatus("Laya Mode के लिए Native TTS, स्थानीय उच्चारण विश्लेषक और Voice का तैयार होना आवश्यक है।", true);
-      return;
-    }
-    const sourceLines = ui.input.value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean);
-    if (!sourceLines.length) {
-      setLayaStatus("पहले संस्कृत पाठ लिखें।", true);
-      ui.input.focus();
-      return;
-    }
-    const speechText = sourceLines.map(line => stripTerminalVerseNumber(line).text.trim()).filter(Boolean).join("\n");
-    if (!speechText) {
-      setLayaStatus("वाचन योग्य पाठ उपलब्ध नहीं है।", true);
-      return;
-    }
-    const voice = chooseVoice(speechText);
-    if (!voice) {
-      setLayaStatus("इस पाठ के लिए कोई स्थानीय Native Voice उपलब्ध नहीं है।", true);
-      return;
-    }
-    try {
-      state.lastAnalysis = engine.analyzeText(speechText);
-    } catch (error) {
-      setLayaStatus("पाठ विश्लेषण विफल: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-      return;
-    }
-
-    state.generation += 1;
-    const generation = state.generation;
-    clearNextTimer();
-    state.active = false;
-    state.speechInFlight = false;
-    state.layaPlan = null;
-    state.layaModeActive = false;
-    updateButtons();
-    try {
-      await engine.cancel();
-    } catch (error) {
-      finish("पिछला वाचन सुरक्षित रूप से रोक नहीं सका: " +
-        (error && error.message ? error.message : "TTS त्रुटि"), true);
-      return;
-    }
-    if (generation !== state.generation || state.destroyed) return;
-
-    setLayaStatus("पाठ का स्वर-क्रम और वाक्यांश तैयार किए जा रहे हैं…");
-    let plan;
-    try {
-      const baseRate = Math.min(1.15, Math.max(0.65, Number(ui.rate.value) || 0.88));
-      const basePitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
-      plan = await state.layaEngine.createPlan(speechText, { rate: baseRate, pitch: basePitch });
-      if (!plan || plan.status !== "ready" || !Array.isArray(plan.phrases) || !plan.phrases.length) {
-        throw new Error("Laya Plan ने कोई वैध वाक्यांश नहीं बनाया।");
-      }
-    } catch (error) {
-      if (generation === state.generation && !state.destroyed) {
-        setLayaStatus("Laya Plan तैयार नहीं हुआ; सामान्य TTS सुरक्षित है। " +
-          (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-      }
-      return;
-    }
-    if (generation !== state.generation || state.destroyed) return;
-
-    state.layaPlan = plan;
-    state.layaModeActive = true;
-    state.lines = plan.phrases.map(phrase => phrase.text);
-    state.index = 0;
-    state.active = true;
-    state.userPaused = false;
-    state.navigationPaused = !pageVisible;
-    state.waitingForNext = !pageVisible;
-    updateButtons();
-    setLayaStatus("Laya Mode सक्रिय है: " + plan.summary.phraseCount +
-      " वाक्यांश तैयार। यह मौजूदा Native Voice का अनुमानित लयात्मक वाचन है, वास्तविक गायन मॉडल नहीं।");
-    if (pageVisible) void speakNext(generation);
   }
 
   async function startReading() {
-    if (ui.layaToggle && ui.layaToggle.checked) {
-      await startLayaReading();
-      return;
-    }
     if (!state.engineReady) {
       setStatus("Native TTS Engine उपलब्ध नहीं है। Browser और Android TTS सुविधा जाँचें।", true);
-      return;
-    }
-    if (!state.pronunciationReady) {
-      setStatus("वैदिक उच्चारण ज्ञानकोश की Self-Test स्थिति सफल नहीं है; सुरक्षित वाचन रोक दिया गया है।", true);
       return;
     }
     if (!state.voiceEntries.length) {
@@ -869,11 +550,10 @@ export async function mount(context) {
       ui.input.focus();
       return;
     }
-    try {
-      state.lastAnalysis = engine.analyzeText(lines.join("\n"));
-    } catch (error) {
-      setStatus("पाठ विश्लेषण विफल: " + (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
-      return;
+    try { engine.analyzeText(lines.join("\n")); }
+    catch (error) {
+      setStatus("Analyzer उपलब्ध नहीं; Native TTS के लिए मूल पाठ सुरक्षित Fallback रहेगा। " +
+        (error && error.message ? error.message : ""), true);
     }
 
     state.generation += 1;
@@ -891,8 +571,6 @@ export async function mount(context) {
     }
     if (generation !== state.generation || state.destroyed) return;
 
-    state.layaPlan = null;
-    state.layaModeActive = false;
     state.lines = lines;
     state.index = 0;
     state.active = true;
@@ -963,22 +641,20 @@ export async function mount(context) {
   function onRateInput() {
     const value = Number(ui.rate.value);
     ui.rateValue.textContent = (Number.isFinite(value) ? value : 0.88).toFixed(2) + "×";
-    notifyMusicPlayerHostChange("speech-rate-changed");
   }
 
   function onVoiceChange() {
     const voice = chooseVoice(ui.input.value);
+    renderSpeechPreview();
     if (!voice) {
-      setStatus("कोई उपयुक्त स्थानीय Voice उपलब्ध नहीं है।", true);
-      notifyMusicPlayerHostChange("voice-changed");
+      setStatus("कोई उपयुक्त स्थानीय Voice उपलब्ध नहीं है। Preview मूल पाठ Fallback दिखाएगा।", true);
       return;
     }
     const gender = voiceGenderHint(voice);
     const note = gender === "female"
       ? "संभावित स्त्री-स्वर चुना गया; नाम-आधारित पहचान की पुष्टि वास्तविक श्रवण से करनी होगी: "
       : "स्थानीय Voice चुनी गई: ";
-    setStatus(note + voice.name + " (" + voice.lang + ")। Pitch परिवर्तन वास्तविक महिला Voice की गारंटी नहीं है।");
-    notifyMusicPlayerHostChange("voice-changed");
+    setStatus(note + voice.name + " (" + voice.lang + ")। Voice बदलने पर Pronunciation Preview पुनः तैयार किया गया है।");
   }
 
   async function refreshVoices() {
@@ -1012,7 +688,7 @@ export async function mount(context) {
         state.voiceEntries.some(entry => entry.key === previousKey);
       ui.voice.value = previousStillExists ? previousKey : "auto";
       updateButtons();
-      notifyMusicPlayerHostChange("voices-updated");
+      renderSpeechPreview();
 
       if (!state.engineReady) return;
       if (!state.voiceEntries.length) {
@@ -1032,31 +708,16 @@ export async function mount(context) {
       state.voices = [];
       state.voiceEntries = [];
       updateButtons();
-      notifyMusicPlayerHostChange("voices-unavailable");
+      renderSpeechPreview();
       setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " +
         (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
     }
   }
 
   async function onHide() {
-    pageVisible = false;
-    if (musicPlayerInstance && typeof musicPlayerInstance.onHide === "function") {
-      try {
-        await musicPlayerInstance.onHide();
-      } catch (error) {
-        setMusicPlayerStatus(
-          "Music Player को रोकने में समस्या हुई: " +
-            (error && error.message ? error.message : "अज्ञात त्रुटि"),
-          true
-        );
-      }
-    }
     if (!state.active || state.userPaused || state.navigationPaused || state.destroyed) return;
     state.navigationPaused = true;
-    if (state.timer !== null) {
-      clearNextTimer();
-      state.waitingForNext = true;
-    }
+    if (state.timer !== null) { clearNextTimer(); state.waitingForNext = true; }
     if (state.speechInFlight) {
       const paused = await engine.pause();
       if (!paused && state.speechInFlight) {
@@ -1070,21 +731,11 @@ export async function mount(context) {
   }
 
   async function onShow() {
-    pageVisible = true;
-    if (musicPlayerInstance && typeof musicPlayerInstance.onShow === "function") {
-      try {
-        await musicPlayerInstance.onShow();
-      } catch (error) {
-        setMusicPlayerStatus(
-          "Music Player फिर सक्रिय नहीं हो सका: " +
-            (error && error.message ? error.message : "अज्ञात त्रुटि"),
-          true
-        );
-      }
-    }
     if (state.destroyed) return;
     await refreshKnowledgeFromCache("TTS पेज पर वापसी");
-    if (!state.active || !state.navigationPaused || state.destroyed) return;
+    if (state.destroyed) return;
+    renderSpeechPreview();
+    if (!state.active || !state.navigationPaused) return;
     state.navigationPaused = false;
     if (state.waitingForNext) {
       state.waitingForNext = false;
@@ -1115,7 +766,6 @@ export async function mount(context) {
     clearNextTimer();
     state.active = false;
     state.speechInFlight = false;
-
     ui.speak.removeEventListener("click", startReading);
     ui.pause.removeEventListener("click", pauseReading);
     ui.resume.removeEventListener("click", resumeReading);
@@ -1123,62 +773,30 @@ export async function mount(context) {
     ui.rate.removeEventListener("input", onRateInput);
     ui.voice.removeEventListener("change", onVoiceChange);
     ui.input.removeEventListener("input", onTextInput);
-    if (ui.layaToggle) ui.layaToggle.removeEventListener("change", onLayaModeChange);
-    state.layaPlan = null;
-    state.layaEngine = null;
-    state.layaReady = false;
-
-    if (musicPlayerButton) {
-      musicPlayerButton.disabled = true;
-      musicPlayerButton.removeEventListener("click", loadMusicPlayer);
-    }
-    const pendingMusicLoad = musicPlayerLoadPromise;
-    if (pendingMusicLoad) {
-      try { await pendingMusicLoad; }
-      catch (_) { /* loadMusicPlayer reports its own failure; continue teardown. */ }
-    }
-    if (musicPlayerInstance && typeof musicPlayerInstance.unmount === "function") {
-      try {
-        await musicPlayerInstance.unmount();
-      } catch (error) {
-        if (win.console && typeof win.console.error === "function") {
-          win.console.error("[Swar-Sadhika] Music Player cleanup failed", error);
-        }
-      }
-    }
-    musicPlayerSubscribers.clear();
-    musicPlayerInstance = null;
-    musicPlayerLoadPromise = null;
-    musicPlayerRoot = null;
-    musicPlayerSection = null;
 
     if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
-    if (typeof state.unsubscribePronunciationAnalysis === "function") state.unsubscribePronunciationAnalysis();
     if (typeof state.unsubscribePronunciationWarning === "function") state.unsubscribePronunciationWarning();
+    if (typeof state.unsubscribeSpeechPreparation === "function") state.unsubscribeSpeechPreparation();
     if (typeof state.unsubscribeKnowledgeChange === "function") state.unsubscribeKnowledgeChange();
     if (typeof state.unsubscribeKnowledgeError === "function") state.unsubscribeKnowledgeError();
     if (typeof state.unsubscribeKnowledgeWarning === "function") state.unsubscribeKnowledgeWarning();
     state.unsubscribeVoices = null;
-    state.unsubscribePronunciationAnalysis = null;
     state.unsubscribePronunciationWarning = null;
+    state.unsubscribeSpeechPreparation = null;
     state.unsubscribeKnowledgeChange = null;
     state.unsubscribeKnowledgeError = null;
     state.unsubscribeKnowledgeWarning = null;
     if (knowledgeStatus.parentNode) knowledgeStatus.parentNode.removeChild(knowledgeStatus);
+    if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.removeChild(pronunciationPreview);
     setLine("");
     updateButtons();
-    try {
-      await engine.dispose();
-    } catch (error) {
+    try { await engine.dispose(); }
+    catch (error) {
       if (win.console && typeof win.console.error === "function") {
-        win.console.error("[Swar-Sadhika] TTS Engine cleanup failed", error);
+        win.console.error("[Swar-Sadhika TTS] Engine cleanup failed", error);
       }
     }
   }
-
-  installMusicPlayerHook();
-  installNativeTtsLayaControl();
-  void preloadNativeTtsLayaEngine();
 
   ui.speak.addEventListener("click", startReading);
   ui.pause.addEventListener("click", pauseReading);
@@ -1193,10 +811,6 @@ export async function mount(context) {
   state.unsubscribeVoices = engine.on("voiceschanged", () => {
     void refreshVoices();
   });
-  state.unsubscribePronunciationAnalysis = engine.on("pronunciationanalysis", detail => {
-    if (state.destroyed) return;
-    state.lastPronunciationReport = detail;
-  });
   state.unsubscribePronunciationWarning = engine.on("pronunciationwarning", detail => {
     if (state.destroyed || !state.active) return;
     const reasons = Array.isArray(detail && detail.reasons) ? detail.reasons.join(" ") : "";
@@ -1207,8 +821,20 @@ export async function mount(context) {
       true
     );
   });
+  state.unsubscribeSpeechPreparation = engine.on("speechpreparationdiagnostics", detail => {
+    if (state.destroyed) return;
+    const current = state.previewEntries[state.index];
+    if (current && detail && detail.originalText === current.speechSourceText &&
+        detail.validation && detail.validation.valid === true && typeof detail.speechText === "string") {
+      current.speechText = detail.speechText;
+      current.applied = detail.knowledgeAppliedToSpeech === true;
+    }
+  });
   state.unsubscribeKnowledgeChange = engine.on("knowledgechange", detail => {
-    if (!state.destroyed) renderKnowledgeStatus(detail);
+    if (!state.destroyed) {
+      renderKnowledgeStatus(detail);
+      renderSpeechPreview();
+    }
   });
   state.unsubscribeKnowledgeError = engine.on("knowledgeerror", detail => {
     if (state.destroyed) return;
@@ -1229,25 +855,34 @@ export async function mount(context) {
       return Object.freeze({ onShow, onHide, unmount });
     }
     state.engineReady = Boolean(initialized && initialized.ready);
+    try {
+      state.pronunciationInfo = engine.getPronunciationKnowledgeBaseInfo();
+      state.pronunciationReady = Boolean(
+        state.pronunciationInfo && state.pronunciationInfo.available &&
+        state.pronunciationInfo.selfTest && state.pronunciationInfo.selfTest.status === "PASSED" &&
+        state.pronunciationInfo.selfTest.failed === 0 &&
+        (!state.pronunciationInfo.compilerSelfTest || state.pronunciationInfo.compilerSelfTest.status === "PASSED")
+      );
+    } catch (error) {
+      state.pronunciationInfo = null;
+      state.pronunciationReady = false;
+      setStatus("Pronunciation Analyzer/Compiler diagnostics उपलब्ध नहीं; सामान्य Native TTS मूल-पाठ Fallback जारी रखेगा। " +
+        (error && error.message ? error.message : ""), true);
+    }
+    await refreshKnowledgeFromCache("प्रारंभिक Knowledge जाँच");
+    if (state.destroyed) {
+      await engine.dispose();
+      return Object.freeze({ onShow, onHide, unmount });
+    }
     if (!state.engineReady) {
       setStatus("इस ब्राउज़र में Native Speech Synthesis उपलब्ध नहीं है। Android Chrome और installed local TTS voice की जाँच करें।", true);
       updateButtons();
-      await refreshKnowledgeFromCache("प्रारंभिक Knowledge जाँच");
     } else {
-      state.pronunciationInfo = engine.getPronunciationKnowledgeBaseInfo();
-      state.pronunciationReady = Boolean(
-        state.pronunciationInfo &&
-        state.pronunciationInfo.available &&
-        state.pronunciationInfo.selfTest &&
-        state.pronunciationInfo.selfTest.status === "PASSED" &&
-        state.pronunciationInfo.selfTest.failed === 0
-      );
+      await refreshVoices();
+      if (ui.input.value.trim()) analyzeCurrentText();
+      else renderSpeechPreview();
       if (!state.pronunciationReady) {
-        setStatus("वैदिक उच्चारण ज्ञानकोश की Self-Test विफल है। सुरक्षा के लिए वाचन उपलब्ध नहीं किया गया।", true);
-        updateButtons();
-      } else {
-        await refreshVoices();
-        if (ui.input.value.trim()) analyzeCurrentText();
+        setStatus("Analyzer/Compiler Self-Test सफल नहीं है। सुरक्षित रूप से मूल-पाठ Native TTS उपलब्ध रहेगा; Lexicon परिवर्तन लागू नहीं होंगे।", true);
       }
     }
   } catch (error) {
