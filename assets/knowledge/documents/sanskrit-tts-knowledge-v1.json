@@ -1,40 +1,132 @@
 {
   "schema": "swar-sadhika.sanskrit-tts-knowledge",
   "schemaVersion": 1,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "language": "sa",
   "entries": [
     {
       "id": "om-text-integrity",
       "term": "ॐ",
-      "guidance": "मूल पाठ में दिए गए स्वर-चिह्नों और पाठ-रूप को अक्षरशः सुरक्षित रखें। केवल शब्द-मिलान से उदात्त, अनुदात्त या स्वरित का अनुमान न लगाएँ।",
+      "guidance": "ॐ (ओम्) को मूल पाठ में जिस रूप और स्वर-चिह्नों सहित दिया गया है, उसी रूप में सुरक्षित रखें। छान्दोग्य उपनिषद् 1.1.1 में 'ओम्' को उद्गीथ के रूप में प्रस्तुत किया गया है; यह पाठ-संदर्भ किसी अन्य वैदिक शाखा के स्वराघात या चुनी हुई Native Voice का उच्चारण स्वयं प्रमाणित नहीं करता। केवल शब्द-मिलान से उदात्त, अनुदात्त या स्वरित न जोड़ें।",
       "scope": "general",
       "category": "vedic-text-integrity",
-      "reviewStatus": "needs-review"
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-text-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-08",
+        "references": [
+          {
+            "sourceType": "digital-transcription-of-primary-text",
+            "grantha": "Chāndogya Upaniṣad",
+            "location": "Adhyāya 1, Khaṇḍa 1, mantra 1.1.1",
+            "textExcerpt": "ओम् इत्य् एतद् अक्षरम् उद्गीथम् उपासीत । ओम् इति ह्य् उद्गायति ।",
+            "url": "https://upanishads.org.in/u/chhandogya/p/1.1.1",
+            "establishes": "The source passage presents ओम् as the udgītha syllable.",
+            "doesNotEstablish": "A branch-specific Vedic accent, phonetic substitute, or Android Native Voice pronunciation."
+          }
+        ],
+        "reviewNote": "The textual occurrence is located. The guidance's accent-preservation rule remains a conservative compiler policy; no voice-specific pronunciation has been verified."
+      }
     },
     {
       "id": "agni-vedic-context",
       "term": "अग्निमीळे",
-      "guidance": "वैदिक पाठ के लिए संहिता या पदपाठ, शाखा और उपलब्ध स्वर-चिह्नों का मूल स्रोत सत्यापित करें। संदर्भ पुष्ट होने तक Native TTS में विशेष स्वराघात लागू न करें।",
+      "guidance": "'अग्निमीळे' ऋग्वेद शाकल संहिता 1.1.1 के आरम्भिक पद से सम्बद्ध है। उपलब्ध स्वराङ्कित पाठ में 'अ॒ग्निमी॑ळे' रूप और पदपाठ-सूचना मिलती है। किसी वाचन-निर्देश से पहले मूल संहिता-पाठ, पदपाठ, चुनी हुई शाखा तथा उसी पाठ-रूप के स्वर-चिह्न मिलाएँ। केवल 'अग्निमीळे' शब्द मिलने पर Native TTS में विशेष स्वराघात लागू न करें।",
       "scope": "general",
       "category": "vedic-pronunciation-context",
-      "reviewStatus": "needs-review"
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-text-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-08",
+        "references": [
+          {
+            "sourceType": "digital-transcription-of-vedic-text",
+            "grantha": "Ṛgveda, Śākala Śākhā",
+            "location": "Maṇḍala 1, Sūkta 1, mantra 1 (RV 1.1.1)",
+            "textExcerpt": "अ॒ग्निमी॑ळे पु॒रोहि॑तं य॒ज्ञस्य॑ दे॒वमृ॒त्विज॑म्",
+            "url": "https://dhee.apratiratha.in/scriptures/rigveda/excerpts/1.1.1",
+            "establishes": "A digital text witness displays the opening mantra with Vedic accent marks and a Padapāṭha breakdown.",
+            "doesNotEstablish": "A universally valid pronunciation across all śākhās or a tested Android Native Voice speech form."
+          },
+          {
+            "sourceType": "vedic-text-reference-portal",
+            "grantha": "Vedic Heritage Portal, Ṛgveda Śākala Śākhā",
+            "location": "Maṇḍala 1, Sūkta 1, reference RV 1.1.1a",
+            "url": "https://vedicheritage.gov.in/rigveda-shakala-shakha-mandala-01-sukta-01/",
+            "establishes": "The portal identifies 'agnim īḍe purohitam' as RV 1.1.1a and supplies cross-text references.",
+            "doesNotEstablish": "The complete accent realization for every recitation tradition."
+          }
+        ],
+        "reviewNote": "The mantra identity and a Śākala text witness are located. Accent/recitation realization and selected-voice playback remain unverified; keep needs-review."
+      }
     },
     {
       "id": "namah-visarga-context",
       "term": "नमः",
-      "guidance": "विसर्ग का उच्चारण अगले ध्वनि-संदर्भ, पद-विभाजन और पाठ-परंपरा पर निर्भर हो सकता है। विशिष्ट निर्देश जोड़ने से पहले प्रमाणित पाठ-स्रोत की समीक्षा करें।",
+      "guidance": "'नमः' के विसर्ग को हर प्रसंग में एक ही ध्वनि से प्रतिस्थापित न करें। पाणिनि अष्टाध्यायी 8.3.15 'खरवसानयोर्विसर्जनीयः' एक विशिष्ट व्याकरणिक परिवेश में विसर्जनीय-विधान बताता है; यह सूत्र अकेले प्रत्येक वैदिक शाखा, पद-विभाजन और वास्तविक पाठ-परम्परा का सम्पूर्ण वाचन तय नहीं करता। मूल ः चिह्न सुरक्षित रखें और किसी विशेष रूप से पहले सम्बद्ध संहिता/पदपाठ का प्रमाण लें।",
       "scope": "general",
       "category": "visarga-context",
-      "reviewStatus": "needs-review"
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-grammar-rule-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-08",
+        "references": [
+          {
+            "sourceType": "primary-grammar-text-digital-reference",
+            "grantha": "Pāṇini, Aṣṭādhyāyī",
+            "location": "Adhyāya 8, Pāda 3, sūtra 15 (8.3.15)",
+            "textExcerpt": "खरवसानयोर्विसर्जनीयः",
+            "url": "https://sanskritdictionary.com/panini/8-3-15",
+            "establishes": "The Pāṇinian rule links visarga substitution to a specified khar-consonant or pause environment.",
+            "doesNotEstablish": "The complete recitational realization of every occurrence of नमः in every Vedic or later tradition."
+          }
+        ],
+        "reviewNote": "The grammatical rule reference is located. A specific नमः mantra passage and śākhā-specific recitation have not been verified; keep needs-review."
+      }
     },
     {
       "id": "svaha-mantra-context",
       "term": "स्वाहा",
-      "guidance": "स्वर-मात्रा और पाठ-परंपरा संबंधी निर्देश मूल मन्त्र-स्रोत से सत्यापित करें। सामान्य शब्द-मिलान के आधार पर लय या मात्रा स्वतः न बदलें।",
+      "guidance": "'स्वाहा' का प्रयोग तैत्तिरीय संहिता 7.1 के अश्वमेध-मन्त्र-प्रकरण में अनेक आहुति-पाठों के साथ मिलता है। यह पाठ-साक्ष्य इसके मन्त्र-प्रयोग को दिखाता है; इससे हर मन्त्र, शाखा या Native Voice के लिए स्वर-मात्रा, pitch अथवा लय का एक समान नियम सिद्ध नहीं होता। मूल मन्त्र-पाठ और उसके स्वर-चिह्न सुरक्षित रखें; केवल शब्द-मिलान के आधार पर मात्रा या लय न बदलें।",
       "scope": "general",
       "category": "mantra-context",
-      "reviewStatus": "needs-review"
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-text-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-08",
+        "references": [
+          {
+            "sourceType": "digital-transcription-of-primary-text",
+            "grantha": "Kṛṣṇa Yajurveda, Taittirīya Saṃhitā",
+            "location": "Kāṇḍa 7, Prapāṭhaka 1, Anuvāka 13; compare 7.1.15 and 7.1.17",
+            "textExcerpt": "आयनाय स्वाहा । प्रायणाय स्वाहा । उद्द्रावाय स्वाहा ।",
+            "url": "https://sa.wikisource.org/wiki/तैत्तिरीयसंहिता(विस्वरः)/काण्डम्_७/प्रपाठकः_१",
+            "establishes": "The cited Saṃhitā transcription contains repeated svāhā formulae in the specified offering passages.",
+            "doesNotEstablish": "A universal vowel-duration, pitch, melodic pattern, or voice-specific pronunciation rule for every mantra."
+          }
+        ],
+        "reviewNote": "The cited textual occurrences are located. The exact mantra intended by this generic entry and its recitational form remain unverified; keep needs-review."
+      }
     }
-  ]
+  ],
+  "reviewMetadata": {
+    "identificationCode": "SWR-TTS-GUIDANCE-05",
+    "reviewedAt": "2026-11-08",
+    "reviewMethod": "Locate and compare cited primary-text or primary-grammar passages; state precisely what each source establishes and what it does not establish.",
+    "entryCount": 4,
+    "unchangedEntryCount": 4,
+    "unverifiedPronunciationEntriesRemainNeedsReview": true,
+    "documentRole": "general-guidance-only",
+    "guidanceIsNotSpeechText": true,
+    "structuredPronunciationLexiconRemainsSeparate": true,
+    "automaticSpeechRewriteAuthorized": false
+  }
 }
