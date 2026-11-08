@@ -62,7 +62,7 @@
       "integrationMode": "nano-server-tts-knowledge-adapter",
       "contentSchema": "swar-sadhika.sanskrit-tts-knowledge",
       "contentSchemaVersion": 1,
-      "sha256": "e2966f4203359f278ba384f06be9fbef9c54eeb502b1ffbdbb1ccc43adff21fb",
+      "sha256": "5fb858fb3c9e16948f14deb8cbe017fd43b73352fe71c80639c223495eb1f42e",
       "reviewPolicy": "only-reviewed-entries-are-exposed-as-active-guidance",
       "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
