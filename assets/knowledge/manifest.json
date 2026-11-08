@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.3.0",
+  "catalogVersion": "1.4.0",
   "appId": "swar-sadhika-android",
   "entries": [
     {
@@ -51,7 +51,7 @@
       "id": "sanskrit-vedic-pronunciation-v1",
       "entryType": "knowledge-document",
       "title": "वैदिक संस्कृत एवं कठिन उच्चारण विस्तारित ज्ञान-दस्तावेज़",
-      "documentVersion": "1.1.0",
+      "documentVersion": "1.2.0",
       "category": "pronunciation",
       "language": "sa",
       "script": "Devanagari",
@@ -62,8 +62,28 @@
       "integrationMode": "nano-server-tts-knowledge-adapter",
       "contentSchema": "swar-sadhika.sanskrit-tts-knowledge",
       "contentSchemaVersion": 1,
-      "sha256": "5fb858fb3c9e16948f14deb8cbe017fd43b73352fe71c80639c223495eb1f42e",
+      "sha256": "afc5b9633e8e1f1fa57ffeef1fbef9591c69e1a21bad2ee3f1f0c09145acbc77",
       "reviewPolicy": "only-reviewed-entries-are-exposed-as-active-guidance",
+      "loaderPolicy": "verified-json-data-only-no-code-execution",
+      "enabled": true
+    },
+    {
+      "id": "sanskrit-pronunciation-lexicon-v1",
+      "entryType": "knowledge-document",
+      "title": "संस्कृत उच्चारण शब्दकोश (Pronunciation Lexicon)",
+      "documentVersion": "1.0.1",
+      "category": "pronunciation",
+      "language": "sa",
+      "script": "Devanagari",
+      "format": "json",
+      "path": "documents/sanskrit-pronunciation-lexicon-v1.json",
+      "pathBase": "manifest-directory",
+      "consumer": "../js/nano-server/nano-server-tts-knowledge-adapter-part2.js",
+      "integrationMode": "nano-server-tts-knowledge-adapter",
+      "contentSchema": "swar-sadhika.sanskrit-pronunciation-lexicon",
+      "contentSchemaVersion": 1,
+      "sha256": "7effda365a51cea362981583763f6fff453b7b08510c54b63600f83500e71485",
+      "reviewPolicy": "only-reviewed-source-verified-and-voice-tested-entries-can-be-applied",
       "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
     }
