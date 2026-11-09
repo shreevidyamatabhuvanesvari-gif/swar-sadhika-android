@@ -1,7 +1,7 @@
 {
   "schema": "swar-sadhika.sanskrit-tts-knowledge",
   "schemaVersion": 1,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "language": "sa",
   "entries": [
     {
@@ -33,100 +33,188 @@
     {
       "id": "agni-vedic-context",
       "term": "अग्निमीळे",
-      "guidance": "'अग्निमीळे' ऋग्वेद शाकल संहिता 1.1.1 के आरम्भिक पद से सम्बद्ध है। उपलब्ध स्वराङ्कित पाठ में 'अ॒ग्निमी॑ळे' रूप और पदपाठ-सूचना मिलती है। किसी वाचन-निर्देश से पहले मूल संहिता-पाठ, पदपाठ, चुनी हुई शाखा तथा उसी पाठ-रूप के स्वर-चिह्न मिलाएँ। केवल 'अग्निमीळे' शब्द मिलने पर Native TTS में विशेष स्वराघात लागू न करें।",
+      "guidance": "‘अग्निमीळे’ ऋग्वेद शाकल, मण्डल १, सूक्त १, ऋक् १ के उद्घाटन-पद से सम्बद्ध है। Vedic Heritage Portal का concordance ‘agnim īḍe purohitam’ को RV 1.1.1a से जोड़ता है। यह संदर्भ मन्त्र की पहचान और शाखा-सन्दर्भ का समर्थन करता है; उपलब्ध Portal-पृष्ठ स्वयं स्वराङ्कित देवनागरी पाठ या चुनी हुई Native Voice का उच्चारण प्रमाणित नहीं करता। केवल शब्द-मिलान से उदात्त, अनुदात्त, स्वरित, मात्रा या pitch न जोड़ें; मूल पाठ और उसके उपलब्ध चिह्न सुरक्षित रखें।",
       "scope": "general",
       "category": "vedic-pronunciation-context",
       "reviewStatus": "needs-review",
       "sourceReview": {
-        "status": "primary-text-located",
-        "primaryTextLocated": true,
+        "status": "concordance-reference-located",
+        "primaryTextLocated": false,
         "phoneticClaimVerified": false,
-        "reviewedAt": "2026-11-08",
+        "reviewedAt": "2026-11-09",
         "references": [
           {
-            "sourceType": "digital-transcription-of-vedic-text",
+            "sourceType": "official-vedic-concordance-portal",
             "grantha": "Ṛgveda, Śākala Śākhā",
-            "location": "Maṇḍala 1, Sūkta 1, mantra 1 (RV 1.1.1)",
-            "textExcerpt": "अ॒ग्निमी॑ळे पु॒रोहि॑तं य॒ज्ञस्य॑ दे॒वमृ॒त्विज॑म्",
-            "url": "https://dhee.apratiratha.in/scriptures/rigveda/excerpts/1.1.1",
-            "establishes": "A digital text witness displays the opening mantra with Vedic accent marks and a Padapāṭha breakdown.",
-            "doesNotEstablish": "A universally valid pronunciation across all śākhās or a tested Android Native Voice speech form."
-          },
-          {
-            "sourceType": "vedic-text-reference-portal",
-            "grantha": "Vedic Heritage Portal, Ṛgveda Śākala Śākhā",
-            "location": "Maṇḍala 1, Sūkta 1, reference RV 1.1.1a",
+            "location": "Maṇḍala 1, Sūkta 1, item 1; RV 1.1.1a",
+            "textExcerpt": "agnim īḍe (ŚŚ.ŚG. īle) purohitam # RV.1.1.1a",
             "url": "https://vedicheritage.gov.in/rigveda-shakala-shakha-mandala-01-sukta-01/",
-            "establishes": "The portal identifies 'agnim īḍe purohitam' as RV 1.1.1a and supplies cross-text references.",
-            "doesNotEstablish": "The complete accent realization for every recitation tradition."
+            "establishes": "The Vedic Heritage Portal page identifies the opening phrase agnim īḍe purohitam with RV 1.1.1a under the Rigveda Śākala Śākhā Mandala 1, Sūkta 1 concordance.",
+            "doesNotEstablish": "An accent-marked Devanagari primary-text witness, the complete recitational form, or a tested Android Native TTS pronunciation."
           }
         ],
-        "reviewNote": "The mantra identity and a Śākala text witness are located. Accent/recitation realization and selected-voice playback remain unverified; keep needs-review."
+        "reviewNote": "The accessible Portal page is a concordance/reference page, not an accent-marked recitation witness. Accent-specific claims have therefore been removed from this entry pending a directly checked accent-marked text source."
       }
     },
     {
       "id": "namah-visarga-context",
       "term": "नमः",
-      "guidance": "'नमः' के विसर्ग को हर प्रसंग में एक ही ध्वनि से प्रतिस्थापित न करें। पाणिनि अष्टाध्यायी 8.3.15 'खरवसानयोर्विसर्जनीयः' एक विशिष्ट व्याकरणिक परिवेश में विसर्जनीय-विधान बताता है; यह सूत्र अकेले प्रत्येक वैदिक शाखा, पद-विभाजन और वास्तविक पाठ-परम्परा का सम्पूर्ण वाचन तय नहीं करता। मूल ः चिह्न सुरक्षित रखें और किसी विशेष रूप से पहले सम्बद्ध संहिता/पदपाठ का प्रमाण लें।",
+      "guidance": "‘नमः’ में पहले से लिखा विसर्ग हर परिवेश में एक ही वाचन-रूप का आदेश नहीं देता। पाणिनि 8.3.34 (विसर्जनीयस्य सः), 8.3.35 (शर्परे विसर्जनीयः) और 8.3.36 (वा शरि) संहितागत परिवेश तथा आगे आने वाले व्यञ्जन के अनुसार अलग शर्तें रखते हैं; 8.3.36 में शर् से पहले विसर्ग के बने रहने का विकल्प है। इसलिए केवल अकेले ‘नमः’ token से अगला पद, विराम या पाठ-परम्परा अनुमानित नहीं की जा सकती। मूल ः चिह्न और पद-सीमा सुरक्षित रखें; सटीक मन्त्र-क्रम, शाखा और पाठ-साक्ष्य के बिना कोई `nativeSpeechText` न बनाएँ।",
       "scope": "general",
       "category": "visarga-context",
       "reviewStatus": "needs-review",
       "sourceReview": {
-        "status": "primary-grammar-rule-located",
+        "status": "primary-grammar-rules-located",
         "primaryTextLocated": true,
         "phoneticClaimVerified": false,
-        "reviewedAt": "2026-11-08",
+        "reviewedAt": "2026-11-09",
         "references": [
           {
             "sourceType": "primary-grammar-text-digital-reference",
             "grantha": "Pāṇini, Aṣṭādhyāyī",
-            "location": "Adhyāya 8, Pāda 3, sūtra 15 (8.3.15)",
-            "textExcerpt": "खरवसानयोर्विसर्जनीयः",
-            "url": "https://sanskritdictionary.com/panini/8-3-15",
-            "establishes": "The Pāṇinian rule links visarga substitution to a specified khar-consonant or pause environment.",
-            "doesNotEstablish": "The complete recitational realization of every occurrence of नमः in every Vedic or later tradition."
+            "location": "Adhyāya 8, Pāda 3, sūtra 34 (8.3.34)",
+            "textExcerpt": "विसर्जनीयस्य सः",
+            "url": "https://sanskritdictionary.com/panini/8-3-34",
+            "establishes": "In the stated saṃhitā environment, the rule substitutes s for a visarga before a khar consonant.",
+            "doesNotEstablish": "A universal replacement for every visarga or the recitation of the isolated word नमः."
+          },
+          {
+            "sourceType": "primary-grammar-text-digital-reference",
+            "grantha": "Pāṇini, Aṣṭādhyāyī",
+            "location": "Adhyāya 8, Pāda 3, sūtra 35 (8.3.35)",
+            "textExcerpt": "शर्परे विसर्जनीयः",
+            "url": "https://sanskritdictionary.com/panini/8-3-35",
+            "establishes": "The visarga is retained in the specified khar-followed-by-śar environment.",
+            "doesNotEstablish": "A rule independent of its full consonant environment or a śākhā-specific audio realization."
+          },
+          {
+            "sourceType": "primary-grammar-text-digital-reference",
+            "grantha": "Pāṇini, Aṣṭādhyāyī",
+            "location": "Adhyāya 8, Pāda 3, sūtra 36 (8.3.36)",
+            "textExcerpt": "वा शरि",
+            "url": "https://sanskritdictionary.com/panini/8-3-36",
+            "establishes": "The rule provides an option for retaining visarga before a śar sibilant.",
+            "doesNotEstablish": "A universal Native TTS spelling replacement, the exact tradition-specific choice, or prosody."
           }
         ],
-        "reviewNote": "The grammatical rule reference is located. A specific नमः mantra passage and śākhā-specific recitation have not been verified; keep needs-review."
+        "correctionNote": "The previous version cited 8.3.15 as though it explained the pronunciation of the already-written visarga in नमः. That citation was inapplicable: 8.3.15 concerns visarga substitution for final र् in its stated environment. It has been removed as supporting evidence and replaced with the relevant conditional visarga rules 8.3.34–36.",
+        "reviewNote": "The grammar rules and their stated environments were checked. They do not independently establish a single recitational output for every occurrence of नमः; keep the entry needs-review and do not generate a replacement."
       }
     },
     {
       "id": "svaha-mantra-context",
       "term": "स्वाहा",
-      "guidance": "'स्वाहा' का प्रयोग तैत्तिरीय संहिता 7.1 के अश्वमेध-मन्त्र-प्रकरण में अनेक आहुति-पाठों के साथ मिलता है। यह पाठ-साक्ष्य इसके मन्त्र-प्रयोग को दिखाता है; इससे हर मन्त्र, शाखा या Native Voice के लिए स्वर-मात्रा, pitch अथवा लय का एक समान नियम सिद्ध नहीं होता। मूल मन्त्र-पाठ और उसके स्वर-चिह्न सुरक्षित रखें; केवल शब्द-मिलान के आधार पर मात्रा या लय न बदलें।",
+      "guidance": "‘स्वाहा’ का प्रयोग तैत्तिरीय संहिता, काण्ड ७, प्रपाठक १ के अश्वमेध-मन्त्र-प्रकरण में अनुवाक १३ (7.1.13) में स्पष्ट रूप से मिलता है; इसी प्रकरण में 7.1.15 और 7.1.17 में भी स्वाहा-युक्त आहुति-पाठ हैं। ये पाठ-साक्ष्य मन्त्रों में इस पद की उपस्थिति और पाठ-स्थान स्थापित करते हैं; वे हर मन्त्र, शाखा या Native Voice के लिए स्वर-मात्रा, pitch, लय अथवा एक समान ध्वनि-रूप सिद्ध नहीं करते। मूल मन्त्र-पाठ, पद-सीमा और उपलब्ध स्वर-चिह्न सुरक्षित रखें; केवल ‘स्वाहा’ के शब्द-मिलान से मात्रा या लय न बदलें।",
       "scope": "general",
       "category": "mantra-context",
       "reviewStatus": "needs-review",
       "sourceReview": {
-        "status": "primary-text-located",
+        "status": "digital-primary-text-transcription-located",
         "primaryTextLocated": true,
         "phoneticClaimVerified": false,
-        "reviewedAt": "2026-11-08",
+        "reviewedAt": "2026-11-09",
         "references": [
           {
             "sourceType": "digital-transcription-of-primary-text",
-            "grantha": "Kṛṣṇa Yajurveda, Taittirīya Saṃhitā",
-            "location": "Kāṇḍa 7, Prapāṭhaka 1, Anuvāka 13; compare 7.1.15 and 7.1.17",
-            "textExcerpt": "आयनाय स्वाहा । प्रायणाय स्वाहा । उद्द्रावाय स्वाहा ।",
-            "url": "https://sa.wikisource.org/wiki/तैत्तिरीयसंहिता(विस्वरः)/काण्डम्_७/प्रपाठकः_१",
-            "establishes": "The cited Saṃhitā transcription contains repeated svāhā formulae in the specified offering passages.",
-            "doesNotEstablish": "A universal vowel-duration, pitch, melodic pattern, or voice-specific pronunciation rule for every mantra."
+            "grantha": "Kṛṣṇa Yajurveda, Taittirīya Saṃhitā (visvara text)",
+            "location": "Kāṇḍa 7, Prapāṭhaka 1, Anuvāka 13; 7.1.13, Aśvamedha-mantra section",
+            "textExcerpt": "आयनाय स्वाहा प्रायणाय स्वाहा । उद्द्रावाय स्वाहा ।",
+            "url": "https://sa.wikisource.org/w/index.php?title=तैत्तिरीयसंहिता(विस्वरः)/काण्डम्_७/प्रपाठकः_१&oldid=324845",
+            "establishes": "The cited transcription contains the quoted svāhā formulae at Taittirīya Saṃhitā 7.1.13.",
+            "doesNotEstablish": "Vedic accent marks, a universal pitch or duration for svāhā, or the recitation of other mantras/śākhās."
+          },
+          {
+            "sourceType": "digital-transcription-of-primary-text",
+            "grantha": "Kṛṣṇa Yajurveda, Taittirīya Saṃhitā (visvara text)",
+            "location": "Kāṇḍa 7, Prapāṭhaka 1, Anuvāka 15 and Anuvāka 17; 7.1.15 and 7.1.17",
+            "textExcerpt": "पृथिव्यै स्वाहा । अन्तरिक्षाय स्वाहा दिवे स्वाहा",
+            "url": "https://sa.wikisource.org/w/index.php?title=तैत्तिरीयसंहिता(विस्वरः)/काण्डम्_७/प्रपाठकः_१&oldid=324845",
+            "establishes": "The same transcription contains further svāhā formulae in the cited Aśvamedha anuvākas.",
+            "doesNotEstablish": "A single prosodic or voice-specific pronunciation rule for every occurrence of svāhā."
           }
         ],
-        "reviewNote": "The cited textual occurrences are located. The exact mantra intended by this generic entry and its recitational form remain unverified; keep needs-review."
+        "reviewNote": "The cited transcription and anuvāka locations were checked. It is explicitly a visvara text and is used here only to establish textual occurrence, not accent or acoustic realization."
+      }
+    },
+    {
+      "id": "samhita-boundary-control",
+      "term": "संहिता",
+      "guidance": "पाणिनि अष्टाध्यायी 1.4.109 ‘परः सन्निकर्षः संहिता’ में वर्णों के अत्यन्त निकट सम्पर्क को संहिता-संज्ञा देते हैं। यह व्याकरणिक परिभाषा संहितागत नियमों के परिवेश को समझने में सहायक है; यह अपने-आप किसी भी मन्त्र में रिक्त स्थान हटाने, शब्द जोड़ने या मनमाना सन्धि-परिवर्तन करने का आदेश नहीं है। TTS में मूल स्रोत की लिखित सीमा, विराम-चिह्न और चुने हुए संहिता/पद-पाठ का संदर्भ सुरक्षित रखें; किसी विशिष्ट सन्धि-रूप के लिए उसका अलग नियम और वास्तविक पाठ-साक्ष्य आवश्यक है।",
+      "scope": "general",
+      "category": "text-boundary-and-samhita-context",
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-grammar-rule-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-09",
+        "references": [
+          {
+            "sourceType": "primary-grammar-text-digital-reference",
+            "grantha": "Pāṇini, Aṣṭādhyāyī",
+            "location": "Adhyāya 1, Pāda 4, sūtra 109 (1.4.109)",
+            "textExcerpt": "परः सन्निकर्षः संहिता",
+            "url": "https://brijs.github.io/ashtadhyayi-explorer/sutra/1.4.109/",
+            "establishes": "The sūtra defines saṃhitā in terms of close proximity/contact of sounds or letters.",
+            "doesNotEstablish": "A blanket instruction to remove written spaces, alter source text, or apply a particular sandhi to every mantra."
+          }
+        ],
+        "reviewNote": "The grammatical definition is located. The TTS instruction is deliberately limited to preserving source boundaries unless a separate context-specific sandhi rule is verified."
+      }
+    },
+    {
+      "id": "avasana-pause-control",
+      "term": "अवसान",
+      "guidance": "पाणिनि अष्टाध्यायी 1.4.110 ‘विरामोऽवसानम्’ में विराम/रुकने को अवसान-संज्ञा देते हैं। यह व्याकरणिक संज्ञा है; इससे किसी डिजिटल पंक्ति-विभाजन की निश्चित ध्वनि-अवधि, milliseconds में विराम, या प्रत्येक newline पर अनिवार्य मौन सिद्ध नहीं होता। TTS को मूल पाठ के स्पष्ट दण्ड, पाठ-साक्ष्य और चुनी हुई पाठ-परम्परा का पालन करना चाहिए; केवल दृश्य line-break से नया दीर्घ विराम न गढ़ें।",
+      "scope": "general",
+      "category": "pause-and-text-boundary-control",
+      "reviewStatus": "needs-review",
+      "sourceReview": {
+        "status": "primary-grammar-rule-located",
+        "primaryTextLocated": true,
+        "phoneticClaimVerified": false,
+        "reviewedAt": "2026-11-09",
+        "references": [
+          {
+            "sourceType": "primary-grammar-text-digital-reference",
+            "grantha": "Pāṇini, Aṣṭādhyāyī",
+            "location": "Adhyāya 1, Pāda 4, sūtra 110 (1.4.110)",
+            "textExcerpt": "विरामोऽवसानम्",
+            "url": "https://ashtadhyayi.github.io/suutra/1.4/1.4.110/",
+            "establishes": "The sūtra gives the technical designation avasāna to virāma/cessation.",
+            "doesNotEstablish": "A fixed acoustic pause duration, a mapping from every printed line break to silence, or app-specific timing values."
+          }
+        ],
+        "reviewNote": "The sūtra is a grammatical definition, not an acoustic timing standard. No pause-duration values are asserted."
       }
     }
   ],
   "reviewMetadata": {
     "identificationCode": "SWR-TTS-GUIDANCE-05",
-    "reviewedAt": "2026-11-08",
-    "reviewMethod": "Locate and compare cited primary-text or primary-grammar passages; state precisely what each source establishes and what it does not establish.",
-    "entryCount": 4,
-    "unchangedEntryCount": 4,
-    "unverifiedPronunciationEntriesRemainNeedsReview": true,
+    "reviewedAt": "2026-11-09",
+    "reviewMethod": "Re-check exact cited source passages and rule environments; distinguish primary text, concordance, and grammar references; record what each reference does and does not establish; do not infer acoustic or voice-specific behavior from written text alone.",
+    "entryCount": 6,
+    "previousEntryCount": 4,
+    "modifiedEntryIds": [
+      "agni-vedic-context",
+      "namah-visarga-context",
+      "svaha-mantra-context"
+    ],
+    "addedEntryIds": [
+      "samhita-boundary-control",
+      "avasana-pause-control"
+    ],
+    "sourceCorrections": [
+      "The Agnimile entry now distinguishes a Vedic concordance reference from an accent-marked primary-text witness; the unsupported accent claim was removed.",
+      "The Namah entry no longer misuses Aṣṭādhyāyī 8.3.15 as evidence for the pronunciation of an already-written visarga; it now cites conditional rules 8.3.34–36.",
+      "The Svaha entry's exact Taittirīya Saṃhitā location was checked as 7.1.13, with 7.1.15 and 7.1.17 recorded as additional occurrences."
+    ],
     "documentRole": "general-guidance-only",
     "guidanceIsNotSpeechText": true,
     "structuredPronunciationLexiconRemainsSeparate": true,
-    "automaticSpeechRewriteAuthorized": false
+    "automaticSpeechRewriteAuthorized": false,
+    "allPronunciationClaimsVoiceTested": false,
+    "unverifiedPronunciationEntriesRemainNeedsReview": true,
+    "productionScope": "source-grounded guidance and conservative TTS text-integrity constraints; no guessed nativeSpeechText, IPA, voice profile, pitch, tempo, or pause duration"
   }
 }
