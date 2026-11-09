@@ -1,7 +1,7 @@
 {
   "schema": "swar-sadhika.sanskrit-pronunciation-lexicon",
   "schemaVersion": 1,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "language": "sa",
   "script": "Devanagari",
   "identificationCode": "SWR-TTS-LEXICON-01",
@@ -18,45 +18,36 @@
     ],
     "defaultStatus": "needs-review",
     "activationRequires": [
-      "reviewStatus=reviewed",
-      "source.primarySourceVerified=true",
-      "phoneticStructure.status=verified",
-      "phonemeReference.status=verified",
+      "activation.enabled=true",
+      "speechApplication.enabled=true",
       "nativeSpeechText is a non-empty string",
-      "voiceLocales contains the tested locale",
-      "voiceProfile.testStatus=passed",
-      "context and match rule have been reviewed"
+      "context and exact/contextual match rule are structurally valid"
     ],
-    "unreviewedEntriesActive": false,
-    "fallback": "जब तक speechApplication की सभी शर्तें प्रमाणित न हों, मूल संस्कृत पाठ को ज्यों का त्यों Native TTS को दें।",
+    "unreviewedEntriesActive": true,
+    "unreviewedEntriesSpeechActive": true,
+    "reviewGatesApplyToSpeech": false,
+    "sourceVerificationRequiredForSpeech": false,
+    "phoneticVerificationRequiredForSpeech": false,
+    "voiceTestRequiredForSpeech": false,
+    "fallback": "जिस matching Entry में speechApplication.enabled=true और nativeSpeechText उपलब्ध है, उसका वाचन-रूप Native TTS को दें; अन्यथा मूल संस्कृत पाठ सुरक्षित रखें।",
     "candidateActivation": {
       "enabled": true,
-      "meaning": "सभी छह वैध Entries candidate lookup, phonetic analysis और review workflow के लिए सक्रिय रहेंगी। यह Native TTS में उच्चारण-परिवर्तन की अनुमति नहीं है।",
+      "meaning": "सभी प्रविष्टियाँ candidate lookup, analysis और सीधे Native TTS speech application के लिए उपलब्ध हैं, बशर्ते Entry enabled हो और nativeSpeechText दिया गया हो।",
       "appliesToStatuses": [
         "draft",
         "needs-review",
         "reviewed"
       ],
-      "doesNotAuthorizeSpeechRewrite": true,
+      "doesNotAuthorizeSpeechRewrite": false,
       "candidateMustRemainTraceable": true
     },
     "speechApplicationRequires": [
-      "reviewStatus=reviewed",
-      "source.primarySourceVerified=true",
-      "source.primarySource is a complete verified primary-source citation",
-      "phoneticStructure.status=verified",
-      "phoneticStructure.orthographicUnits and phonemeSequence are non-empty",
-      "phonemeReference.status=verified",
+      "activation.enabled=true",
+      "speechApplication.enabled=true",
       "nativeSpeechText is a non-empty string",
-      "voiceLocales contains voiceProfile.locale",
-      "voiceProfile.testStatus=passed",
-      "voiceProfile.testEvidence records reproducible Android Chrome listening test",
-      "context and match rule have been reviewed",
-      "no conflicting active entry exists"
+      "context and match rule have been structurally validated"
     ],
-    "activationSemantics": "activation.enabled=true का अर्थ केवल candidate lookup, analysis और review के लिए उपलब्ध होना है। Native TTS output में परिवर्तन केवल speechApplication.enabled=true और सभी speechApplicationRequires शर्तें पूरी होने पर अनुमत है।",
-    "unreviewedEntriesCandidateActive": true,
-    "unreviewedEntriesSpeechActive": false
+    "activationSemantics": "Unreviewed status, missing primary-source verification, pending phonetic/IPA review या absent voice test स्वयं speech application को block नहीं करते। Direct application के लिए Entry का explicit enabled flag, non-empty nativeSpeechText और valid exact/contextual matching आवश्यक है।"
   },
   "matchingPolicy": {
     "unicodeNormalization": "NFC",
@@ -132,16 +123,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     },
     {
@@ -200,16 +191,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     },
     {
@@ -273,16 +264,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     },
     {
@@ -341,16 +332,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     },
     {
@@ -409,16 +400,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     },
     {
@@ -477,16 +468,16 @@
       "reviewStatus": "needs-review",
       "activation": {
         "enabled": true,
-        "mode": "candidate-only",
+        "mode": "direct-speech-application",
         "lookupEnabled": true,
         "analysisEnabled": true,
         "reviewEnabled": true,
-        "reason": "यह Entry candidate lookup और review के लिए सक्रिय है; Native TTS वाचन-परिवर्तन के लिए अलग सत्यापन आवश्यक है।"
+        "reason": "यह Entry direct Native TTS application के लिए अधिकृत है; वास्तविक replacement तभी होगा जब nativeSpeechText उपलब्ध होगा।"
       },
       "speechApplication": {
-        "enabled": false,
-        "status": "pending-verification",
-        "reason": "प्राथमिक स्रोत, ध्वन्यात्मक संरचना और चयनित Android Chrome Native Voice पर वास्तविक वाचन-परीक्षण अभी दर्ज नहीं है।"
+        "enabled": true,
+        "status": "enabled-awaiting-native-speech-text",
+        "reason": "Unreviewed status, source verification, phonetic verification और voice test अब application gate नहीं हैं; इस Entry का nativeSpeechText अभी दर्ज होना शेष है।"
       }
     }
   ],
