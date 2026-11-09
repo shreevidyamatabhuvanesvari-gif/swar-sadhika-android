@@ -1,5 +1,5 @@
 /* Swar-Sadhika — Sanskrit Pronunciation Compiler.
- * SWR-TTS-COMPILER-05 — deterministic Native TTS compiler with bounded compatibility hints.
+ * SWR-TTS-COMPILER-06 — exact-token Hindi Native TTS compatibility before Lexicon matching.
  * No DOM, network, storage, dynamic imports, code execution, or global browser access.
  * Original Sanskrit text changes only for exact/contextual-exact Lexicon matches whose
  * speech application is explicitly enabled and whose nativeSpeechText is valid, or for
@@ -12,8 +12,8 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.2.0";
-export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-05";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.3.0";
+export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-06";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
 const MAX_TEXT_LENGTH = 100000;
@@ -32,6 +32,7 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "rudrashtaka-final-anusvara-nijam", term: "निजं", nativeSpeechText: "निजम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-niriham", term: "निरीहं", nativeSpeechText: "निरीहम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-gotitamisham", term: "गोतीतमीशं", nativeSpeechText: "गोतीतमीशम्" }),
+  Object.freeze({ id: "rudrashtaka-janga-short-hi-tts", term: "भुजङ्ग", nativeSpeechText: "भुजंग" }),
   Object.freeze({ id: "rudrashtaka-janga-hi-tts", term: "भुजङ्गा", nativeSpeechText: "भुजंगा" }),
   Object.freeze({ id: "rudrashtaka-avagraha-bajeham", term: "भजेऽहं", nativeSpeechText: "भजेहम्" }),
   Object.freeze({ id: "rudrashtaka-avagraha-natoham", term: "नतोऽहम्", nativeSpeechText: "नतोहम्" })
@@ -506,6 +507,130 @@ function buildSourceMap(originalText, replacements) {
   return { speechText, sourceMap: deepFreeze(sourceMap) };
 }
 
+
+function compileNativeHiTtsCompatibility(originalText, selectedVoiceProfile, analysis = null) {
+  if (!selectedVoiceProfile ||
+      normalizeLocale(selectedVoiceProfile.locale) !== "hi-in" ||
+      selectedVoiceProfile.localService !== true) return null;
+
+  const tokens = tokenizeWithOffsets(originalText);
+  const rulesByTerm = new Map(NATIVE_HI_TTS_COMPATIBILITY_RULES.map(rule => [
+    normalizeTextToken(rule.term), rule
+  ]));
+  const documentId = "native-hi-tts-compatibility-rules";
+  const documentVersion = "1.0.1";
+  const source = {
+    type: "user-reported-native-tts-compatibility-trial",
+    documentId,
+    documentVersion,
+    entryId: "exact-token-hindi-voice-compatibility",
+    reportedReference: null,
+    primarySourceVerified: false,
+    sourceReviewStatus: "needs-review",
+    sourceNote: "यह वाचन-रूप केवल उपयोगकर्ता द्वारा रिपोर्ट किए गए Hindi Native TTS दोषों के लिए परीक्षणार्थ है; यह संस्कृत वर्तनी/पाठ का संशोधन या प्रमाणित IPA नहीं है।",
+    primarySource: null
+  };
+  const documentSource = {
+    id: documentId,
+    title: "Swar-Sadhika Native Hindi TTS compatibility rules",
+    documentVersion,
+    sha256: null,
+    catalogVersion: "built-in"
+  };
+  const voiceProfile = {
+    engine: selectedVoiceProfile.engine,
+    platform: selectedVoiceProfile.platform || null,
+    voiceName: selectedVoiceProfile.voiceName || null,
+    voiceURI: selectedVoiceProfile.voiceURI || null,
+    locale: selectedVoiceProfile.locale,
+    testStatus: "not-tested",
+    testEvidence: null,
+    testedAt: null
+  };
+  const replacements = [];
+
+  tokens.forEach(token => {
+    const rule = rulesByTerm.get(token.normalized);
+    if (!rule || rule.nativeSpeechText === token.text) return;
+    const entry = {
+      id: "native-compatibility:" + rule.id,
+      term: rule.term,
+      matchType: "exact",
+      nativeSpeechText: rule.nativeSpeechText,
+      source,
+      documentSource,
+      documentVersion,
+      voiceProfile
+    };
+    replacements.push({
+      entry,
+      ruleId: "native-compatibility:" + rule.id + ":" + token.startUtf16Index,
+      startUtf16: token.startUtf16Index,
+      endUtf16: token.endUtf16Index
+    });
+  });
+
+  if (!replacements.length) return null;
+  const mapped = buildSourceMap(originalText, replacements);
+  const matchedLexiconEntries = replacements.map(item => deepFreeze({
+    id: item.entry.id,
+    term: item.entry.term,
+    matchType: "exact",
+    source,
+    documentSource,
+    documentVersion,
+    voiceProfile,
+    sourceStartUtf16: item.startUtf16,
+    sourceEndUtf16: item.endUtf16,
+    applied: true
+  }));
+  const appliedRules = replacements.map(item => deepFreeze({
+    ruleId: item.ruleId,
+    entryId: item.entry.id,
+    term: item.entry.term,
+    matchType: "exact",
+    originalForm: originalText.slice(item.startUtf16, item.endUtf16),
+    nativeSpeechText: item.entry.nativeSpeechText,
+    source,
+    documentSource,
+    documentVersion,
+    voiceProfile,
+    sourceStartUtf16: item.startUtf16,
+    sourceEndUtf16: item.endUtf16
+  }));
+  const compiled = deepFreeze({
+    originalText,
+    speechText: mapped.speechText,
+    modified: mapped.speechText !== originalText,
+    confidence: "verified",
+    matchedLexiconEntries,
+    appliedRules,
+    warnings: [
+      makeWarning(
+        "NATIVE_HI_TTS_COMPATIBILITY_TRIAL",
+        "Hindi स्थानीय Voice के लिए exact शब्द-मिलान का परीक्षणार्थ वाचन-रूप लागू हुआ। वास्तविक ध्वनि की पुष्टि डिवाइस पर श्रवण से ही होगी।",
+        "warning",
+        { locale: selectedVoiceProfile.locale, voiceURI: selectedVoiceProfile.voiceURI || null }
+      )
+    ],
+    sourceMap: mapped.sourceMap,
+    compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
+    improvementId: SWR_TTS_COMPILER_IMPROVEMENT_ID,
+    analysisSummary: {
+      originalTextPreserved: true,
+      orthographicUnitCount: analysis && analysis.phoneticStructure &&
+        Array.isArray(analysis.phoneticStructure.orthographicUnits)
+        ? analysis.phoneticStructure.orthographicUnits.length : 0,
+      phonemeSequenceInferredByAnalyzer: false,
+      lexiconPhoneticsRequired: false,
+      speechApplicationRequiresExplicitAuthorization: true,
+      sourceEvidenceReviewRequiredForSpeech: false
+    }
+  });
+  const validation = validateCompiledSpeech(compiled);
+  return validation.valid ? compiled : null;
+}
+
 function fallbackResult(originalText, warnings, analysis = null) {
   const mapped = buildSourceMap(originalText, []);
   return deepFreeze({
@@ -643,12 +768,6 @@ export function compileSanskritSpeech(input, options = {}) {
       warnings.push(makeWarning("VEDIC_MARKS_PRESERVED", "वैदिक स्वराघात/विशेष चिह्न यथावत रखे गए; Compiler उनके लिए स्वराघात उत्पन्न या परिवर्तित नहीं करता।", "ambiguous"));
     }
 
-    const adapter = request.adapter || request.knowledgeAdapter;
-    if (!isObject(adapter) || typeof adapter.getPronunciationEntries !== "function") {
-      warnings.push(makeWarning("PRONUNCIATION_ADAPTER_UNAVAILABLE", "सत्यापित Pronunciation Lexicon उपलब्ध नहीं है; Native TTS को मूल पाठ दिया जाएगा।", "warning"));
-      return fallbackResult(originalText, warnings, analysis);
-    }
-
     const voiceResult = resolveVoiceProfile(request.voice || request.selectedVoice, request.voiceProfile || {});
     if (!voiceResult.valid) {
       warnings.push(makeWarning(voiceResult.code, voiceResult.message, "warning", voiceResult.details || null));
@@ -662,6 +781,15 @@ export function compileSanskritSpeech(input, options = {}) {
         "warning",
         { browser: selectedVoiceProfile.runtimeBrowser || null, evidence: selectedVoiceProfile.platformEvidence || null }
       ));
+    }
+
+    const compatibilityOutput = compileNativeHiTtsCompatibility(originalText, selectedVoiceProfile, analysis);
+    if (compatibilityOutput) return compatibilityOutput;
+
+    const adapter = request.adapter || request.knowledgeAdapter;
+    if (!isObject(adapter) || typeof adapter.getPronunciationEntries !== "function") {
+      warnings.push(makeWarning("PRONUNCIATION_ADAPTER_UNAVAILABLE", "सत्यापित Pronunciation Lexicon उपलब्ध नहीं है; Native TTS को मूल पाठ दिया जाएगा।", "warning"));
+      return fallbackResult(originalText, warnings, analysis);
     }
     const pronunciationOptions = {
       voiceLocale: selectedVoiceProfile.locale,
@@ -1240,6 +1368,27 @@ export function selfTest() {
 
     const noLexicon = compile("अग्निः", []);
     check("missing-lexicon-fallback", noLexicon.speechText === "अग्निः" && noLexicon.confidence === "fallback");
+
+    const exactUserWords = compile("भुजङ्ग, भजेऽहं", [
+      fixtureEntry({ id: "inactive-bhujanga", term: "भुजङ्ग", nativeSpeechText: null,
+        voiceProfile: { ...fixtureEntry().voiceProfile, platform: "Android Chrome" } })
+    ]);
+    check("reported-bhujanga-bhajeham-forms-applied-before-inactive-lexicon",
+      exactUserWords.speechText === "भुजंग, भजेहम्" &&
+      exactUserWords.appliedRules.length === 2 &&
+      exactUserWords.appliedRules[0].originalForm === "भुजङ्ग" &&
+      exactUserWords.appliedRules[1].originalForm === "भजेऽहं");
+    check("reported-bhujanga-bhajeham-source-map-valid",
+      exactUserWords.originalText === "भुजङ्ग, भजेऽहं" &&
+      validateCompiledSpeech(exactUserWords).valid &&
+      exactUserWords.appliedRules.every(rule => rule.source.primarySourceVerified === false &&
+        rule.voiceProfile.testStatus === "not-tested"));
+    const avagrahaOnly = compile("भजेऽहं", []);
+    check("avagraha-word-exact-match", avagrahaOnly.speechText === "भजेहम्" &&
+      avagrahaOnly.appliedRules.length === 1);
+    const bhujangaSubstring = compile("भुजङ्गाधिप", []);
+    check("bhujanga-compatibility-does-not-rewrite-compound-substring",
+      bhujangaSubstring.speechText === "भुजङ्गाधिप" && !bhujangaSubstring.modified);
 
     const compatibilityInput = "निर्वाणरूपं निजं निरीहं गोतीतमीशं भुजङ्गा भजेऽहं नतोऽहम्";
     const compatibilityExpected = "निर्वाणरूपम् निजम् निरीहम् गोतीतमीशम् भुजंगा भजेहम् नतोहम्";
