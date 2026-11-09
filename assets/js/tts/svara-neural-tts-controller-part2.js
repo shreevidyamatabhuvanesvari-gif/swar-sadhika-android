@@ -47,7 +47,8 @@ const state = {
   destroyed: false,
   activeAudioUrl: null,
   previousAudioUrls: new Set(),
-  loadStarted: false
+  loadStarted: false,
+  runtimeImportError: ""
 };
 
 async function inspectDevice() {
@@ -100,11 +101,12 @@ function handleWorkerMessage(event) {
       state.webgpuReady = false;
       state.busy = false;
       setBusy(false);
-      setStatus("Runtime Module लोड विफल। चरण: " + data.stage +
+      state.runtimeImportError = "Runtime Module लोड विफल। चरण: " + data.stage +
         "\\nकारण: " + (data.message || "अज्ञात module import त्रुटि") +
         "\\nTransformers URL: " + (data.transformersUrl || "—") +
         "\\nONNX Runtime URL: " + (data.onnxRuntimeUrl || "—") +
-        (data.stack ? "\\nविवरण: " + data.stack : ""), "error");
+        (data.stack ? "\\nविवरण: " + data.stack : "");
+      setStatus(state.runtimeImportError, "error");
       break;
     case "feature-error":
       state.webgpuReady = false;
@@ -150,8 +152,13 @@ function handleWorkerMessage(event) {
 function handleWorkerError(event) {
   state.busy = false;
   setBusy(false);
+  if (state.runtimeImportError) {
+    setStatus(state.runtimeImportError, "error");
+    return;
+  }
   setStatus("Worker/Module लोड त्रुटि: " + (event.message || "अज्ञात त्रुटि") +
-    "। CDN import, WebGPU या browser memory समस्या हो सकती है।", "error");
+    (event.filename ? "\\nFile: " + event.filename : "") +
+    (Number.isFinite(event.lineno) ? "\\nLine: " + event.lineno : ""), "error");
 }
 
 function startWorker() {
