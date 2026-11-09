@@ -1,15 +1,17 @@
 /* Swar-Sadhika — Sanskrit Pronunciation Compiler.
- * SWR-TTS-COMPILER-04 — deterministic, review-gated Native TTS text compiler.
+ * SWR-TTS-COMPILER-04 — deterministic, explicitly authorized Native TTS text compiler.
  * No DOM, network, storage, dynamic imports, code execution, or global browser access.
- * Original Sanskrit text changes only when one exact, reviewed, voice-tested Lexicon
- * entry authorizes a single-word replacement.
+ * Original Sanskrit text changes only for exact/contextual-exact Lexicon matches whose
+ * speech application is explicitly enabled and whose nativeSpeechText is valid.
+ * Review, primary-source verification, phonetic review, and voice-test status are not
+ * speech-application gates; declared voice restrictions and structural safety checks remain.
  */
 import {
   analyzeVedicText,
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.0.0";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.1.0";
 export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-04";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
@@ -76,6 +78,18 @@ function codePointOffset(text, utf16Offset) {
   return countCodePoints(text.slice(0, utf16Offset));
 }
 
+function utf16OffsetFromCodePoint(text, codePointIndex) {
+  if (!Number.isInteger(codePointIndex) || codePointIndex < 0) return null;
+  let utf16Offset = 0;
+  let remaining = codePointIndex;
+  for (const character of text) {
+    if (remaining === 0) return utf16Offset;
+    utf16Offset += character.length;
+    remaining -= 1;
+  }
+  return remaining === 0 ? utf16Offset : null;
+}
+
 function tokenizeWithOffsets(text) {
   const regex = new RegExp(WORD_PATTERN_SOURCE, "gu");
   return Array.from(text.matchAll(regex), match => ({
@@ -84,28 +98,6 @@ function tokenizeWithOffsets(text) {
     startUtf16Index: match.index,
     endUtf16Index: match.index + match[0].length
   }));
-}
-
-function completePrimarySource(source) {
-  if (!isObject(source)) return false;
-  const values = Object.entries(source).filter(([, value]) =>
-    (typeof value === "string" && value.trim().length > 0) ||
-    (typeof value === "number" && Number.isFinite(value))
-  );
-  const hasWork = values.some(([key]) => /text|grantha|title|name|work|source/i.test(key));
-  const hasLocator = values.some(([key]) => /chapter|section|verse|citation|locator|reference|passage/i.test(key));
-  return values.length >= 2 && hasWork && hasLocator;
-}
-
-function hasStructuredVoiceEvidence(evidence) {
-  if (!isObject(evidence)) return false;
-  const keys = Object.entries(evidence)
-    .filter(([, value]) => isNonEmptyString(value))
-    .map(([key]) => key.toLowerCase());
-  return keys.some(key => /date|testedat/.test(key)) &&
-    keys.some(key => /phrase|utterance|testtext/.test(key)) &&
-    keys.some(key => /result|observation|accepted/.test(key)) &&
-    keys.some(key => /reviewer|reviewedby|tester/.test(key));
 }
 
 function resolveVoiceProfile(voice, suppliedProfile = {}) {
@@ -163,50 +155,55 @@ function validateLexiconEntryForSpeech(entry, selectedVoiceProfile) {
   const reasons = [];
   if (!isObject(entry)) return { ready: false, reasons: ["entry-not-an-object"] };
 
-  if (entry.reviewStatus !== "reviewed") reasons.push("entry-not-reviewed");
-  if (!isObject(entry.source) ||
-      entry.source.primarySourceVerified !== true ||
-      entry.source.sourceReviewStatus !== "reviewed" ||
-      !completePrimarySource(entry.source.primarySource)) {
-    reasons.push("primary-source-not-verified");
-  }
-  if (!isObject(entry.phoneticStructure) ||
-      entry.phoneticStructure.status !== "verified" ||
-      !Array.isArray(entry.phoneticStructure.orthographicUnits) ||
-      !entry.phoneticStructure.orthographicUnits.length ||
-      !Array.isArray(entry.phoneticStructure.phonemeSequence) ||
-      !entry.phoneticStructure.phonemeSequence.length) {
-    reasons.push("structured-phonetics-not-verified");
-  }
-  if (!isObject(entry.phonemeReference) ||
-      entry.phonemeReference.status !== "verified" ||
-      !isNonEmptyString(entry.phonemeReference.value)) {
-    reasons.push("phoneme-reference-not-verified");
-  }
-  if (!isNonEmptyString(entry.nativeSpeechText) ||
-      !DEVANAGARI_TOKEN.test(entry.nativeSpeechText.trim()) ||
-      /\s/u.test(entry.nativeSpeechText)) {
+  // Review and evidence states remain provenance metadata, not speech-application gates.
+  if (!isObject(entry.source)) reasons.push("source-metadata-missing");
+  if (!isObject(entry.phoneticStructure)) reasons.push("phonetic-structure-missing");
+  else if (entry.phoneticStructure.status === "invalid") reasons.push("phonetic-structure-marked-invalid");
+  if (!isObject(entry.phonemeReference)) reasons.push("phoneme-reference-missing");
+  else if (entry.phonemeReference.status === "invalid") reasons.push("phoneme-reference-marked-invalid");
+
+  const nativeSpeechText = isNonEmptyString(entry.nativeSpeechText)
+    ? entry.nativeSpeechText.trim()
+    : "";
+  if (!nativeSpeechText ||
+      !DEVANAGARI_TOKEN.test(nativeSpeechText) ||
+      /\s/u.test(nativeSpeechText)) {
     reasons.push("native-speech-text-invalid");
   }
+
   if (!Array.isArray(entry.voiceLocales) ||
+      entry.voiceLocales.some(locale => !isValidLocale(locale))) {
+    reasons.push("voice-locales-invalid");
+  } else if (entry.voiceLocales.length &&
       !entry.voiceLocales.some(locale => normalizeLocale(locale) === normalizeLocale(selectedVoiceProfile.locale))) {
-    reasons.push("voice-locale-not-declared");
+    reasons.push("voice-locale-mismatch");
   }
+
   if (!isObject(entry.voiceProfile)) {
     reasons.push("voice-profile-missing");
   } else {
     const profile = entry.voiceProfile;
-    if (profile.engine !== selectedVoiceProfile.engine ||
-        profile.platform !== selectedVoiceProfile.platform ||
-        profile.voiceName !== selectedVoiceProfile.voiceName ||
-        profile.voiceURI !== selectedVoiceProfile.voiceURI ||
-        normalizeLocale(profile.locale) !== normalizeLocale(selectedVoiceProfile.locale)) {
-      reasons.push("voice-profile-mismatch");
+    const declaredVoiceName = profile.voiceName || profile.name;
+    const declaredLocale = profile.locale;
+    if (isNonEmptyString(profile.engine) && profile.engine !== selectedVoiceProfile.engine) {
+      reasons.push("voice-engine-mismatch");
     }
-    if (profile.testStatus !== "passed" || !hasStructuredVoiceEvidence(profile.testEvidence)) {
-      reasons.push("voice-test-not-passed-or-evidenced");
+    if (isNonEmptyString(profile.platform) && profile.platform !== selectedVoiceProfile.platform) {
+      reasons.push("voice-platform-mismatch");
+    }
+    if (isNonEmptyString(declaredVoiceName) && declaredVoiceName !== selectedVoiceProfile.voiceName) {
+      reasons.push("voice-name-mismatch");
+    }
+    if (isNonEmptyString(profile.voiceURI) && profile.voiceURI !== selectedVoiceProfile.voiceURI) {
+      reasons.push("voice-uri-mismatch");
+    }
+    if (isNonEmptyString(declaredLocale) &&
+        (!isValidLocale(declaredLocale) ||
+         normalizeLocale(declaredLocale) !== normalizeLocale(selectedVoiceProfile.locale))) {
+      reasons.push("voice-profile-locale-mismatch");
     }
   }
+
   if (!isObject(entry.activation) ||
       entry.activation.enabled !== true ||
       entry.activation.lookupEnabled !== true) {
@@ -235,6 +232,17 @@ function validateLexiconEntryForSpeech(entry, selectedVoiceProfile) {
   }
   if (entry.scope === "shakha-specific" && !isNonEmptyString(entry.context && entry.context.shakha)) {
     reasons.push("shakha-specific-entry-missing-shakha");
+  }
+  if (isObject(entry.context)) {
+    if (entry.context.patha !== null && entry.context.patha !== undefined &&
+        !isNonEmptyString(entry.context.patha)) reasons.push("invalid-context-patha");
+    if (!Array.isArray(entry.context.precedingWords) || !Array.isArray(entry.context.followingWords)) {
+      reasons.push("invalid-context-word-arrays");
+    }
+    if (entry.matchType === "contextual-exact" &&
+        (!Array.isArray(entry.context.requiredSequence) || !entry.context.requiredSequence.length)) {
+      reasons.push("contextual-sequence-missing");
+    }
   }
   return { ready: reasons.length === 0, reasons };
 }
@@ -540,7 +548,7 @@ export function compileSanskritSpeech(input, options = {}) {
     }
     const candidates = Array.from(candidateMap.values());
     if (!candidates.length) {
-      warnings.push(makeWarning("NO_VERIFIED_LEXICON_MATCH", "चयनित Voice और Context के लिए कोई सत्यापित Pronunciation Entry उपलब्ध नहीं है; Native TTS Fallback लागू है।", "warning"));
+      warnings.push(makeWarning("NO_ACTIVE_LEXICON_MATCH", "चयनित Voice और Context के लिए कोई सक्रिय तथा उपयोग योग्य Pronunciation Entry उपलब्ध नहीं है; Native TTS Fallback लागू है।", "warning"));
       return fallbackResult(originalText, warnings, analysis);
     }
 
@@ -614,28 +622,37 @@ export function compileSanskritSpeech(input, options = {}) {
 
       const readiness = validateLexiconEntryForSpeech(entry, selectedVoiceProfile);
       if (!readiness.ready) {
-        warnings.push(makeWarning("LEXICON_ENTRY_NOT_COMPILER_READY", "Lexicon Entry सभी समीक्षा, स्रोत, ध्वन्यात्मक और Voice परीक्षण शर्तें पूरी नहीं करती; मूल शब्द सुरक्षित रखा गया।", "warning", {
+        warnings.push(makeWarning("LEXICON_ENTRY_NOT_COMPILER_READY", "Lexicon Entry की संरचना, स्पष्ट Speech Authorization, Native Speech Text या घोषित Voice प्रतिबंध अमान्य हैं; मूल शब्द सुरक्षित रखा गया।", "warning", {
           entryId: entry.id,
           reasons: readiness.reasons
         }));
         continue;
       }
-      if (!contextMatches(entry, match, originalText, request)) {
+      const normalizedMatch = {
+        ...match,
+        termStartUtf16Index: Number.isInteger(match.termStartUtf16Index)
+          ? match.termStartUtf16Index
+          : utf16OffsetFromCodePoint(originalText, match.termStartCodePointIndex),
+        termEndUtf16Index: Number.isInteger(match.termEndUtf16Index)
+          ? match.termEndUtf16Index
+          : utf16OffsetFromCodePoint(originalText, match.termEndCodePointIndex)
+      };
+      if (!contextMatches(entry, normalizedMatch, originalText, request)) {
         warnings.push(makeWarning("LEXICON_CONTEXT_MISMATCH", "Exact Word, Context, Shakha या Patha का पूरा मिलान नहीं हुआ; संबंधित शब्द अपरिवर्तित रखा गया।", "ambiguous", {
           entryId: entry.id,
           term: entry.term
         }));
         continue;
       }
-      if (!Number.isInteger(match.termStartUtf16Index) || !Number.isInteger(match.termEndUtf16Index) ||
-          match.termStartUtf16Index < 0 || match.termEndUtf16Index <= match.termStartUtf16Index ||
-          match.termEndUtf16Index > originalText.length) {
+      if (!Number.isInteger(normalizedMatch.termStartUtf16Index) || !Number.isInteger(normalizedMatch.termEndUtf16Index) ||
+          normalizedMatch.termStartUtf16Index < 0 || normalizedMatch.termEndUtf16Index <= normalizedMatch.termStartUtf16Index ||
+          normalizedMatch.termEndUtf16Index > originalText.length) {
         warnings.push(makeWarning("MATCH_OFFSETS_INVALID", "Analyzer ने सुरक्षित source offsets नहीं दिए; संबंधित परिवर्तन अस्वीकार किया गया।", "ambiguous", {
           entryId: entry.id
         }));
         continue;
       }
-      const sourceTerm = originalText.slice(match.termStartUtf16Index, match.termEndUtf16Index);
+      const sourceTerm = originalText.slice(normalizedMatch.termStartUtf16Index, normalizedMatch.termEndUtf16Index);
       if (normalizeTextToken(sourceTerm) !== normalizeTextToken(entry.term)) {
         warnings.push(makeWarning("SOURCE_TERM_MISMATCH", "Analyzer का exact source term Lexicon term से मेल नहीं खाता; परिवर्तन अस्वीकार किया गया।", "ambiguous", {
           entryId: entry.id
@@ -643,13 +660,13 @@ export function compileSanskritSpeech(input, options = {}) {
         continue;
       }
 
-      const ruleId = "lexicon:" + entry.id + ":" + match.termStartUtf16Index;
+      const ruleId = "lexicon:" + entry.id + ":" + normalizedMatch.termStartUtf16Index;
       const record = {
         entry,
-        match,
+        match: normalizedMatch,
         ruleId,
-        startUtf16: match.termStartUtf16Index,
-        endUtf16: match.termEndUtf16Index
+        startUtf16: normalizedMatch.termStartUtf16Index,
+        endUtf16: normalizedMatch.termEndUtf16Index
       };
       eligibleMatches.push(record);
       matchedLexiconEntries.push(deepFreeze({
@@ -706,10 +723,10 @@ export function compileSanskritSpeech(input, options = {}) {
     }));
 
     if (!matchedLexiconEntries.length && !warnings.length) {
-      warnings.push(makeWarning("NO_APPLICABLE_PRONUNCIATION_RULE", "इस पाठ के लिए कोई लागू और सत्यापित Pronunciation Rule नहीं मिला; Native TTS Fallback लागू है।", "warning"));
+      warnings.push(makeWarning("NO_APPLICABLE_PRONUNCIATION_RULE", "इस पाठ के लिए कोई लागू और स्पष्ट रूप से अधिकृत Pronunciation Rule नहीं मिला; Native TTS Fallback लागू है।", "warning"));
     }
     if (!matchedLexiconEntries.length && candidateAnalysis.matches.length) {
-      warnings.push(makeWarning("ALL_MATCHES_REJECTED", "सभी matched entries Compiler की स्वतंत्र सत्यापन शर्तों पर अस्वीकृत हुईं; मूल पाठ सुरक्षित है।", "warning"));
+      warnings.push(makeWarning("ALL_MATCHES_REJECTED", "सभी matched entries Compiler की संरचनात्मक, Authorization, Native Speech Text या declared-Voice जाँच में अस्वीकृत हुईं; मूल पाठ सुरक्षित है।", "warning"));
     }
 
     const ambiguous = warnings.some(item => item.severity === "ambiguous");
@@ -729,7 +746,9 @@ export function compileSanskritSpeech(input, options = {}) {
         originalTextPreserved: analysis.originalTextPreserved,
         orthographicUnitCount: analysis.phoneticStructure.orthographicUnits.length,
         phonemeSequenceInferredByAnalyzer: false,
-        lexiconPhoneticsRequired: true
+        lexiconPhoneticsRequired: false,
+        speechApplicationRequiresExplicitAuthorization: true,
+        sourceEvidenceReviewRequiredForSpeech: false
       }
     });
 
@@ -766,10 +785,14 @@ export function getCompilerDiagnostics(compiledSpeech = null) {
     confidenceStates: ["verified", "fallback", "ambiguous"],
     policy: {
       originalTextPreservedOnError: true,
-      onlyReviewedEntries: true,
-      primarySourceRequired: true,
-      verifiedPhoneticStructureRequired: true,
-      testedNativeVoiceRequired: true,
+      onlyReviewedEntries: false,
+      primarySourceRequired: false,
+      verifiedPhoneticStructureRequired: false,
+      testedNativeVoiceRequired: false,
+      explicitSpeechAuthorizationRequired: true,
+      nonEmptyNativeSpeechTextRequired: true,
+      declaredVoiceRestrictionsEnforced: true,
+      invalidPhoneticMetadataRejected: true,
       exactAndContextualMatchingOnly: true,
       guidanceParagraphToSpeech: false,
       ipaToNativeSpeech: false,
@@ -904,8 +927,40 @@ export function selfTest() {
     const substring = compile("भुजङ्गतुङ्ग", [fixtureEntry({ term: "भुजङ्ग", nativeSpeechText: "भुजङ्गः" })]);
     check("exact-token-does-not-match-substring", substring.speechText === "भुजङ्गतुङ्ग" && !substring.modified);
 
-    const unreviewed = compile("अग्निः", [fixtureEntry({ reviewStatus: "needs-review" })]);
-    check("unreviewed-entry-rejected", unreviewed.speechText === "अग्निः" && !unreviewed.modified && unreviewed.confidence === "fallback");
+    const unreviewedDirectEntry = fixtureEntry({
+      reviewStatus: "needs-review",
+      source: {
+        type: "existing-knowledge-document",
+        documentId: "secondary-reference",
+        documentVersion: "1.0.0",
+        entryId: "unreviewed-agni",
+        reportedReference: null,
+        primarySourceVerified: false,
+        sourceReviewStatus: "needs-review",
+        primarySource: null
+      },
+      phoneticStructure: { status: "pending-review", orthographicUnits: [], phonemeSequence: [] },
+      phonemeReference: { system: "IPA", value: null, status: "pending-review", source: null },
+      voiceLocales: [],
+      voiceProfile: {
+        engine: NATIVE_TTS_ENGINE,
+        platform: "Android Chrome",
+        voiceName: null,
+        voiceURI: null,
+        locale: null,
+        testStatus: "not-tested",
+        testEvidence: null
+      },
+      speechApplication: { enabled: true, status: "enabled-awaiting-native-speech-text" }
+    });
+    const unreviewed = compile("अग्निः", [unreviewedDirectEntry]);
+    check("unreviewed-unverified-unprofiled-entry-can-apply", unreviewed.speechText === "अग्नि" && unreviewed.modified);
+    check("direct-application-retains-unverified-provenance", unreviewed.appliedRules.length === 1 &&
+      unreviewed.appliedRules[0].source.primarySourceVerified === false &&
+      unreviewed.appliedRules[0].voiceProfile.testStatus === "not-tested");
+    check("explicit-authorization-diagnostics", getCompilerDiagnostics(unreviewed).policy.onlyReviewedEntries === false &&
+      getCompilerDiagnostics(unreviewed).policy.primarySourceRequired === false &&
+      getCompilerDiagnostics(unreviewed).policy.explicitSpeechAuthorizationRequired === true);
 
     const unsupportedVoice = compile("अग्निः", [fixtureEntry()], { voice: null });
     check("missing-voice-safe-fallback", unsupportedVoice.speechText === "अग्निः" && unsupportedVoice.warnings.some(item => item.code === "NATIVE_VOICE_MISSING"));
@@ -928,11 +983,11 @@ export function selfTest() {
         notes: "contextual self-test"
       }
     });
-    const contextual = compile("सदाशिवं भजे।", [contextualEntry]);
-    check("contextual-sequence-replaces-term-only", contextual.speechText === "सदाशिवम् भजे।" && contextual.modified);
+    const contextual = compile("सदाशिवं भजे", [contextualEntry]);
+    check("contextual-sequence-replaces-term-only", contextual.speechText === "सदाशिवम् भजे" && contextual.modified);
 
-    const wrongContext = compile("सदाशिवं नमः।", [contextualEntry]);
-    check("contextual-mismatch-fallback", wrongContext.speechText === "सदाशिवं नमः।" && !wrongContext.modified);
+    const wrongContext = compile("सदाशिवं नमः", [contextualEntry]);
+    check("contextual-mismatch-fallback", wrongContext.speechText === "सदाशिवं नमः" && !wrongContext.modified);
 
     const branchEntry = fixtureEntry({
       id: "shakha-entry",
@@ -966,10 +1021,19 @@ export function selfTest() {
     const ipaResult = compile("अग्निः", [fixtureEntry({ ipa: "ˈɐɡ.nɪ", nativeSpeechText: "अग्नि" })]);
     check("ipa-is-not-native-speech-output", ipaResult.speechText === "अग्नि" && ipaResult.speechText !== "ˈɐɡ.nɪ");
 
-    const malformedSource = compile("अग्निः", [fixtureEntry({
-      source: { primarySourceVerified: false, sourceReviewStatus: "needs-review", primarySource: null }
+    const malformedSource = compile("अग्निः", [fixtureEntry({ source: null })]);
+    check("missing-source-metadata-rejected", malformedSource.speechText === "अग्निः" && !malformedSource.modified);
+
+    const missingSpeechText = compile("अग्निः", [fixtureEntry({ nativeSpeechText: null })]);
+    check("missing-native-speech-text-rejected", missingSpeechText.speechText === "अग्निः" && !missingSpeechText.modified);
+
+    const invalidPhonetics = compile("अग्निः", [fixtureEntry({
+      phoneticStructure: { status: "invalid", orthographicUnits: [], phonemeSequence: [] }
     })]);
-    check("unverified-source-rejected", malformedSource.speechText === "अग्निः" && !malformedSource.modified);
+    check("explicitly-invalid-phonetics-rejected", invalidPhonetics.speechText === "अग्निः" && !invalidPhonetics.modified);
+
+    const unauthorizedSpeech = compile("अग्निः", [fixtureEntry({ speechApplication: { enabled: false } })]);
+    check("speech-application-authorization-required", unauthorizedSpeech.speechText === "अग्निः" && !unauthorizedSpeech.modified);
 
     const outputCorruption = validateCompiledSpeech({
       ...exact,
