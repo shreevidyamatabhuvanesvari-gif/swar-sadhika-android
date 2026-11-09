@@ -36,6 +36,61 @@ export async function mount(context) {
     throw new Error("TTS interface में आवश्यक तत्व अनुपस्थित हैं: " + missing.join(", "));
   }
 
+  const calibrationPanel = doc.createElement("section");
+  calibrationPanel.className = "note tts-voice-calibration";
+  calibrationPanel.setAttribute("aria-label", "Native Voice Rate और Pitch Calibration");
+  calibrationPanel.setAttribute("data-role", "voice-parameter-calibration");
+  const calibrationHeading = doc.createElement("h3");
+  calibrationHeading.textContent = "Native Voice — Rate / Pitch Calibration";
+  const calibrationIntro = doc.createElement("p");
+  calibrationIntro.className = "note";
+  calibrationIntro.textContent = "1.00 / 1.00 चुनी हुई Native Voice के platform-default मान हैं। छोटे बदलाव करके नमूना सुनें; Android TTS Provider कुछ मानों को सीमित या अनदेखा कर सकता है। Rate और Pitch आवाज़ की पहचान या संस्कृत उच्चारण को स्वयं ठीक नहीं करते।";
+  const pitchField = doc.createElement("label");
+  pitchField.className = "field";
+  pitchField.textContent = "आवाज़ की Pitch ";
+  const pitchValue = doc.createElement("span");
+  pitchValue.textContent = "1.00";
+  pitchField.appendChild(pitchValue);
+  const pitchInput = doc.createElement("input");
+  pitchInput.type = "range";
+  pitchInput.min = "0.70";
+  pitchInput.max = "1.30";
+  pitchInput.step = "0.05";
+  pitchInput.value = "1.00";
+  pitchInput.setAttribute("aria-label", "Native Voice Pitch");
+  pitchInput.setAttribute("aria-valuetext", "1.00 — platform default");
+  pitchField.appendChild(pitchInput);
+  const calibrationSummary = doc.createElement("p");
+  calibrationSummary.className = "tts-preview-meta";
+  calibrationSummary.setAttribute("role", "status");
+  calibrationSummary.setAttribute("aria-live", "polite");
+  const calibrationActions = doc.createElement("div");
+  calibrationActions.className = "tts-actions";
+  const calibrationSampleButton = doc.createElement("button");
+  calibrationSampleButton.type = "button";
+  calibrationSampleButton.className = "btn";
+  calibrationSampleButton.textContent = "▶ पहली पंक्ति का नमूना सुनें";
+  const calibrationResetButton = doc.createElement("button");
+  calibrationResetButton.type = "button";
+  calibrationResetButton.className = "btn";
+  calibrationResetButton.textContent = "मानक 1.00 / 1.00 पर रीसेट";
+  calibrationActions.append(calibrationSampleButton, calibrationResetButton);
+  const calibrationNote = doc.createElement("p");
+  calibrationNote.className = "note";
+  calibrationNote.textContent = "नमूना परीक्षण में पाठ वही रहेगा जो आपने लिखा है। परीक्षण के दौरान मुख्य वाचन बंद रहेगा; “समाप्त करें” से नमूना रोका जा सकता है।";
+  calibrationPanel.append(calibrationHeading, calibrationIntro, pitchField, calibrationSummary, calibrationActions, calibrationNote);
+  const rateField = ui.rate.parentNode;
+  const controlsRow = rateField && rateField.parentNode;
+  if (controlsRow && controlsRow.parentNode) {
+    controlsRow.parentNode.insertBefore(calibrationPanel, controlsRow.nextSibling);
+  } else {
+    root.appendChild(calibrationPanel);
+  }
+  ui.rate.min = "0.65";
+  ui.rate.max = "1.25";
+  ui.rate.step = "0.05";
+  ui.rate.value = "1.00";
+  ui.rate.setAttribute("aria-label", "Native Voice बोलने की गति");
   const knowledgeStatus = doc.createElement("div");
   knowledgeStatus.className = "status warn";
   knowledgeStatus.setAttribute("role", "status");
@@ -165,6 +220,7 @@ export async function mount(context) {
     index: 0,
     active: false,
     speechInFlight: false,
+    calibrationTesting: false,
     engineReady: false,
     userPaused: false,
     navigationPaused: false,
@@ -866,14 +922,109 @@ export async function mount(context) {
     renderG2PPreview();
   }
 
+  function getSelectedRate() {
+    const value = Number(ui.rate.value);
+    return Number.isFinite(value) ? Math.min(1.25, Math.max(0.65, value)) : 1.00;
+  }
+
+  function getSelectedPitch() {
+    const value = Number(pitchInput.value);
+    return Number.isFinite(value) ? Math.min(1.30, Math.max(0.70, value)) : 1.00;
+  }
+
+  function renderCalibrationSummary() {
+    const voice = chooseVoice(ui.input.value);
+    const voiceLabel = voice
+      ? String(voice.name || "स्थानीय Native Voice") + " (" + String(voice.lang || "locale अज्ञात") + ")"
+      : "अभी कोई स्थानीय Voice चयनित नहीं";
+    calibrationSummary.textContent = "Voice: " + voiceLabel +
+      " · Rate: " + getSelectedRate().toFixed(2) +
+      "× · Pitch: " + getSelectedPitch().toFixed(2) +
+      " · ये मान अगले वाचन पर लागू होंगे।";
+  }
+
+  function setCalibrationControlsDisabled(disabled) {
+    ui.rate.disabled = Boolean(disabled);
+    pitchInput.disabled = Boolean(disabled);
+    calibrationResetButton.disabled = Boolean(disabled);
+    calibrationSampleButton.disabled = Boolean(disabled) || !state.engineReady ||
+      !state.voiceEntries.length || state.destroyed;
+  }
+
+  function onPitchInput() {
+    const value = getSelectedPitch();
+    pitchValue.textContent = value.toFixed(2);
+    pitchInput.setAttribute("aria-valuetext",
+      value.toFixed(2) + (value === 1 ? " — platform default" : ""));
+    renderCalibrationSummary();
+  }
+
+  function resetCalibration() {
+    if (state.active || state.calibrationTesting || state.destroyed) return;
+    ui.rate.value = "1.00";
+    pitchInput.value = "1.00";
+    onRateInput();
+    onPitchInput();
+    setStatus("Native Voice Calibration मान platform default 1.00 / 1.00 पर रीसेट किए गए।");
+  }
+
+  async function testVoiceCalibration() {
+    if (state.destroyed || state.active || state.calibrationTesting || !state.engineReady) return;
+    const inputLine = ui.input.value.split(/\r?\n/u).map(line => line.trim()).find(Boolean) || "ॐ नमः शिवाय।";
+    const sourceText = stripTerminalVerseNumber(inputLine).text.trim() || "ॐ नमः शिवाय।";
+    const voice = chooseVoice(sourceText);
+    if (!voice || voice.localService !== true) {
+      setStatus("नमूना सुनाने के लिए कोई स्थानीय Voice उपलब्ध नहीं है।", true);
+      return;
+    }
+
+    state.calibrationTesting = true;
+    updateButtons();
+    setStatus("चुनी हुई स्थानीय Voice पर पहला पाठ-नमूना चल रहा है: " + voice.name +
+      " · Rate " + getSelectedRate().toFixed(2) +
+      "× · Pitch " + getSelectedPitch().toFixed(2) + "।");
+    try {
+      const context = getPronunciationContext();
+      const result = await engine.speak(sourceText, {
+        voice,
+        voiceProfile: nativeVoiceProfile(voice),
+        pronunciation: {
+          ...context,
+          context,
+          shakha: context.shakha || null,
+          patha: context.patha || null
+        },
+        lang: voice.lang || (isDevanagari(sourceText) ? "hi-IN" : "en-IN"),
+        rate: getSelectedRate(),
+        pitch: getSelectedPitch(),
+        volume: 1,
+        replace: false
+      });
+      if (!state.destroyed && state.calibrationTesting) {
+        setStatus(result && result.status === "cancelled"
+          ? "आवाज़ का नमूना रोक दिया गया।"
+          : "आवाज़ का नमूना पूरा हुआ। Rate/Pitch बदलकर फिर सुनें और अपनी पसंद का मान चुनें।");
+      }
+    } catch (error) {
+      if (!state.destroyed) {
+        setStatus("आवाज़ का नमूना चल नहीं सका: " +
+          (error && error.message ? error.message : "अज्ञात TTS त्रुटि"), true);
+      }
+    } finally {
+      state.calibrationTesting = false;
+      if (!state.destroyed) updateButtons();
+    }
+  }
+
   function updateButtons() {
     const canSpeak = state.engineReady && state.voiceEntries.length > 0 && !state.destroyed;
-    ui.speak.disabled = state.active || !canSpeak;
-    ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
-    ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
-    ui.stop.disabled = !state.active;
-    contextShakha.disabled = state.active || state.destroyed;
-    contextPatha.disabled = state.active || state.destroyed;
+    ui.speak.disabled = state.active || state.calibrationTesting || !canSpeak;
+    ui.pause.disabled = !state.active || state.calibrationTesting || state.userPaused || state.navigationPaused;
+    ui.resume.disabled = !state.active || state.calibrationTesting || (!state.userPaused && !state.navigationPaused);
+    ui.stop.disabled = !state.active && !state.calibrationTesting;
+    contextShakha.disabled = state.active || state.calibrationTesting || state.destroyed;
+    contextPatha.disabled = state.active || state.calibrationTesting || state.destroyed;
+    setCalibrationControlsDisabled(state.active || state.calibrationTesting || state.destroyed);
   }
 
   function clearNextTimer() {
@@ -937,9 +1088,8 @@ export async function mount(context) {
     let lineAnalysis = null;
     try { lineAnalysis = engine.analyzeText(speechSourceText); }
     catch (error) { setStatus("पाठ विश्लेषण उपलब्ध नहीं; Engine का सुरक्षित मूल-पाठ Fallback जारी रहेगा। " + (error && error.message ? error.message : ""), true); }
-    const rateValue = Number(ui.rate.value);
-    const rate = Number.isFinite(rateValue) ? Math.min(1.15, Math.max(0.65, rateValue)) : 0.88;
-    const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+    const rate = getSelectedRate();
+    const pitch = getSelectedPitch();
     const pronunciationContext = state.readingContext || getPronunciationContext();
     setLine(line);
     setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ने की तैयारी: " + voice.name +
@@ -977,6 +1127,10 @@ export async function mount(context) {
   }
 
   async function startReading() {
+    if (state.calibrationTesting) {
+      setStatus("पहले आवाज़ का नमूना पूरा होने दें या “समाप्त करें” दबाकर उसे रोकें।", true);
+      return;
+    }
     if (!state.engineReady) {
       setStatus("Native TTS Engine उपलब्ध नहीं है। Browser और Android TTS सुविधा जाँचें।", true);
       return;
@@ -1070,6 +1224,19 @@ export async function mount(context) {
   }
 
   async function stopReading() {
+    if (state.calibrationTesting && !state.active) {
+      state.calibrationTesting = false;
+      try {
+        await engine.cancel();
+        setStatus("आवाज़ का नमूना समाप्त कर दिया गया।");
+      } catch (error) {
+        setStatus("नमूना रोकते समय त्रुटि: " +
+          (error && error.message ? error.message : "अज्ञात TTS त्रुटि"), true);
+      } finally {
+        if (!state.destroyed) updateButtons();
+      }
+      return;
+    }
     state.generation += 1;
     clearNextTimer();
     finish("पाठ समाप्त कर दिया गया।");
@@ -1082,8 +1249,10 @@ export async function mount(context) {
   }
 
   function onRateInput() {
-    const value = Number(ui.rate.value);
-    ui.rateValue.textContent = (Number.isFinite(value) ? value : 0.88).toFixed(2) + "×";
+    const value = getSelectedRate();
+    ui.rateValue.textContent = value.toFixed(2) + "×";
+    ui.rate.setAttribute("aria-valuetext", value.toFixed(2) + "×");
+    renderCalibrationSummary();
   }
 
   function onPronunciationContextChange() {
@@ -1104,6 +1273,7 @@ export async function mount(context) {
       ? "संभावित स्त्री-स्वर चुना गया; नाम-आधारित पहचान की पुष्टि वास्तविक श्रवण से करनी होगी: "
       : "स्थानीय Voice चुनी गई: ";
     setStatus(note + voice.name + " (" + voice.lang + ")। Voice बदलने पर Pronunciation Preview पुनः तैयार किया गया है।");
+    renderCalibrationSummary();
   }
 
   async function refreshVoices() {
@@ -1145,6 +1315,7 @@ export async function mount(context) {
       ui.voice.value = previousStillExists ? previousKey : "auto";
       updateButtons();
       renderSpeechPreview();
+      renderCalibrationSummary();
 
       if (!state.engineReady) return;
       if (!state.voiceEntries.length) {
@@ -1165,13 +1336,22 @@ export async function mount(context) {
       state.voiceEntries = [];
       updateButtons();
       renderSpeechPreview();
+      renderCalibrationSummary();
       setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " +
         (error && error.message ? error.message : "अज्ञात त्रुटि"), true);
     }
   }
 
   async function onHide() {
-    if (!state.active || state.userPaused || state.navigationPaused || state.destroyed) return;
+    if (state.destroyed) return;
+    if (state.calibrationTesting) {
+      state.calibrationTesting = false;
+      try { await engine.cancel(); } catch (_) {}
+      updateButtons();
+      setStatus("दूसरे पेज पर जाने के कारण आवाज़ का नमूना रोक दिया गया।");
+      return;
+    }
+    if (!state.active || state.userPaused || state.navigationPaused) return;
     state.navigationPaused = true;
     if (state.timer !== null) { clearNextTimer(); state.waitingForNext = true; }
     if (state.speechInFlight) {
@@ -1227,6 +1407,9 @@ export async function mount(context) {
     ui.resume.removeEventListener("click", resumeReading);
     ui.stop.removeEventListener("click", stopReading);
     ui.rate.removeEventListener("input", onRateInput);
+    pitchInput.removeEventListener("input", onPitchInput);
+    calibrationResetButton.removeEventListener("click", resetCalibration);
+    calibrationSampleButton.removeEventListener("click", testVoiceCalibration);
     ui.voice.removeEventListener("change", onVoiceChange);
     ui.input.removeEventListener("input", onTextInput);
     contextShakha.removeEventListener("change", onPronunciationContextChange);
@@ -1248,6 +1431,7 @@ export async function mount(context) {
     if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.removeChild(pronunciationPreview);
     if (pronunciationContextPanel.parentNode) pronunciationContextPanel.parentNode.removeChild(pronunciationContextPanel);
     if (g2pPreviewPanel.parentNode) g2pPreviewPanel.parentNode.removeChild(g2pPreviewPanel);
+    if (calibrationPanel.parentNode) calibrationPanel.parentNode.removeChild(calibrationPanel);
     if (voiceProfileDiagnosticsPanel.parentNode) voiceProfileDiagnosticsPanel.parentNode.removeChild(voiceProfileDiagnosticsPanel);
     setLine("");
     updateButtons();
@@ -1264,11 +1448,16 @@ export async function mount(context) {
   ui.resume.addEventListener("click", resumeReading);
   ui.stop.addEventListener("click", stopReading);
   ui.rate.addEventListener("input", onRateInput);
+  pitchInput.addEventListener("input", onPitchInput);
+  calibrationResetButton.addEventListener("click", resetCalibration);
+  calibrationSampleButton.addEventListener("click", testVoiceCalibration);
   ui.voice.addEventListener("change", onVoiceChange);
   ui.input.addEventListener("input", onTextInput);
   contextShakha.addEventListener("change", onPronunciationContextChange);
   contextPatha.addEventListener("change", onPronunciationContextChange);
   onRateInput();
+  onPitchInput();
+  renderCalibrationSummary();
   updateButtons();
 
   state.unsubscribeVoices = engine.on("voiceschanged", () => {
