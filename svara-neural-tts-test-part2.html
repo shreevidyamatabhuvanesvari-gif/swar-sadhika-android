@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17152d">
+  <meta name="description" content="Swar-Sadhika isolated Svāra Neural TTS WebGPU test page.">
+  <title>Svāra Neural TTS Test | Swar-Sadhika</title>
+  <style>
+    :root{color-scheme:dark;--bg:#17152d;--panel:#28223f;--panel2:#211c36;--text:#f3efff;--muted:#c0b7d7;--accent:#f2c77b;--line:rgba(207,190,255,.2);--danger:#f4a0a0;--success:#a9e0bd}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Noto Sans Devanagari",sans-serif}
+    main{width:min(900px,100%);margin:auto;padding:18px 14px 40px}
+    header{padding:18px 14px;border-bottom:1px solid var(--line);background:#120f24}
+    header div{width:min(900px,100%);margin:auto}
+    h1{font-size:1.35rem;margin:0 0 5px;color:var(--accent)}
+    h2{font-size:1.05rem;margin:0 0 10px}
+    p{margin:8px 0}
+    .sub{color:var(--muted);font-size:.9rem}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px;margin:14px 0}
+    .warning{border-left:3px solid var(--accent);background:var(--panel2);padding:11px;border-radius:7px;color:#f5dfb5}
+    .status{padding:12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);overflow-wrap:anywhere}
+    .status[data-kind="error"]{color:var(--danger);border-color:#874b5a}
+    .status[data-kind="success"]{color:var(--success);border-color:#477b5c}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    label{display:block;font-weight:600;margin:10px 0 5px}
+    textarea,select{display:block;width:100%;background:#171329;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:11px;font:inherit}
+    textarea{min-height:145px;resize:vertical}
+    select{min-height:44px}
+    .actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+    button,.link{display:inline-block;border:1px solid var(--line);border-radius:9px;padding:10px 14px;background:#3b3157;color:var(--text);font:inherit;text-decoration:none;cursor:pointer}
+    button.primary{background:#7954ad;border-color:#9b7bc6}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .tiny{font-size:.82rem;color:var(--muted)}
+    audio{width:100%;margin:8px 0}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;color:var(--muted);margin:0}
+    footer{color:var(--muted);font-size:.82rem;text-align:center;margin-top:24px}
+    @media(max-width:480px){main{padding:12px 10px 30px}.panel{padding:12px}}
+  </style>
+</head>
+<body>
+  <header><div>
+    <h1>स्वर-साधिका — Svāra Neural TTS परीक्षण</h1>
+    <p class="sub">अलग परीक्षण पृष्ठ · मौजूदा Native TTS और Sanskrit Compiler से स्वतंत्र</p>
+    <a class="link" href="./">मुख्य ऐप पर वापस जाएँ</a>
+  </div></header>
+  <main>
+    <section class="panel">
+      <h2>इस परीक्षण का उद्देश्य</h2>
+      <p>Svāra Neural TTS के Sanskrit (Female) मॉडल को Android Chrome में जाँचना। यह अभी केवल परीक्षण है; मुख्य ऐप की आवाज़ नहीं बदलेगा।</p>
+      <div class="warning">
+        <strong>महत्त्वपूर्ण:</strong> मुख्य मॉडल का प्रकाशित आकार लगभग 1.95 GB है। पहली बार डाउनलोड के लिए Wi-Fi, पर्याप्त खाली स्टोरेज और पर्याप्त RAM चाहिए। मॉडल अपने-आप डाउनलोड नहीं होगा। पहले डिवाइस जाँचें, फिर अपनी इच्छा से Load Model दबाएँ।
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>1. डिवाइस और WebGPU जाँच</h2>
+      <pre id="svara-device">डिवाइस की जानकारी जाँची जा रही है…</pre>
+      <div id="svara-status" class="status" role="status" aria-live="polite">परीक्षण Worker प्रारंभ हो रहा है…</div>
+      <div class="actions">
+        <button id="svara-load" class="primary" type="button" disabled>Svāra मॉडल लोड करें (~1.95 GB)</button>
+      </div>
+      <p class="tiny">इस परीक्षण में केवल q4f16 मॉडल सक्रिय है। q8 का बड़ा मॉडल जानबूझकर शामिल नहीं किया गया है। Browser storage quota अनुमान है; वास्तविक डाउनलोड/कम्प्यूट क्षमता अलग हो सकती है।</p>
+    </section>
+
+    <section class="panel">
+      <h2>2. महिला Voice और संस्कृत पाठ</h2>
+      <div class="grid">
+        <div>
+          <label for="svara-voice">महिला Voice चुनें</label>
+          <select id="svara-voice">
+            <option value="Sanskrit (Female)" selected>संस्कृत — महिला Voice</option>
+            <option value="Hindi (Female)">हिन्दी — महिला Voice</option>
+          </select>
+        </div>
+        <div>
+          <label>परीक्षण सीमा</label>
+          <p class="tiny">अधिकतम 500 अक्षर · 24 kHz Audio · स्थानीय संश्लेषण</p>
+        </div>
+      </div>
+      <label for="svara-text">परीक्षण-पाठ</label>
+      <textarea id="svara-text" maxlength="500">भुजङ्ग, भुजङ्गा, भजेऽहं।
+निर्वाणरूपं निजं निरीहं गोतीतमीशं।
+ॐ नमः शिवाय।</textarea>
+      <p class="tiny" id="svara-count">76/500</p>
+      <div class="actions">
+        <button id="svara-generate" class="primary" type="button" disabled>महिला Voice में Audio बनाएँ</button>
+        <button id="svara-stop" type="button" disabled>Audio रोकें / हटाएँ</button>
+      </div>
+    </section>
+
+    <section id="svara-audio-panel" class="panel" hidden>
+      <h2>3. तैयार Audio</h2>
+      <p id="svara-result" class="tiny"></p>
+      <audio id="svara-audio" controls preload="none"></audio>
+      <p class="tiny">कृपया हर संस्कृत शब्द का उच्चारण अलग से जाँचें। Neural TTS होना शुद्ध वैदिक पाठ या गायन की गारंटी नहीं है।</p>
+    </section>
+
+    <section class="panel">
+      <h2>तकनीकी सीमाएँ</h2>
+      <ul>
+        <li>मॉडल और SNAC Decoder सार्वजनिक Hugging Face से डाउनलोड होंगे।</li>
+        <li>पाठ से Audio निर्माण इसी डिवाइस के WebGPU Worker में होगा; अलग inference server नहीं है।</li>
+        <li>पहली बार डाउनलोड के लिए इंटरनेट आवश्यक है। Browser cache quota/OS memory pressure के कारण मॉडल दोबारा डाउनलोड करना पड़ सकता है।</li>
+        <li>इस परीक्षण का परिणाम अभी मुख्य ऐप के Native TTS को स्वतः प्रतिस्थापित नहीं करता।</li>
+        <li>यह TTS परीक्षण है, Singing Voice Synthesis (SVS) नहीं।</li>
+      </ul>
+      <p class="tiny">Upstream implementation: shreyaskarnik/svara-tts-webgpu · Apache-2.0 declared upstream · Svāra model and SNAC decoder have their own model-card licenses; review them before redistribution.</p>
+    </section>
+    <footer>Swar-Sadhika Android · Svāra Neural TTS isolated test · Part 2</footer>
+  </main>
+  <script type="module" src="./assets/js/tts/svara-neural-tts-controller-part2.js"></script>
+</body>
+</html>
