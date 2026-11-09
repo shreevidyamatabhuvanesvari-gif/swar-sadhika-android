@@ -108,6 +108,31 @@ export async function mount(context) {
   pronunciationContextPanel.append(contextHeading, contextIntro, contextFields);
   if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.insertBefore(pronunciationContextPanel, pronunciationPreview);
   else root.appendChild(pronunciationContextPanel);
+
+  const voiceProfileDiagnosticsPanel = doc.createElement("section");
+  voiceProfileDiagnosticsPanel.className = "note tts-voice-profile-diagnostics";
+  voiceProfileDiagnosticsPanel.setAttribute("aria-label", "Native TTS Voice Profile Diagnostics");
+  voiceProfileDiagnosticsPanel.setAttribute("data-role", "voice-profile-diagnostics");
+  const voiceProfileDiagnosticsHeading = doc.createElement("h3");
+  voiceProfileDiagnosticsHeading.textContent = "Native Voice Profile Diagnostics";
+  const voiceProfileDiagnosticsSummary = doc.createElement("div");
+  voiceProfileDiagnosticsSummary.className = "status";
+  voiceProfileDiagnosticsSummary.setAttribute("role", "status");
+  voiceProfileDiagnosticsSummary.setAttribute("aria-live", "polite");
+  voiceProfileDiagnosticsSummary.textContent = "स्थानीय Voice सूची प्राप्त होने पर वास्तविक Voice Profile यहाँ दिखाई देगा।";
+  const voiceProfileDiagnosticsDetails = doc.createElement("div");
+  voiceProfileDiagnosticsDetails.className = "tts-voice-profile-details";
+  voiceProfileDiagnosticsPanel.append(
+    voiceProfileDiagnosticsHeading,
+    voiceProfileDiagnosticsSummary,
+    voiceProfileDiagnosticsDetails
+  );
+  if (pronunciationPreview.parentNode) {
+    pronunciationPreview.parentNode.insertBefore(voiceProfileDiagnosticsPanel, pronunciationPreview.nextSibling);
+  } else {
+    root.appendChild(voiceProfileDiagnosticsPanel);
+  }
+
   const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
     voices: [],
@@ -366,6 +391,81 @@ export async function mount(context) {
     };
   }
 
+
+  function isValidBcp47Locale(value) {
+    return typeof value === "string" &&
+      /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(value.trim());
+  }
+
+  function inspectNativeVoiceProfile(voice) {
+    if (!voice || typeof voice !== "object") {
+      return Object.freeze({
+        available: false,
+        compilerReady: false,
+        missing: Object.freeze(["Native Voice चयन"]),
+        profile: null,
+        localService: null
+      });
+    }
+
+    const profile = nativeVoiceProfile(voice);
+    const missing = [];
+    if (!profile.voiceName) missing.push("voiceName");
+    if (!profile.voiceURI) missing.push("voiceURI");
+    if (!isValidBcp47Locale(profile.locale)) missing.push("BCP-47 locale");
+    if (!profile.platform) missing.push("Android Chrome platform");
+    if (voice.localService !== true) missing.push("localService=true");
+
+    return Object.freeze({
+      available: true,
+      compilerReady: missing.length === 0,
+      missing: Object.freeze(missing),
+      profile: Object.freeze({ ...profile }),
+      localService: voice.localService === true ? "true" :
+        voice.localService === false ? "false" : "अनिर्दिष्ट"
+    });
+  }
+
+  function renderNativeVoiceProfileDiagnostics(voice) {
+    const diagnostics = inspectNativeVoiceProfile(voice);
+    voiceProfileDiagnosticsDetails.replaceChildren();
+
+    if (!diagnostics.available) {
+      voiceProfileDiagnosticsSummary.className = "status warn";
+      voiceProfileDiagnosticsSummary.textContent =
+        "अभी कोई स्थानीय Native Voice चयनित नहीं है। Android Chrome की Voice सूची प्राप्त होने पर जाँच होगी।";
+      return;
+    }
+
+    const profile = diagnostics.profile;
+    const fields = [
+      ["Voice Name", profile.voiceName || "ब्राउज़र ने उपलब्ध नहीं कराया"],
+      ["voiceURI", profile.voiceURI || "ब्राउज़र ने खाली छोड़ा"],
+      ["BCP-47 locale", profile.locale || "ब्राउज़र ने उपलब्ध नहीं कराया"],
+      ["localService", diagnostics.localService],
+      ["Engine", profile.engine],
+      ["Platform", profile.platform || "Android Chrome की पुष्टि नहीं हुई"]
+    ];
+
+    fields.forEach(([label, value]) => {
+      const row = doc.createElement("p");
+      row.className = "tts-voice-profile-row subtle";
+      row.textContent = label + ": " + value;
+      voiceProfileDiagnosticsDetails.appendChild(row);
+    });
+
+    if (diagnostics.compilerReady) {
+      voiceProfileDiagnosticsSummary.className = "status";
+      voiceProfileDiagnosticsSummary.textContent =
+        "चयनित स्थानीय Voice का आवश्यक Profile metadata उपलब्ध है। अब भी किसी Lexicon नियम के लिए उसका अपना पाठ, संदर्भ और अनुमति वैध होना आवश्यक है।";
+    } else {
+      voiceProfileDiagnosticsSummary.className = "status warn";
+      voiceProfileDiagnosticsSummary.textContent =
+        "Compiler Profile अधूरा है। अनुपलब्ध/अमान्य मान: " + diagnostics.missing.join(", ") +
+        "। Native TTS आवाज़ फिर भी बोल सकती है; ऐसे में Voice-विशिष्ट Lexicon परिवर्तन लागू नहीं होगा और मूल संस्कृत पाठ सुरक्षित रहेगा।";
+    }
+  }
+
   function getPronunciationContext() {
     const context = {};
     if (contextShakha.value) context.shakha = contextShakha.value;
@@ -476,6 +576,7 @@ export async function mount(context) {
     if (state.destroyed) return;
     const lines = ui.input.value.split(/\r?\n/u).filter(line => line.trim());
     const voice = chooseVoice(ui.input.value);
+    renderNativeVoiceProfileDiagnostics(voice);
     state.previewEntries = lines.map((line, index) => previewEntryForLine(line.trim(), index, voice));
     previewList.replaceChildren();
     if (!state.previewEntries.length) {
@@ -879,6 +980,7 @@ export async function mount(context) {
     if (knowledgeStatus.parentNode) knowledgeStatus.parentNode.removeChild(knowledgeStatus);
     if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.removeChild(pronunciationPreview);
     if (pronunciationContextPanel.parentNode) pronunciationContextPanel.parentNode.removeChild(pronunciationContextPanel);
+    if (voiceProfileDiagnosticsPanel.parentNode) voiceProfileDiagnosticsPanel.parentNode.removeChild(voiceProfileDiagnosticsPanel);
     setLine("");
     updateButtons();
     try { await engine.dispose(); }
