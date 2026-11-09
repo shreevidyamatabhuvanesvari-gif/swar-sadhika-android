@@ -3,7 +3,7 @@
  * All document reads pass through the existing SHA-256-validating Knowledge API.
  * This module never guesses pronunciation from prose or executes downloaded code.
  */
-export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "1.1.0";
+export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "1.2.0";
 export const SWR_TTS_ADAPTER_IMPROVEMENT_ID = "SWR-TTS-ADAPTER-03";
 export const TTS_KNOWLEDGE_DOCUMENT_SCHEMA = "swar-sadhika.sanskrit-tts-knowledge";
 export const TTS_PRONUNCIATION_LEXICON_SCHEMA = "swar-sadhika.sanskrit-pronunciation-lexicon";
@@ -90,20 +90,6 @@ function validateGuidanceDocument(doc, source) {
   });
   return freeze({ kind: "guidance", schema: doc.schema, schemaVersion: 1, version,
     language: language.slice(0, 16), entries, invalidEntries: [] });
-}
-
-function populatedArray(value) {
-  return Array.isArray(value) && value.length > 0 && value.every(item =>
-    (typeof item === "string" && item.trim().length > 0) || (object(item) && Object.keys(item).length > 0));
-}
-
-function completePrimarySource(value) {
-  if (!object(value)) return false;
-  const pairs = Object.entries(value).filter(([, item]) =>
-    (typeof item === "string" && item.trim()) || (typeof item === "number" && Number.isFinite(item)));
-  const hasText = pairs.some(([key]) => /text|grantha|title|name|work|source/i.test(key));
-  const hasLocator = pairs.some(([key]) => /chapter|section|verse|citation|locator|reference|passage/i.test(key));
-  return pairs.length >= 2 && hasText && hasLocator;
 }
 
 function validateLexiconEntry(item, index, source, version, policy) {
@@ -199,9 +185,9 @@ function validateLexiconDocument(doc, source) {
   const language = typeof doc.language === "string" ? doc.language.trim() : "";
   if (!version || version.length > 40) fail("Lexicon document version अमान्य है।", "INVALID_LEXICON_VERSION");
   if (!/^sa(?:-|$)/i.test(language) || doc.script !== "Devanagari") fail("Lexicon केवल Devanagari संस्कृत (sa) के लिए स्वीकार है।", "INVALID_LEXICON_LANGUAGE", { language, script: doc.script });
-  if (!object(doc.reviewPolicy) ||
-      !(doc.reviewPolicy.unreviewedEntriesSpeechActive === false || doc.reviewPolicy.unreviewedEntriesActive === false)) {
-    fail("Lexicon review policy में unreviewed entries का निष्क्रिय रहना अनिवार्य है।", "UNSAFE_LEXICON_REVIEW_POLICY");
+  if (!object(doc.reviewPolicy) || doc.reviewPolicy.unreviewedEntriesSpeechActive !== true ||
+      doc.reviewPolicy.reviewGatesApplyToSpeech !== false) {
+    fail("Lexicon में direct unreviewed speech application की explicit policy आवश्यक है।", "DIRECT_SPEECH_POLICY_NOT_ENABLED");
   }
   const matching = doc.matchingPolicy;
   if (!object(matching) || matching.unicodeNormalization !== "NFC" || matching.substringMatching !== false ||
@@ -239,27 +225,12 @@ function validateLexiconDocument(doc, source) {
 
 function compilerReadiness(entry) {
   const reasons = [];
-  if (entry.reviewStatus !== "reviewed") reasons.push("entry-not-reviewed");
-  if (entry.source.primarySourceVerified !== true || !completePrimarySource(entry.source.primarySource)) reasons.push("primary-source-not-verified");
-  if (entry.phoneticStructure.status !== "verified" || !populatedArray(entry.phoneticStructure.orthographicUnits) ||
-      !populatedArray(entry.phoneticStructure.phonemeSequence)) reasons.push("phonetic-structure-not-verified");
-  if (entry.phonemeReference.status !== "verified" || !nonEmpty(entry.phonemeReference.value)) reasons.push("phoneme-reference-not-verified");
+  if (entry.phoneticStructure.status === "invalid") reasons.push("phonetic-structure-marked-invalid");
+  if (entry.phonemeReference.status === "invalid") reasons.push("phoneme-reference-marked-invalid");
   if (!nonEmpty(entry.nativeSpeechText)) reasons.push("native-speech-text-missing");
-  const locale = normalizeLocale(entry.voiceProfile.locale);
-  if (!locale || !entry.voiceLocales.some(item => normalizeLocale(item) === locale)) reasons.push("tested-locale-not-declared");
-  if (entry.voiceProfile.testStatus !== "passed" || !nonEmpty(entry.voiceProfile.voiceName) || !nonEmpty(entry.voiceProfile.voiceURI)) reasons.push("voice-profile-not-passed");
-  const evidence = entry.voiceProfile.testEvidence;
-  if (!object(evidence)) reasons.push("voice-test-evidence-incomplete");
-  else {
-    const keys = Object.entries(evidence).filter(([, value]) => nonEmpty(value)).map(([key]) => key.toLowerCase());
-    if (!(keys.some(key => /date|testedat/.test(key)) && keys.some(key => /phrase|utterance|testtext/.test(key)) &&
-        keys.some(key => /result|observation|accepted/.test(key)) && keys.some(key => /reviewer|reviewedby|tester/.test(key)))) {
-      reasons.push("voice-test-evidence-incomplete");
-    }
+  if (entry.activation.enabled !== true || entry.speechApplication.enabled !== true) {
+    reasons.push("speech-application-not-authorized");
   }
-  if (entry.documentPolicy.requiredEngine && entry.voiceProfile.engine !== entry.documentPolicy.requiredEngine) reasons.push("voice-engine-mismatch");
-  if (entry.documentPolicy.targetPlatform && entry.voiceProfile.platform !== entry.documentPolicy.targetPlatform) reasons.push("voice-platform-mismatch");
-  if (entry.activation.enabled !== true || entry.speechApplication.enabled !== true) reasons.push("speech-application-not-authorized");
   return Object.freeze({ ready: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 
@@ -361,12 +332,23 @@ function matchesVoiceProfile(entry, options) {
   const p = object(options.voiceProfile) ? options.voiceProfile : (object(options.voice) ? options.voice : null);
   if (!p) return false;
   const locale = normalizeLocale(options.voiceLocale || options.locale || p.locale || p.lang);
-  if (!locale || normalizeLocale(entry.voiceProfile.locale) !== locale ||
-      !entry.voiceLocales.some(item => normalizeLocale(item) === locale)) return false;
-  const requested = { engine: p.engine || null, platform: p.platform || null,
-    voiceName: p.voiceName || p.name || null, voiceURI: p.voiceURI || null };
+  if (!locale) return false;
+
+  const declaredLocale = normalizeLocale(entry.voiceProfile.locale);
+  if (declaredLocale && declaredLocale !== locale) return false;
+  if (entry.voiceLocales.length && !entry.voiceLocales.some(item => normalizeLocale(item) === locale)) return false;
+
+  const requested = {
+    engine: p.engine || null,
+    platform: p.platform || null,
+    voiceName: p.voiceName || p.name || null,
+    voiceURI: p.voiceURI || null
+  };
   if (!requested.voiceURI && !requested.voiceName) return false;
-  for (const key of Object.keys(requested)) if (requested[key] && entry.voiceProfile[key] !== requested[key]) return false;
+  for (const key of Object.keys(requested)) {
+    const declared = entry.voiceProfile[key];
+    if (requested[key] && nonEmpty(declared) && declared !== requested[key]) return false;
+  }
   return true;
 }
 
@@ -516,7 +498,7 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
     if (typeof text !== "string") fail("text string होना चाहिए।", "INVALID_TEXT");
     return Object.freeze({ originalText: text, speechText: text, modified: false,
       appliedToSpeech: false, safeToTransform: false, guidance: getGuidance(text, guidanceOptions),
-      policy: "मूल पाठ अक्षरशः सुरक्षित है। Guidance से उच्चारण अनुमानित नहीं होता; Native TTS में परिवर्तन केवल अलग से सत्यापित Structured Pronunciation Entry के लिए विचारणीय है।" });
+      policy: "मूल पाठ default है; explicitly enabled exact/contextual Lexicon Entry के non-empty nativeSpeechText से Native TTS speech text बदला जा सकता है।" });
   }
   function getDiagnostics() {
     assertActive();
@@ -552,8 +534,9 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
       policy: {
         jsonDocumentsOnly: true, verifiedByKnowledgeAPI: true, sha256ValidationDelegatedToKnowledgeAPI: true,
         downloadRequiresExplicitOptIn: true, autoDownload: false, executeDownloadedCode: false,
-        guidanceMayInferPronunciation: false, onlyReviewedVerifiedLexiconCanReachCompiler: true,
-        speechRewriteRequiresSpeechApplicationAuthorization: true, missingLexiconUsesNativeTtsFallback: true,
+        guidanceMayInferPronunciation: false, onlyReviewedVerifiedLexiconCanReachCompiler: false,
+        unreviewedSpeechApplicationAllowed: true, speechRewriteRequiresSpeechApplicationAuthorization: true,
+        missingLexiconUsesNativeTtsFallback: true,
         rewriteSpeechText: false, applyProsody: false, trainModel: false
       }
     });
@@ -605,7 +588,7 @@ export function selfTest() {
   const lexicon = {
     schema: TTS_PRONUNCIATION_LEXICON_SCHEMA, schemaVersion: 1, version: "1.0.1", language: "sa", script: "Devanagari",
     identificationCode: "SWR-TTS-LEXICON-TEST",
-    reviewPolicy: { unreviewedEntriesActive: false, unreviewedEntriesSpeechActive: false },
+    reviewPolicy: { unreviewedEntriesActive: true, unreviewedEntriesSpeechActive: true, reviewGatesApplyToSpeech: false },
     matchingPolicy: { unicodeNormalization: "NFC", matchTypes: ["exact", "contextual-exact"], substringMatching: false, fuzzyMatching: false },
     voiceProfilePolicy: { requiredEngine: "Web Speech API SpeechSynthesis", targetPlatform: "Android Chrome" },
     entryContract: { requiredFields: LEXICON_FIELDS.slice() }, entries: [makeEntry()]
@@ -619,8 +602,24 @@ export function selfTest() {
     check("new-lexicon-schema-validates", checkedLexicon.entries.length === 1 && checkedLexicon.invalidEntries.length === 0);
     check("lexicon-source-and-version-retained", checkedLexicon.entries[0].documentSource.documentVersion === "1.0.1" && checkedLexicon.entries[0].source.primarySourceVerified === true);
     check("verified-reviewed-entry-compiler-ready", compilerReadiness(checkedLexicon.entries[0]).ready);
-    const unreviewed = validateLexiconDocument({ ...lexicon, entries: [makeEntry({ reviewStatus: "needs-review" })] }, { id: "test-lexicon", title: "Test Lexicon" });
-    check("unreviewed-entry-inactive", !compilerReadiness(unreviewed.entries[0]).ready);
+    const unreviewed = validateLexiconDocument({ ...lexicon, entries: [makeEntry({
+      reviewStatus: "needs-review",
+      phoneticStructure: { status: "pending-review", orthographicUnits: [], phonemeSequence: [], syllableBoundaries: [] },
+      phonemeReference: { system: "IPA", value: null, status: "pending-review", source: null },
+      nativeSpeechText: "अग्निः", voiceLocales: [],
+      voiceProfile: { engine: "Web Speech API SpeechSynthesis", platform: "Android Chrome", voiceName: null,
+        voiceURI: null, locale: null, testStatus: "not-tested", testEvidence: null, testedAt: null },
+      source: { type: "existing-knowledge-document", documentId: "unverified", documentVersion: "1.0.0",
+        entryId: "unverified", reportedReference: null, primarySourceVerified: false,
+        sourceReviewStatus: "needs-review", sourceNote: "Unverified test source", primarySource: null },
+      speechApplication: { enabled: true, status: "enabled-unverified" }
+    })] }, { id: "test-lexicon", title: "Test Lexicon" });
+    check("unreviewed-unverified-entry-directly-compiler-ready", compilerReadiness(unreviewed.entries[0]).ready);
+    const missingText = validateLexiconDocument({ ...lexicon, entries: [makeEntry({ nativeSpeechText: null })] }, { id: "test-lexicon", title: "Test Lexicon" });
+    check("missing-native-speech-text-remains-inactive", !compilerReadiness(missingText.entries[0]).ready);
+    check("unprofiled-entry-matches-current-runtime-voice",
+      matchesVoiceProfile(unreviewed.entries[0], { voiceLocale: "hi-IN",
+        voiceProfile: { voiceName: "Runtime Hindi Voice", voiceURI: "runtime://hi-IN", locale: "hi-IN" } }));
     check("exact-match-does-not-use-substring", matchesPronunciationEntry(checkedLexicon.entries[0], tokenize("ॐ अग्निः नमः"), {}) && !matchesPronunciationEntry(checkedLexicon.entries[0], tokenize("अग्नि का उदाहरण"), {}));
     const contextual = makeEntry({ id: "contextual", term: "सदाशिवं", matchType: "contextual-exact",
       context: { scope: "general", shakha: null, patha: null, requiredSequence: ["सदाशिवं", "भजे"], precedingWords: [], followingWords: [], notes: "context test" } });
@@ -640,6 +639,7 @@ export function selfTest() {
     check("conflicting-pronunciation-blocked", conflictIndex.pronunciationIndex.size === 0 && conflictIndex.conflictingEntries > 0);
     const indexed = buildIndexes([{ type: "guidance", document: checkedGuidance }, { type: "pronunciation-lexicon", document: checkedLexicon }]);
     check("guidance-and-lexicon-use-separate-indexes", indexed.guidanceIndex.size === 1 && indexed.pronunciationIndex.size === 1);
+    try { validateLexiconDocument({ ...lexicon, reviewPolicy: { unreviewedEntriesActive: false, unreviewedEntriesSpeechActive: false } }, { id: "review-gate-disabled" }); check("explicit-direct-speech-policy-required", false); } catch (error) { check("explicit-direct-speech-policy-required", error.code === "DIRECT_SPEECH_POLICY_NOT_ENABLED"); }
     try { validateLexiconDocument({ ...lexicon, matchingPolicy: { ...lexicon.matchingPolicy, substringMatching: true } }, { id: "bad-policy" }); check("unsafe-match-policy-rejected", false); }
     catch (error) { check("unsafe-match-policy-rejected", error.code === "UNSAFE_LEXICON_MATCH_POLICY"); }
   } catch (_) { check("self-test-unexpected-error", false); }
