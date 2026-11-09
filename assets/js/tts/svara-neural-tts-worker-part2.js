@@ -25,7 +25,24 @@ let ort;
 async function loadRuntimeModules() {
   const stage = "runtime-module-import";
   const transformersUrl = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
-  const onnxRuntimeUrl = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/esm/ort.webgpu.min.js";
+  const onnxRuntimeCandidates = [
+    {
+      label: "esm.sh bundled ESM",
+      url: "https://esm.sh/onnxruntime-web@1.25.1/webgpu?bundle",
+      wasmPath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/"
+    },
+    {
+      label: "unpkg ESM",
+      url: "https://unpkg.com/onnxruntime-web@1.25.1/dist/esm/ort.webgpu.min.js",
+      wasmPath: "https://unpkg.com/onnxruntime-web@1.25.1/dist/"
+    },
+    {
+      label: "jsDelivr ESM",
+      url: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/esm/ort.webgpu.min.js",
+      wasmPath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/"
+    }
+  ];
+  const importFailures = [];
   try {
     const transformersModule = await import(transformersUrl);
     const requiredExports = [
@@ -45,19 +62,40 @@ async function loadRuntimeModules() {
       env: transformersEnv
     } = transformersModule);
 
-    ort = await import(onnxRuntimeUrl);
-    if (!ort.InferenceSession || !ort.Tensor || !ort.env) {
-      throw new Error("ONNX Runtime WebGPU module did not expose InferenceSession, Tensor and env.");
+    for (const candidate of onnxRuntimeCandidates) {
+      try {
+        const runtimeModule = await import(candidate.url);
+        const runtime = runtimeModule.default?.InferenceSession
+          ? runtimeModule.default
+          : runtimeModule;
+        if (!runtime.InferenceSession || !runtime.Tensor || !runtime.env) {
+          throw new Error("Module exports missing: InferenceSession, Tensor or env");
+        }
+        ort = runtime;
+        ort.env.wasm.wasmPaths = candidate.wasmPath;
+        self.postMessage({
+          status: "module-attempt-success",
+          stage,
+          provider: candidate.label,
+          url: candidate.url
+        });
+        break;
+      } catch (error) {
+        importFailures.push(candidate.label + " [" + candidate.url + "]: " +
+          (error && error.message ? error.message : String(error)));
+      }
+    }
+
+    if (!ort) {
+      throw new Error("सभी ONNX Runtime CDN विकल्प विफल हुए:\\n" + importFailures.join("\\n"));
     }
 
     // Model/runtime binaries are distributed via public CDNs; inference itself is local.
     transformersEnv.useBrowserCache = true;
     transformersEnv.useWasmCache = true;
     if (transformersEnv.backends?.onnx?.wasm) {
-      transformersEnv.backends.onnx.wasm.wasmPaths =
-        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+      transformersEnv.backends.onnx.wasm.wasmPaths = ort.env.wasm.wasmPaths;
     }
-    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
     self.postMessage({
       status: "module-success",
       stage,
