@@ -773,13 +773,23 @@ if (document.readyState === "loading") {
 }
 
 export function selfTest() {
+  const sample = graphemes("क्षि");
   const checks = [
     { id: "9x16-canvas", passed: canvas.width / canvas.height === 9 / 16 },
     { id: "native-engine", passed: typeof createTtsEngine === "function" },
-    { id: "grapheme-segmentation", passed: graphemes("क्षि").length === 1 || graphemes("क्षि").length > 0 },
+    { id: "grapheme-segmentation", passed: sample.length > 0 && sample.map(item => item.text).join("") === "क्षि" },
     { id: "text-limit", passed: MAX_TEXT_LENGTH === 12000 },
-    { id: "looping-video", passed: video.loop === true },
-    { id: "separate-download-recorder", passed: typeof MediaRecorder !== "undefined" || true }
+    { id: "looping-video", passed: video.loop === true }
   ];
-  return { passed: checks.every(item => item.passed), total: checks.length, checks };
+  return {
+    passed: checks.every(item => item.passed),
+    total: checks.length,
+    checks,
+    capabilities: {
+      mediaRecorder: typeof MediaRecorder !== "undefined",
+      canvasCaptureStream: typeof canvas.captureStream === "function",
+      microphone: Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function"),
+      fullscreen: typeof stage.requestFullscreen === "function"
+    }
+  };
 }
