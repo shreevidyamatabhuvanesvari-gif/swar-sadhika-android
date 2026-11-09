@@ -64,7 +64,50 @@ export async function mount(context) {
   pronunciationPreview.append(previewHeading, previewIntro, previewSummary, previewList);
   if (ui.input.parentNode) ui.input.parentNode.insertBefore(pronunciationPreview, ui.input.nextSibling);
   else root.appendChild(pronunciationPreview);
-
+  const pronunciationContextPanel = doc.createElement("section");
+  pronunciationContextPanel.className = "note tts-pronunciation-context";
+  pronunciationContextPanel.setAttribute("aria-label", "वैदिक शाखा और पाठ-संदर्भ");
+  const contextHeading = doc.createElement("h3");
+  contextHeading.textContent = "वैदिक शाखा एवं पाठ-संदर्भ";
+  const contextIntro = doc.createElement("p");
+  contextIntro.className = "note";
+  contextIntro.textContent = "शाखा या पाठ का चयन केवल तभी करें जब दिए गए संस्कृत पाठ का संदर्भ निश्चित हो। अनिर्दिष्ट चयन पर शाखा/पाठ-विशिष्ट नियम लागू नहीं होंगे और मूल पाठ सुरक्षित रहेगा।";
+  const contextFields = doc.createElement("div");
+  contextFields.className = "tts-context-fields";
+  function createContextSelect(id, labelText, choices) {
+    const field = doc.createElement("div");
+    field.className = "tts-context-field";
+    const label = doc.createElement("label");
+    label.setAttribute("for", id);
+    label.textContent = labelText;
+    const select = doc.createElement("select");
+    select.id = id;
+    select.className = ui.voice.className || "";
+    select.setAttribute("aria-label", labelText);
+    for (const choice of choices) {
+      const option = doc.createElement("option");
+      option.value = choice.value;
+      option.textContent = choice.label;
+      select.appendChild(option);
+    }
+    field.append(label, select);
+    contextFields.appendChild(field);
+    return select;
+  }
+  const contextShakha = createContextSelect("tts-pronunciation-shakha", "वैदिक शाखा", [
+    { value: "", label: "अनिर्दिष्ट — शाखा-विशिष्ट नियम निष्क्रिय" },
+    { value: "shaakala", label: "ऋग्वेद — शाकल शाखा" }
+  ]);
+  const contextPatha = createContextSelect("tts-pronunciation-patha", "पाठ-प्रकार", [
+    { value: "", label: "अनिर्दिष्ट — मूल पाठ सुरक्षित" },
+    { value: "samhita", label: "संहिता-पाठ" },
+    { value: "pada", label: "पदपाठ" },
+    { value: "krama", label: "क्रमपाठ" },
+    { value: "other", label: "अन्य" }
+  ]);
+  pronunciationContextPanel.append(contextHeading, contextIntro, contextFields);
+  if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.insertBefore(pronunciationContextPanel, pronunciationPreview);
+  else root.appendChild(pronunciationContextPanel);
   const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
     voices: [],
@@ -91,6 +134,7 @@ export async function mount(context) {
     pronunciationInfo: null,
     previewEntries: [],
     currentSpeech: null,
+    readingContext: null,
     unsubscribeSpeechPreparation: null
   };
 
@@ -124,16 +168,22 @@ export async function mount(context) {
     const candidateCount = Number(diagnostics.loadedPronunciationCandidates) || 0;
     const readyCount = Number(diagnostics.activePronunciationEntries) || 0;
     const uniqueTermCount = Number(diagnostics.uniqueTerms) || 0;
+    const uniquePhraseCount = Number(diagnostics.uniquePhrases) || 0;
     const documentStates = Array.isArray(diagnostics.documentStates) ? diagnostics.documentStates : [];
     const failedDocuments = documentStates.filter(item => item && item.status === "error").length;
-    const partial = diagnostics.status === "PARTIAL" || diagnostics.status === "FAILED" || failedDocuments > 0;
+    const validationFallbacks = documentStates.filter(item => item && item.validationFallback).length;
+    const inactiveReasons = (diagnostics.indexDiagnostics || {}).pronunciationInactiveReasons || {};
+    const missingSpeechText = Number(inactiveReasons["native-speech-text-missing"]) || 0;
+    const partial = diagnostics.status === "PARTIAL" || diagnostics.status === "FAILED" ||
+      failedDocuments > 0 || validationFallbacks > 0;
     const lexiconText = diagnostics.hasPronunciationLexicon ? "Pronunciation Lexicon " + candidateCount + " Candidates" : "Pronunciation Lexicon अनुपलब्ध";
     const message = "स्थानीय Knowledge Index सक्रिय: " + documentCount + " JSON दस्तावेज़ · " +
       guidanceCount + " Guidance Entries · " + uniqueTermCount + " विशिष्ट शब्द · " +
-      lexiconText + " · " + readyCount + " Compiler-ready Rules। " +
-      (partial ? failedDocuments + " दस्तावेज़ों की Sync जाँच लंबित/विफल; उपलब्ध Index सुरक्षित है।" : "Manifest में पंजीकृत सभी सक्रिय JSON दस्तावेज़ पढ़े गए।") +
-      " वाचन में केवल स्वतंत्र रूप से सत्यापित Voice-specific Rules लागू होंगे।";
-    setKnowledgeStatus(message, partial || readyCount === 0);
+      uniquePhraseCount + " बहु-शब्द पद · " + lexiconText + " · " + readyCount + " Compiler-ready Rules। " +
+      (partial ? failedDocuments + " दस्तावेज़ Sync में विफल और " + validationFallbacks + " दस्तावेज़ Generic Fallback से Index हुए।" :
+        "Manifest में पंजीकृत सभी सक्रिय JSON दस्तावेज़ पढ़े गए।") +
+      (missingSpeechText ? " " + missingSpeechText + " Lexicon Candidates में nativeSpeechText अनुपलब्ध है; उन पर मूल पाठ सुरक्षित रहेगा।" : "");
+    setKnowledgeStatus(message, partial || readyCount === 0 || missingSpeechText > 0);
   }
 
   async function refreshKnowledgeFromCache(reason) {
@@ -316,8 +366,21 @@ export async function mount(context) {
     };
   }
 
+  function getPronunciationContext() {
+    const context = {};
+    if (contextShakha.value) context.shakha = contextShakha.value;
+    if (contextPatha.value) context.patha = contextPatha.value;
+    return Object.freeze(context);
+  }
+  function describePronunciationContext(context = getPronunciationContext()) {
+    const shakhaLabel = context.shakha === "shaakala" ? "ऋग्वेद शाकल" : "शाखा अनिर्दिष्ट";
+    const labels = { samhita: "संहिता", pada: "पद", krama: "क्रम", other: "अन्य" };
+    return shakhaLabel + " · " + (context.patha ? labels[context.patha] || "पाठ अनिर्दिष्ट" : "पाठ अनिर्दिष्ट");
+  }
   function compilerOptionsForVoice(voice) {
-    return { backendType: "native", voice, voiceProfile: nativeVoiceProfile(voice), context: Object.freeze({}) };
+    const context = getPronunciationContext();
+    return { backendType: "native", voice, voiceProfile: nativeVoiceProfile(voice),
+      shakha: context.shakha || null, patha: context.patha || null, context };
   }
 
   function previewEntryForLine(originalLine, index, voice) {
@@ -382,6 +445,17 @@ export async function mount(context) {
         " (Speech Text में परिवर्तन अधिकृत नहीं हुआ)";
       row.appendChild(matches);
     }
+    const contextRequired = entry.prepared && entry.prepared.knowledgeGuidance &&
+      Array.isArray(entry.prepared.knowledgeGuidance.contextRequired)
+      ? entry.prepared.knowledgeGuidance.contextRequired : [];
+    if (contextRequired.length) {
+      const contextWarning = doc.createElement("p");
+      contextWarning.className = "status warn";
+      contextWarning.textContent = "संदर्भ आवश्यक: " + contextRequired.map(item =>
+        String(item.term || "") + " — " + String(item.shakha || "विशिष्ट शाखा")
+      ).join(" · ") + "। चयनित शाखा से मिलान होने तक कोई शाखा-विशिष्ट नियम लागू नहीं होगा।";
+      row.appendChild(contextWarning);
+    }
     if (entry.failure) {
       const failure = doc.createElement("p");
       failure.className = "status warn";
@@ -419,6 +493,7 @@ export async function mount(context) {
     previewSummary.textContent = state.previewEntries.length + " पंक्तियाँ · " +
       appliedCount + " पर वास्तविक Lexicon परिवर्तन · " + verifiedCount + " Validated · " +
       ambiguousCount + " Ambiguous · " + fallbackCount + " मूल-पाठ Fallback। " +
+      describePronunciationContext() + " · " +
       (voice ? "चयनित Voice: " + voice.name : "स्थानीय Voice चयन उपलब्ध नहीं।");
     state.previewEntries.forEach(entry => previewList.appendChild(renderPreviewEntry(entry)));
   }
@@ -429,6 +504,8 @@ export async function mount(context) {
     ui.pause.disabled = !state.active || state.userPaused || state.navigationPaused;
     ui.resume.disabled = !state.active || (!state.userPaused && !state.navigationPaused);
     ui.stop.disabled = !state.active;
+    contextShakha.disabled = state.active || state.destroyed;
+    contextPatha.disabled = state.active || state.destroyed;
   }
 
   function clearNextTimer() {
@@ -446,6 +523,7 @@ export async function mount(context) {
     state.navigationPaused = false;
     state.waitingForNext = false;
     state.currentSpeech = null;
+    state.readingContext = null;
     state.lines = [];
     state.index = 0;
     setLine("");
@@ -494,18 +572,21 @@ export async function mount(context) {
     const rateValue = Number(ui.rate.value);
     const rate = Number.isFinite(rateValue) ? Math.min(1.15, Math.max(0.65, rateValue)) : 0.88;
     const pitch = voiceGenderHint(voice) === "female" ? 1.02 : 1.07;
+    const pronunciationContext = state.readingContext || getPronunciationContext();
     setLine(line);
     setStatus("पंक्ति " + (state.index + 1) + " / " + state.lines.length + " पढ़ने की तैयारी: " + voice.name +
       " (स्थानीय Native Voice)" + (numbered.removed ? " · अंतिम श्लोक-संख्या वाचन से छोड़ी गई।" : "") +
       (lineAnalysis ? " · " + summarizeAnalysis(lineAnalysis) : ""),
       Boolean(lineAnalysis && (lineAnalysis.needsBranchContext || (lineAnalysis.unclassifiedMarks && lineAnalysis.unclassifiedMarks.length))));
-    state.currentSpeech = { generation, index: state.index, sourceText: speechSourceText, voice, analysis: lineAnalysis };
+    state.currentSpeech = { generation, index: state.index, sourceText: speechSourceText, voice,
+      analysis: lineAnalysis, context: pronunciationContext };
     state.speechInFlight = true;
     updateButtons();
     try {
       const result = await engine.speak(speechSourceText, {
         voice, voiceProfile: nativeVoiceProfile(voice),
-        pronunciation: { context: Object.freeze({}) },
+        pronunciation: { ...pronunciationContext, context: pronunciationContext,
+          shakha: pronunciationContext.shakha || null, patha: pronunciationContext.patha || null },
         lang: voice.lang || (isDevanagari(line) ? "hi-IN" : "en-IN"),
         rate, pitch, volume: 1, replace: false
       });
@@ -566,6 +647,7 @@ export async function mount(context) {
 
     state.lines = lines;
     state.index = 0;
+    state.readingContext = getPronunciationContext();
     state.active = true;
     state.userPaused = false;
     state.navigationPaused = false;
@@ -636,6 +718,12 @@ export async function mount(context) {
     ui.rateValue.textContent = (Number.isFinite(value) ? value : 0.88).toFixed(2) + "×";
   }
 
+  function onPronunciationContextChange() {
+    if (state.destroyed || state.active) return;
+    renderSpeechPreview();
+    setStatus("Pronunciation Preview नए संदर्भ के अनुसार पुनः तैयार किया गया: " +
+      describePronunciationContext() + "।");
+  }
   function onVoiceChange() {
     const voice = chooseVoice(ui.input.value);
     renderSpeechPreview();
@@ -773,6 +861,8 @@ export async function mount(context) {
     ui.rate.removeEventListener("input", onRateInput);
     ui.voice.removeEventListener("change", onVoiceChange);
     ui.input.removeEventListener("input", onTextInput);
+    contextShakha.removeEventListener("change", onPronunciationContextChange);
+    contextPatha.removeEventListener("change", onPronunciationContextChange);
 
     if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
     if (typeof state.unsubscribePronunciationWarning === "function") state.unsubscribePronunciationWarning();
@@ -788,6 +878,7 @@ export async function mount(context) {
     state.unsubscribeKnowledgeWarning = null;
     if (knowledgeStatus.parentNode) knowledgeStatus.parentNode.removeChild(knowledgeStatus);
     if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.removeChild(pronunciationPreview);
+    if (pronunciationContextPanel.parentNode) pronunciationContextPanel.parentNode.removeChild(pronunciationContextPanel);
     setLine("");
     updateButtons();
     try { await engine.dispose(); }
@@ -805,6 +896,8 @@ export async function mount(context) {
   ui.rate.addEventListener("input", onRateInput);
   ui.voice.addEventListener("change", onVoiceChange);
   ui.input.addEventListener("input", onTextInput);
+  contextShakha.addEventListener("change", onPronunciationContextChange);
+  contextPatha.addEventListener("change", onPronunciationContextChange);
   onRateInput();
   updateButtons();
 
