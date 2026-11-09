@@ -7,6 +7,12 @@ import {
   getKnowledgeBaseCoverage as getVedicKnowledgeBaseCoverage,
   selfTest as runVedicPronunciationSelfTest
 } from "./vedic-sanskrit-pronunciation.js";
+import {
+  SANSKRIT_G2P_ENGINE_VERSION,
+  analyzeSanskritG2P,
+  getSanskritG2PDiagnostics,
+  selfTest as runSanskritG2PSelfTest
+} from "./sanskrit-g2p-engine.js";
 import { createNanoServerKnowledgeAPI } from "../nano-server/nano-server-knowledge-api-part2.js";
 import { createNanoServerTtsKnowledgeAdapter } from "../nano-server/nano-server-tts-knowledge-adapter-part2.js";
 import {
@@ -23,8 +29,8 @@ import {
  * Speech Synthesis API; it performs no network requests and loads no model.
  */
 
-export const TTS_ENGINE_VERSION = "1.4.0";
-export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-08";
+export const TTS_ENGINE_VERSION = "1.5.0";
+export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-09";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -126,6 +132,67 @@ function makeCompilerFallbackResult(originalText, code, message) {
     compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
     improvementId: SWR_TTS_COMPILER_IMPROVEMENT_ID,
     analysisSummary: null
+  });
+}
+
+
+function makeG2PFallbackResult(originalText, error) {
+  const failure = asError(error, "G2P_ANALYSIS_FAILED");
+  const warning = Object.freeze({
+    code: failure.code,
+    message: failure.message || "G2P विश्लेषण उपलब्ध नहीं; मूल संस्कृत पाठ सुरक्षित है।",
+    severity: "warning",
+    details: null
+  });
+  return Object.freeze({
+    schema: "swar-sadhika.sanskrit-g2p",
+    schemaVersion: 1,
+    engineVersion: SANSKRIT_G2P_ENGINE_VERSION,
+    originalText,
+    originalTextPreserved: true,
+    status: "partial",
+    complete: false,
+    contextSensitive: false,
+    requiresContext: false,
+    hasUnsupportedGraphemes: true,
+    phonemicTransliteration: null,
+    phonemeSequence: Object.freeze([]),
+    phonemeCount: 0,
+    vowelNuclei: Object.freeze([]),
+    orthographicUnits: Object.freeze([]),
+    rulesApplied: Object.freeze([]),
+    warnings: Object.freeze([warning]),
+    outputContract: Object.freeze({
+      ipa: null,
+      nativeSpeechText: null,
+      phoneticSyllablesInferred: false,
+      melodyGenerated: false,
+      audioGenerated: false,
+      note: "G2P विश्लेषण विफल हुआ; मूल Native TTS पाठ अप्रभावित है।"
+    }),
+    failure: Object.freeze({ code: failure.code, message: failure.message })
+  });
+}
+
+function summarizeG2PAnalysis(result) {
+  return Object.freeze({
+    engineVersion: result.engineVersion || SANSKRIT_G2P_ENGINE_VERSION,
+    status: result.status || "partial",
+    complete: result.complete === true,
+    contextSensitive: result.contextSensitive === true,
+    requiresContext: result.requiresContext === true,
+    hasUnsupportedGraphemes: result.hasUnsupportedGraphemes === true,
+    inputCodePointCount: Number(result.inputCodePointCount) || Array.from(result.originalText || "").length,
+    orthographicUnitCount: Array.isArray(result.orthographicUnits) ? result.orthographicUnits.length : 0,
+    phonemeCount: Number(result.phonemeCount) || 0,
+    phonemicTransliterationAvailable: typeof result.phonemicTransliteration === "string",
+    warningCount: Array.isArray(result.warnings) ? result.warnings.length : 0,
+    warningCodes: Object.freeze(Array.isArray(result.warnings)
+      ? result.warnings.map(item => String(item && item.code || "G2P_WARNING")) : []),
+    originalTextPreserved: result.originalTextPreserved === true,
+    nativeSpeechTextProduced: false,
+    ipaProduced: false,
+    audioGenerated: false
   });
 }
 
@@ -289,6 +356,9 @@ function createNativeBackend(host) {
       if (!synthesis || !Utterance) {
         return Promise.reject(new TtsEngineError("Native TTS उपलब्ध नहीं है।", "NATIVE_TTS_UNSUPPORTED"));
       }
+      if (options.pronunciationAnalysis && typeof options.pronunciationAnalysis === "object") {
+        emitEvent("pronunciationmetadata", options.pronunciationAnalysis);
+      }
       if (pending) {
         const previous = pending;
         try { synthesis.cancel(); } catch (_) {}
@@ -394,9 +464,25 @@ export function selfTest() {
   add("voice-language-identification", languageForVoice({ lang: "hi-IN" }).id === "hi");
   add("unsupported-voice-identification", languageForVoice({ lang: "en-US" }) === null);
   let compilerTest = null;
+  let g2pTest = null;
   try { compilerTest = runSanskritCompilerSelfTest(); } catch (_) {}
+  try { g2pTest = runSanskritG2PSelfTest(); } catch (_) {}
   add("pronunciation-compiler-self-test", Boolean(compilerTest &&
     compilerTest.status === "PASSED" && compilerTest.failed === 0));
+  add("sanskrit-g2p-self-test", Boolean(g2pTest &&
+    g2pTest.status === "PASSED" && g2pTest.failed === 0));
+  add("g2p-analysis-preserves-source-text", (() => {
+    const source = "ॐ नमः शिवाय";
+    const result = analyzeSanskritG2P(source);
+    return result.originalText === source && result.originalTextPreserved === true &&
+      result.phonemicTransliteration === "oṃ namaḥ śivāya";
+  })());
+  add("g2p-does-not-claim-native-speech-or-audio", (() => {
+    const result = analyzeSanskritG2P("ॐ नमः शिवाय");
+    return result.outputContract.nativeSpeechText === null &&
+      result.outputContract.audioGenerated === false &&
+      result.outputContract.melodyGenerated === false;
+  })());
   add("compiler-output-validator", (() => {
     const fallback = makeCompilerFallbackResult("अग्निः", "TEST_FALLBACK", "Self-test fallback.");
     return validateEngineCompilerOutput(fallback, "अग्निः").valid;
@@ -434,6 +520,7 @@ export async function runIntegrationSelfTest() {
     lang: "hi-IN", localService: true, default: true
   });
   const capturedSpeech = [];
+  let capturedPronunciationMetadata = null;
   class TestSpeechSynthesisUtterance {
     constructor(text) { this.text = text; this.rate = 1; this.pitch = 1; this.volume = 1; }
   }
@@ -488,6 +575,9 @@ export async function runIntegrationSelfTest() {
     engine = createTtsEngine({ target: host, knowledgeAdapter: adapter, autoLoadKnowledge: false, defaultLanguage: "hi" });
     const initialized = await engine.initialize({ backendId: "native" });
     add("native-test-backend-initialized", initialized && initialized.ready === true);
+    engine.on("pronunciationmetadata", detail => {
+      capturedPronunciationMetadata = detail || null;
+    });
     const loaded = await engine.loadKnowledge({ downloadIfMissing: false });
     add("manifest-knowledge-loaded-through-adapter",
       loaded && loaded.status === "COMPLETE" && loaded.loaded === true &&
@@ -507,6 +597,34 @@ export async function runIntegrationSelfTest() {
     const outcome = await engine.speak("अग्निः", { voice, language: "hi" });
     add("native-tts-receives-compiled-speech-text",
       outcome && outcome.status === "ended" && capturedSpeech.length === 1 && capturedSpeech[0] === "अग्नि");
+
+    const mantra = "ॐ नमः शिवाय";
+    const g2pPreparation = engine.prepareSpeech(mantra, {
+      voice,
+      voiceProfile: { engine: NATIVE_TTS_ENGINE_NAME, platform: "Android Chrome" }
+    });
+    add("g2p-analysis-reaches-speech-preparation",
+      g2pPreparation.g2pAnalysis &&
+      g2pPreparation.g2pAnalysis.phonemicTransliteration === "oṃ namaḥ śivāya" &&
+      g2pPreparation.g2pDiagnostics &&
+      g2pPreparation.g2pDiagnostics.status === "context-sensitive");
+    add("g2p-does-not-modify-original-native-speech-text",
+      g2pPreparation.originalText === mantra &&
+      g2pPreparation.speechText === mantra &&
+      g2pPreparation.g2pAnalysis.originalText === mantra &&
+      g2pPreparation.compilerValidation.valid === true);
+
+    const mantraOutcome = await engine.speak(mantra, { voice, language: "hi" });
+    add("g2p-metadata-reaches-native-tts-backend",
+      mantraOutcome && mantraOutcome.status === "ended" &&
+      capturedPronunciationMetadata &&
+      capturedPronunciationMetadata.mode === "analysis-only" &&
+      capturedPronunciationMetadata.g2p &&
+      capturedPronunciationMetadata.g2p.phonemicTransliteration === "oṃ namaḥ śivāya");
+    add("native-tts-speaks-source-not-g2p-transliteration",
+      capturedSpeech.length === 2 &&
+      capturedSpeech[1] === mantra &&
+      capturedSpeech[1] !== capturedPronunciationMetadata.g2p.phonemicTransliteration);
     add("engine-status-reports-loaded-adapter-knowledge", engine.getStatus().knowledgeLoaded === true);
   } catch (error) {
     failure = asError(error, "TTS_INTEGRATION_SELF_TEST_FAILED");
@@ -617,6 +735,7 @@ export function createTtsEngine(options = {}) {
     const backend = activeBackend;
     return Object.freeze({
       version: TTS_ENGINE_VERSION,
+      g2pVersion: SANSKRIT_G2P_ENGINE_VERSION,
       phase,
       playback,
       ready: phase === "ready" && Boolean(backend),
@@ -987,6 +1106,10 @@ export function createTtsEngine(options = {}) {
       knowledgeMatchedTermCount: knowledgeGuidance.matches.length,
       knowledgeContextRequiredCount: knowledgeGuidance.contextRequired.length,
       compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
+      g2pVersion: SANSKRIT_G2P_ENGINE_VERSION,
+      g2pStatus: preparedSpeech.g2pDiagnostics.status,
+      g2pPhonemeCount: preparedSpeech.g2pDiagnostics.phonemeCount,
+      g2pTransliterationAvailable: preparedSpeech.g2pDiagnostics.phonemicTransliterationAvailable,
       compilerConfidence: preparedSpeech.pronunciationConfidence,
       compilerOutputValidated: preparedSpeech.compilerValidation.valid,
       matchedLexiconEntryCount: preparedSpeech.matchedLexiconEntries.length,
@@ -1017,7 +1140,9 @@ export function createTtsEngine(options = {}) {
       appliedRules: preparedSpeech.appliedRules,
       fallbackRules: preparedSpeech.fallbackRules,
       validation: preparedSpeech.compilerValidation,
-      diagnostics: preparedSpeech.speechPreparationDiagnostics
+      diagnostics: preparedSpeech.speechPreparationDiagnostics,
+      g2pAnalysis: preparedSpeech.g2pAnalysis,
+      g2pDiagnostics: preparedSpeech.g2pDiagnostics
     });
     if (voiceResolutionError) {
       emit("pronunciationwarning", {
@@ -1046,6 +1171,13 @@ export function createTtsEngine(options = {}) {
     delete backendOptions.replace;
     delete backendOptions.pronunciation;
     delete backendOptions.language;
+    backendOptions.pronunciationAnalysis = Object.freeze({
+      mode: "analysis-only",
+      sourceText: text,
+      authorizedSpeechText: preparedSpeech.speechText,
+      g2p: preparedSpeech.g2pAnalysis,
+      g2pDiagnostics: preparedSpeech.g2pDiagnostics
+    });
     if (adapter.type === "native" && selectedNativeVoice) backendOptions.voice = selectedNativeVoice;
     backendOptions.lang = speechLanguage.locale;
     activeSpeech = { token, backendId };
@@ -1311,6 +1443,15 @@ export function createTtsEngine(options = {}) {
     }
     const prepOptions = pronunciationOptions && typeof pronunciationOptions === "object" &&
       !Array.isArray(pronunciationOptions) ? pronunciationOptions : {};
+    let g2pAnalysis;
+    try {
+      g2pAnalysis = analyzeSanskritG2P(text, {
+        shakha: prepOptions.shakha || (prepOptions.context && prepOptions.context.shakha) || undefined
+      });
+    } catch (error) {
+      g2pAnalysis = makeG2PFallbackResult(text, error);
+    }
+    const g2pDiagnostics = summarizeG2PAnalysis(g2pAnalysis);
     let baseline = null;
     let baselineError = null;
     try {
@@ -1420,6 +1561,8 @@ export function createTtsEngine(options = {}) {
       pronunciationLexiconRegistered: Boolean(adapterDiagnostics && adapterDiagnostics.lexiconRegistered),
       pronunciationLexiconReadyCount: Number(adapterDiagnostics && adapterDiagnostics.activePronunciationEntries) || 0,
       compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
+      g2pVersion: SANSKRIT_G2P_ENGINE_VERSION,
+      g2p: g2pDiagnostics,
       compilerOutputValidated: compilerValidation.valid,
       compilerConfidence: compilerOutput.confidence,
       compilerWarningCount: fallbackRules.length,
@@ -1445,7 +1588,9 @@ export function createTtsEngine(options = {}) {
       pronunciationConfidence: compilerOutput.confidence,
       compilerOutput,
       compilerValidation,
-      speechPreparationDiagnostics
+      speechPreparationDiagnostics,
+      g2pAnalysis,
+      g2pDiagnostics
     });
   }
 
@@ -1467,13 +1612,32 @@ export function createTtsEngine(options = {}) {
     catch (error) { throw asError(error, "PRONUNCIATION_SELF_TEST_FAILED"); }
   }
 
+  function analyzeG2P(text, g2pOptions = {}) {
+    ensureNotDisposed();
+    try { return analyzeSanskritG2P(text, g2pOptions); }
+    catch (error) { throw asError(error, "G2P_ANALYSIS_FAILED"); }
+  }
+
+  function getG2PDiagnostics(text, g2pOptions = {}) {
+    ensureNotDisposed();
+    try { return getSanskritG2PDiagnostics(text, g2pOptions); }
+    catch (error) { throw asError(error, "G2P_DIAGNOSTICS_FAILED"); }
+  }
+
+  function runG2PSelfTest() {
+    ensureNotDisposed();
+    try { return runSanskritG2PSelfTest(); }
+    catch (error) { throw asError(error, "G2P_SELF_TEST_FAILED"); }
+  }
+
   function getPronunciationKnowledgeBaseInfo() {
     ensureNotDisposed();
-    let coverage, selfTest, compilerSelfTest;
+    let coverage, selfTest, compilerSelfTest, g2pSelfTest;
     try {
       coverage = getVedicKnowledgeBaseCoverage();
       selfTest = runVedicPronunciationSelfTest();
       compilerSelfTest = runSanskritCompilerSelfTest();
+      g2pSelfTest = runSanskritG2PSelfTest();
     } catch (error) {
       throw asError(error, "PRONUNCIATION_KNOWLEDGE_BASE_FAILED");
     }
@@ -1481,13 +1645,18 @@ export function createTtsEngine(options = {}) {
       available: true,
       version: VEDIC_PRONUNCIATION_VERSION,
       compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
+      g2pVersion: SANSKRIT_G2P_ENGINE_VERSION,
       improvementId: SWR_TTS_ENGINE_IMPROVEMENT_ID,
-      integrationMode: "Adapter-backed native speech compiler; exact/contextual matches, source provenance and validated output; original text retained separately",
+      integrationMode: "G2P phonemic analysis is passed to TTS adapters as metadata only; only separately authorized Compiler text can change the native speech string; original text is retained separately",
       coverage,
       selfTest: Object.freeze({ status: selfTest.status, total: selfTest.total, passed: selfTest.passed, failed: selfTest.failed }),
       compilerSelfTest: Object.freeze({
         status: compilerSelfTest.status, total: compilerSelfTest.total,
         passed: compilerSelfTest.passed, failed: compilerSelfTest.failed
+      }),
+      g2pSelfTest: Object.freeze({
+        status: g2pSelfTest.status, total: g2pSelfTest.total,
+        passed: g2pSelfTest.passed, failed: g2pSelfTest.failed
       })
     });
   }
@@ -1591,6 +1760,9 @@ export function createTtsEngine(options = {}) {
     getPronunciationKnowledgeBaseInfo,
     getSpeechCompilerDiagnostics,
     runPronunciationSelfTest,
+    analyzeG2P,
+    getG2PDiagnostics,
+    runG2PSelfTest,
     runIntegrationSelfTest,
     getDiagnostics,
     runDiagnostics,
