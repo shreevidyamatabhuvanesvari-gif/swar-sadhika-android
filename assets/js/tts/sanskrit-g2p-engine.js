@@ -144,8 +144,9 @@ function findVowelGrapheme(unit, vowelNucleus, unitFeatures) {
     return { character: sign.character, localIndex: characters.lastIndexOf(sign.character) };
   }
   if (vowelNucleus.source === "inherent-vowel") {
-    const characters = Array.from(unit.text);
-    return { character: "अ", localIndex: characters.length - 1 };
+    const consonant = unitFeatures.consonants[unitFeatures.consonants.length - 1];
+    if (!consonant) return null;
+    return { character: "अ", localIndex: consonant.localCodePointIndex };
   }
   return null;
 }
@@ -212,6 +213,7 @@ function analyzeOneUnit(unit, unitFeatures, unitIndex, state) {
   const vowelGrapheme = findVowelGrapheme(unit, unitFeatures.vowelNucleus, unitFeatures);
   const vowelLocalIndex = vowelGrapheme ? vowelGrapheme.localIndex : -1;
   const processed = new Set();
+  let unitRequiresContext = false;
 
   if (unit.text === "ॐ") {
     tokens.push(makeToken({
@@ -265,6 +267,17 @@ function analyzeOneUnit(unit, unitFeatures, unitIndex, state) {
       state.contextRequired = true;
       return { kind: "editorial-number", text: unit.text, tokens, issues, transliteration: null };
     }
+  }
+
+  for (const character of characters) {
+    if (!VEDIC_CONSONANT_CHARACTERS.has(character)) continue;
+    issues.push(makeIssue(
+      "BRANCH_SPECIFIC_CONSONANT",
+      "यह अतिरिक्त व्यंजन शाखा/पाठ-सापेक्ष है; स्रोत-सत्यापन के बिना इसका ध्वनि-मान लागू नहीं किया गया।",
+      "unsupported",
+      { character, orthographicUnit: unit.text }
+    ));
+    state.unsupported = true;
   }
 
   for (const consonant of unitFeatures.consonants) {
@@ -370,7 +383,18 @@ function analyzeOneUnit(unit, unitFeatures, unitIndex, state) {
     }
 
     const category = getCharacterCategory(character);
+    const characterInfo = getCharacterInfo(character);
     const absoluteStart = unit.startCodePointIndex + localIndex;
+    if (!characterInfo.found && /\p{M}/u.test(character)) {
+      issues.push(makeIssue(
+        "UNSUPPORTED_COMBINING_MARK",
+        "अज्ञात combining mark सुरक्षित रखा गया; उसका phonemic मान अनुमानित नहीं किया गया।",
+        "unsupported",
+        { character, codePoint: characterInfo.codePoint || null }
+      ));
+      state.unsupported = true;
+      continue;
+    }
     if (category === "nasalization" && character === "ं") {
       tokens.push(makeToken({
         symbol: "ṃ",
@@ -447,6 +471,7 @@ function analyzeOneUnit(unit, unitFeatures, unitIndex, state) {
         { character, codePoint: getCharacterInfo(character).codePoint || null }
       ));
       state.contextRequired = true;
+      unitRequiresContext = true;
       continue;
     }
     if (category === "avagraha") {
@@ -511,7 +536,9 @@ function analyzeOneUnit(unit, unitFeatures, unitIndex, state) {
     text: unit.text,
     tokens,
     issues,
-    transliteration: state.unsupported && issues.some(item => item.severity === "unsupported") ? null : transliteration
+    transliteration: (state.unsupported && issues.some(item => item.severity === "unsupported")) || unitRequiresContext
+      ? null
+      : transliteration
   };
 }
 
@@ -607,7 +634,8 @@ export function analyzeSanskritG2P(text, options = {}) {
   }
 
   const status = resolveStatus(state);
-  const transliterationComplete = segments.every(segment => segment.transliteration !== null);
+  const transliterationComplete = !state.contextRequired &&
+    segments.every(segment => segment.transliteration !== null);
   const phonemicTransliteration = transliterationComplete ? segments.map(segment => segment.transliteration).join("") : null;
   const wordCount = (text.match(/[^\s]+/gu) || []).length;
   const output = {
@@ -762,11 +790,10 @@ export function selfTest() {
     unknownCombining.phonemicTransliteration === null &&
     unknownCombining.warnings.some(item => item.code === "UNCLASSIFIED_COMBINING_MARK"));
 
-  const accent = run("अ॑ग्निमीळे");
+  const accent = run("अ॑ग्नि");
   check("VEDIC-ACCENT-REQUIRES-CONTEXT", accent.status === "needs-context" &&
     accent.phonemicTransliteration === null &&
-    accent.warnings.some(item => item.code === "VEDIC_BRANCH_CONTEXT_REQUIRED" ||
-      item.code === "VEDIC_OR_SPECIAL_MARK_REQUIRES_CONTEXT"));
+    accent.warnings.some(item => item.code === "VEDIC_OR_SPECIAL_MARK_REQUIRES_CONTEXT"));
 
   const branchConsonant = run("ळ");
   check("BRANCH-CONSONANT-NOT-GUESSED", branchConsonant.status === "partial" &&
