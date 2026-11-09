@@ -378,16 +378,95 @@ export async function mount(context) {
     return sorted.length ? sorted[0].voice : null;
   }
 
+  function normalizeBcp47Locale(rawLocale) {
+    const raw = typeof rawLocale === "string" ? rawLocale.trim() : "";
+    if (!raw) return "";
+    const candidate = raw.replace(/_/g, "-");
+    if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(candidate)) return "";
+    try {
+      const localeApi = win.Intl && typeof win.Intl.getCanonicalLocales === "function"
+        ? win.Intl : (typeof Intl !== "undefined" ? Intl : null);
+      if (localeApi && typeof localeApi.getCanonicalLocales === "function") {
+        const canonical = localeApi.getCanonicalLocales(candidate);
+        return canonical.length ? canonical[0] : "";
+      }
+    } catch (_) {
+      return "";
+    }
+    return candidate.split("-").map((part, index) => {
+      if (index === 0) return part.toLowerCase();
+      if (/^[a-z]{2}$/i.test(part)) return part.toUpperCase();
+      if (/^[a-z]{4}$/i.test(part)) return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      return part.toLowerCase();
+    }).join("-");
+  }
+
+  function detectNativeRuntime() {
+    const nav = win.navigator || {};
+    let userAgent = "";
+    let vendor = "";
+    let clientPlatform = "";
+    let brands = [];
+    try { userAgent = String(nav.userAgent || ""); } catch (_) {}
+    try { vendor = String(nav.vendor || ""); } catch (_) {}
+    try {
+      const userAgentData = nav.userAgentData;
+      clientPlatform = String(userAgentData && userAgentData.platform || "");
+      brands = userAgentData && Array.isArray(userAgentData.brands)
+        ? userAgentData.brands.map(item => String(item && item.brand || "")) : [];
+    } catch (_) {
+      clientPlatform = "";
+      brands = [];
+    }
+
+    const androidFromClientHints = /android/i.test(clientPlatform);
+    const androidFromUserAgent = /android/i.test(userAgent);
+    const isAndroid = androidFromClientHints || androidFromUserAgent;
+    const hasGoogleChromeBrand = brands.some(brand => /google chrome/i.test(brand));
+    const hasBrandData = brands.length > 0;
+    const alternateBrowser = /(?:EdgA|EdgiOS|OPR|SamsungBrowser|UCBrowser|YaBrowser|Vivaldi|Brave|Firefox|FxiOS|DuckDuckGo|MiuiBrowser|HuaweiBrowser|HeyTapBrowser)\//i.test(userAgent);
+    const chromeToken = /Chrome\/[0-9.]+/i.test(userAgent);
+    const chromeFromUserAgent = chromeToken && !alternateBrowser && !/\bwv\b/i.test(userAgent);
+    const isChrome = hasGoogleChromeBrand || (!hasBrandData && chromeFromUserAgent);
+    const hasChromiumBrand = brands.some(brand => /^chromium$/i.test(brand));
+    const browser = hasGoogleChromeBrand || isChrome ? "Chrome" :
+      hasChromiumBrand ? "Chromium (Chrome ब्राउज़र की पुष्टि नहीं)" :
+      alternateBrowser ? "अन्य Chromium/Browser (Chrome नहीं)" : "अज्ञात";
+
+    const platform = isAndroid
+      ? (isChrome ? "Android Chrome" : "Android (Chrome की पुष्टि नहीं)")
+      : "Android platform की पुष्टि नहीं";
+    const evidence = [];
+    if (androidFromClientHints) evidence.push("Android: userAgentData.platform");
+    else if (androidFromUserAgent) evidence.push("Android: navigator.userAgent");
+    if (hasGoogleChromeBrand) evidence.push("Chrome: userAgentData.brands");
+    else if (isChrome) evidence.push("Chrome: navigator.userAgent");
+    else if (hasChromiumBrand) evidence.push("Chromium brand उपलब्ध; Chrome ब्राउज़र अपुष्ट");
+    if (vendor) evidence.push("navigator.vendor उपलब्ध");
+    if (!evidence.length) evidence.push("पर्याप्त Browser पहचान संकेत उपलब्ध नहीं");
+    return Object.freeze({
+      platform,
+      browser,
+      evidence: Object.freeze(evidence),
+      androidConfirmed: isAndroid,
+      chromeConfirmed: isChrome
+    });
+  }
+
   function nativeVoiceProfile(voice) {
-    const userAgent = String(win.navigator && win.navigator.userAgent || "");
-    const platform = /Android/i.test(userAgent) && /(?:Chrome|CriOS)\//i.test(userAgent)
-      ? "Android Chrome" : "";
+    const runtime = detectNativeRuntime();
+    const rawLocale = String(voice && voice.lang || "").trim();
+    const normalizedLocale = normalizeBcp47Locale(rawLocale);
     return {
       engine: "Web Speech API SpeechSynthesis",
-      platform,
-      voiceName: String(voice && voice.name || ""),
-      voiceURI: String(voice && voice.voiceURI || ""),
-      locale: String(voice && voice.lang || "")
+      platform: runtime.platform === "Android Chrome" ? runtime.platform : "",
+      voiceName: String(voice && voice.name || "").trim(),
+      voiceURI: String(voice && voice.voiceURI || "").trim(),
+      rawLocale,
+      locale: normalizedLocale,
+      normalizedLocale,
+      runtimeBrowser: runtime.browser,
+      platformEvidence: runtime.evidence.join(" · ")
     };
   }
 
@@ -401,7 +480,7 @@ export async function mount(context) {
     if (!voice || typeof voice !== "object") {
       return Object.freeze({
         available: false,
-        compilerReady: false,
+        metadataComplete: false,
         missing: Object.freeze(["Native Voice चयन"]),
         profile: null,
         localService: null
@@ -412,13 +491,16 @@ export async function mount(context) {
     const missing = [];
     if (!profile.voiceName) missing.push("voiceName");
     if (!profile.voiceURI) missing.push("voiceURI");
-    if (!isValidBcp47Locale(profile.locale)) missing.push("BCP-47 locale");
-    if (!profile.platform) missing.push("Android Chrome platform");
+    if (!profile.rawLocale) missing.push("Raw locale");
+    if (!profile.normalizedLocale) missing.push("मान्य BCP-47 locale");
+    if (profile.platform !== "Android Chrome") missing.push("सत्यापित Android Chrome platform");
     if (voice.localService !== true) missing.push("localService=true");
 
     return Object.freeze({
       available: true,
-      compilerReady: missing.length === 0,
+      metadataComplete: missing.length === 0,
+      localeNeedsNormalization: Boolean(profile.rawLocale && profile.normalizedLocale &&
+        profile.rawLocale !== profile.normalizedLocale),
       missing: Object.freeze(missing),
       profile: Object.freeze({ ...profile }),
       localService: voice.localService === true ? "true" :
@@ -441,10 +523,13 @@ export async function mount(context) {
     const fields = [
       ["Voice Name", profile.voiceName || "ब्राउज़र ने उपलब्ध नहीं कराया"],
       ["voiceURI", profile.voiceURI || "ब्राउज़र ने खाली छोड़ा"],
-      ["BCP-47 locale", profile.locale || "ब्राउज़र ने उपलब्ध नहीं कराया"],
+      ["Raw locale (SpeechSynthesisVoice.lang)", profile.rawLocale || "ब्राउज़र ने उपलब्ध नहीं कराया"],
+      ["Normalized BCP-47 locale", profile.normalizedLocale || "मान्य रूप में सामान्यीकृत नहीं हो सका"],
       ["localService", diagnostics.localService],
       ["Engine", profile.engine],
-      ["Platform", profile.platform || "Android Chrome की पुष्टि नहीं हुई"]
+      ["Browser", profile.runtimeBrowser],
+      ["Platform", profile.platform || "Android Chrome की पुष्टि नहीं हुई"],
+      ["पहचान के प्रमाण", profile.platformEvidence]
     ];
 
     fields.forEach(([label, value]) => {
@@ -454,15 +539,21 @@ export async function mount(context) {
       voiceProfileDiagnosticsDetails.appendChild(row);
     });
 
-    if (diagnostics.compilerReady) {
+    if (diagnostics.metadataComplete && diagnostics.localeNeedsNormalization) {
+      voiceProfileDiagnosticsSummary.className = "status warn";
+      voiceProfileDiagnosticsSummary.textContent =
+        "Voice Metadata उपलब्ध है। Android ने Raw locale " + profile.rawLocale +
+        " दिया है; इसका मानकीकृत BCP-47 रूप " + profile.normalizedLocale +
+        " है। चुनी हुई Native Voice वस्तु अपरिवर्तित रखी गई है। वर्तमान Compiler अभी raw voice.lang को सीधे जाँचता है; अगली अलग फाइल के सुधार तक Compiler Fallback संभव है।";
+    } else if (diagnostics.metadataComplete) {
       voiceProfileDiagnosticsSummary.className = "status";
       voiceProfileDiagnosticsSummary.textContent =
-        "चयनित स्थानीय Voice का आवश्यक Profile metadata उपलब्ध है। अब भी किसी Lexicon नियम के लिए उसका अपना पाठ, संदर्भ और अनुमति वैध होना आवश्यक है।";
+        "Android Chrome की पहचान और स्थानीय Native Voice Metadata उपलब्ध हैं। किसी Lexicon नियम के लिए उसका अपना वाचन-पाठ, संदर्भ और अनुमति भी वैध होना आवश्यक है।";
     } else {
       voiceProfileDiagnosticsSummary.className = "status warn";
       voiceProfileDiagnosticsSummary.textContent =
-        "Compiler Profile अधूरा है। अनुपलब्ध/अमान्य मान: " + diagnostics.missing.join(", ") +
-        "। Native TTS आवाज़ फिर भी बोल सकती है; ऐसे में Voice-विशिष्ट Lexicon परिवर्तन लागू नहीं होगा और मूल संस्कृत पाठ सुरक्षित रहेगा।";
+        "Voice Metadata/Browser पहचान अधूरी है। अनुपलब्ध या अपुष्ट मान: " + diagnostics.missing.join(", ") +
+        "। Native TTS आवाज़ फिर भी बोल सकती है; Voice-विशिष्ट Lexicon परिवर्तन लागू न होने पर मूल संस्कृत पाठ सुरक्षित रहेगा।";
     }
   }
 
