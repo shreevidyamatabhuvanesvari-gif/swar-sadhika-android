@@ -1,5 +1,13 @@
 import { createTtsEngine } from "../tts/tts-engine.js";
 
+/*
+ * SWR-AI-BRAIN-LOCK-V1 extension — 2026-11-10:
+ * Discover the real browser/Android SpeechSynthesis voice inventory.
+ * Only explicit local Hindi/Sanskrit voices may be used for offline playback.
+ * Remote, unknown-locality, and other-language voices remain visible as
+ * unavailable information; female voice identity is never claimed as fact.
+ */
+
 const MAX_TEXT_LENGTH = 12000;
 const CANVAS_WIDTH = 540;
 const CANVAS_HEIGHT = 960;
@@ -24,6 +32,8 @@ const state = {
   fallbackTimer: null,
   unsubscribeBoundary: null,
   unsubscribeVoices: null,
+  systemVoices: [],
+  voiceRefreshToken: 0,
   avatar: null,
   avatarUrl: null,
   videoUrl: null,
@@ -78,76 +88,243 @@ function graphemes(text) {
   return result;
 }
 
-function voiceGenderHint(voice) {
-  const name = String(voice && voice.name || "").toLowerCase();
-  return FEMALE_HINTS.some(hint => name.includes(hint)) ? "female" : "unknown";
+function supportsStudioLanguage(voice) {
+  return Boolean(voice && /^(hi|sa)([-_]|$)/i.test(String(voice.lang || "").trim()));
 }
 
-function scoreVoice(voice) {
-  const language = String(voice && voice.lang || "").toLowerCase();
-  let score = voiceGenderHint(voice) === "female" ? 100 : 0;
-  if (language === "hi-in") score += 35;
-  else if (language.startsWith("hi")) score += 30;
-  else if (language.startsWith("sa")) score += 28;
-  if (voice && voice.localService === true) score += 10;
-  if (voice && voice.default) score += 2;
-  return score;
+function isSelectableLocalVoice(voice) {
+  return supportsStudioLanguage(voice) && voice.localService === true;
+}
+
+function voiceLocalityLabel(voice) {
+  if (voice && voice.localService === true) return "स्थानीय";
+  if (voice && voice.localService === false) return "ऑनलाइन / स्थानीय नहीं";
+  return "स्थानीयता अज्ञात";
+}
+
+function voiceLanguageLabel(voice) {
+  const language = String(voice && voice.lang || "").trim();
+  if (/^hi([-_]|$)/i.test(language)) return "हिन्दी";
+  if (/^sa([-_]|$)/i.test(language)) return "संस्कृत";
+  return language || "भाषा अज्ञात";
+}
+
+function voiceIdentity(voice) {
+  return [
+    String(voice && voice.voiceURI || ""),
+    String(voice && voice.name || ""),
+    String(voice && voice.lang || ""),
+    String(voice && voice.localService)
+  ].join("|");
+}
+
+function setVoiceUiStatus(message, kind = "info") {
+  const target = byId("studio-voice-status");
+  if (!target) return;
+  target.textContent = String(message);
+  target.dataset.kind = kind;
+}
+
+function installVoiceSelectorTools() {
+  if (byId("studio-voice-tools")) return;
+  const select = byId("studio-voice");
+  const grid = select && select.closest(".grid");
+  if (!grid) return;
+
+  const tools = document.createElement("div");
+  tools.id = "studio-voice-tools";
+  tools.className = "stack";
+  tools.style.marginTop = "8px";
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const refresh = document.createElement("button");
+  refresh.id = "studio-voice-refresh";
+  refresh.className = "btn";
+  refresh.type = "button";
+  refresh.textContent = "↻ Android Voice फिर जाँचें";
+
+  const test = document.createElement("button");
+  test.id = "studio-voice-test";
+  test.className = "btn accent";
+  test.type = "button";
+  test.textContent = "♫ चयनित Voice का नमूना सुनें";
+
+  const status = document.createElement("div");
+  status.id = "studio-voice-status";
+  status.className = "tiny";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+
+  actions.append(refresh, test);
+  tools.append(actions, status);
+  grid.insertAdjacentElement("afterend", tools);
+
+  refresh.addEventListener("click", () => {
+    void refreshVoices(true);
+  });
+  test.addEventListener("click", () => {
+    void playSelectedVoiceSample();
+  });
+  select.addEventListener("change", () => {
+    const index = Number(select.value);
+    state.selectedVoice = Number.isInteger(index) ? (state.voices[index] || null) : null;
+    if (state.selectedVoice) {
+      const hint = voiceGenderHint(state.selectedVoice) === "female"
+        ? "नाम से संभावित महिला स्वर; वास्तविक स्वर नमूना सुनकर जाँचें।"
+        : "इस Voice का लिंग नाम से प्रमाणित नहीं है; नमूना सुनकर जाँचें।";
+      setVoiceUiStatus(
+        voiceLanguageLabel(state.selectedVoice) + " · " +
+        voiceLocalityLabel(state.selectedVoice) + " · " + hint
+      );
+    }
+  });
 }
 
 function renderVoiceOptions() {
   const select = byId("studio-voice");
-  const previous = select.value;
+  const previousIdentity = state.selectedVoice ? voiceIdentity(state.selectedVoice) : "";
+  const discovered = Array.isArray(state.systemVoices) ? state.systemVoices.slice() : [];
+  const usable = discovered.filter(isSelectableLocalVoice).sort((a, b) => scoreVoice(b) - scoreVoice(a));
+  const unavailable = discovered.filter(voice => !isSelectableLocalVoice(voice));
+  state.voices = usable;
+
   select.replaceChildren();
-  const voices = state.voices.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a));
-  voices.forEach((voice, index) => {
-    const option = document.createElement("option");
-    option.value = String(index);
-    const gender = voiceGenderHint(voice) === "female" ? " · संभावित महिला स्वर" : "";
-    option.textContent = String(voice.name || "स्थानीय Voice") + " (" + String(voice.lang || "भाषा अज्ञात") + ")" + gender;
-    select.appendChild(option);
-  });
-  if (!voices.length) {
+  if (usable.length) {
+    const localGroup = document.createElement("optgroup");
+    localGroup.label = "स्थानीय हिन्दी / संस्कृत — चयन योग्य";
+    usable.forEach((voice, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      const femaleHint = voiceGenderHint(voice) === "female"
+        ? " · नाम से संभावित महिला"
+        : " · स्वर-लिंग अप्रमाणित";
+      option.textContent = String(voice.name || "स्थानीय Voice") + " (" +
+        voiceLanguageLabel(voice) + " · " + String(voice.lang || "") + ")" + femaleHint;
+      localGroup.appendChild(option);
+    });
+    select.appendChild(localGroup);
+  }
+
+  if (unavailable.length) {
+    const unavailableGroup = document.createElement("optgroup");
+    unavailableGroup.label = "अन्य / ऑनलाइन / स्थानीयता अप्रमाणित — केवल जानकारी";
+    unavailable.forEach(voice => {
+      const option = document.createElement("option");
+      option.value = "unavailable:" + voiceIdentity(voice);
+      option.disabled = true;
+      const reason = !supportsStudioLanguage(voice)
+        ? "इस पाठ के लिए भाषा अनुपयुक्त"
+        : voiceLocalityLabel(voice) + " — ऑफलाइन चयन निष्क्रिय";
+      option.textContent = String(voice.name || "Android Voice") + " (" +
+        voiceLanguageLabel(voice) + " · " + String(voice.lang || "") + " · " + reason + ")";
+      unavailableGroup.appendChild(option);
+    });
+    select.appendChild(unavailableGroup);
+  }
+
+  if (!usable.length) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "कोई स्थानीय हिन्दी/संस्कृत Voice उपलब्ध नहीं";
-    select.appendChild(option);
+    option.disabled = true;
+    option.selected = true;
+    option.textContent = discovered.length
+      ? "कोई चयनयोग्य स्थानीय हिन्दी/संस्कृत Voice नहीं मिली"
+      : "Android से हिन्दी/संस्कृत Voice सूची प्राप्त नहीं हुई";
+    select.insertBefore(option, select.firstChild);
     state.selectedVoice = null;
-    select.disabled = true;
-    setStatus("इस फोन पर अभी कोई स्थानीय हिन्दी/संस्कृत TTS Voice उपलब्ध नहीं मिली। Android की Text-to-speech output सेटिंग में हिन्दी Voice डाउनलोड/सक्रिय करके पेज फिर खोलें।", "warn");
-    return;
+  } else {
+    const previousIndex = usable.findIndex(voice => voiceIdentity(voice) === previousIdentity);
+    const chosenIndex = previousIndex >= 0 ? previousIndex : 0;
+    select.value = String(chosenIndex);
+    state.selectedVoice = usable[chosenIndex];
   }
-  const previousIndex = Number(previous);
-  const chosenIndex = Number.isInteger(previousIndex) && voices[previousIndex] ? previousIndex : 0;
-  select.value = String(chosenIndex);
-  state.voices = voices;
-  state.selectedVoice = voices[chosenIndex];
+
+  /* Keep the control openable so the user can inspect unavailable system entries. */
   select.disabled = false;
-  const genderNote = voiceGenderHint(state.selectedVoice) === "female"
-    ? "संभावित महिला-स्वर चुना गया है।"
-    : "इस डिवाइस की स्थानीय Voice में महिला-स्वर की पहचान नाम से प्रमाणित नहीं हुई; वास्तविक आवाज़ सुनकर जाँचें।";
-  setStatus(voices.length + " स्थानीय हिन्दी/संस्कृत Voice उपलब्ध। " + genderNote,
-    voiceGenderHint(state.selectedVoice) !== "female");
+
+  const remoteCompatible = discovered.filter(voice =>
+    supportsStudioLanguage(voice) && voice.localService !== true
+  ).length;
+  if (usable.length) {
+    const selected = state.selectedVoice;
+    const femaleNote = voiceGenderHint(selected) === "female"
+      ? "नाम से संभावित महिला स्वर; इसकी पुष्टि नमूना सुनकर करें।"
+      : "महिला/पुरुष स्वर का विश्वसनीय metadata उपलब्ध नहीं; नमूना सुनकर निर्णय करें।";
+    setVoiceUiStatus(
+      usable.length + " चयनयोग्य स्थानीय हिन्दी/संस्कृत Voice मिलीं। " +
+      femaleNote + (remoteCompatible
+        ? " अतिरिक्त " + remoteCompatible + " गैर-स्थानीय/अप्रमाणित Voice केवल जानकारी के लिए दिख रही हैं।"
+        : "")
+    );
+  } else if (discovered.length) {
+    setVoiceUiStatus(
+      "Android ने " + discovered.length + " Voice लौटाईं, लेकिन उनमें कोई स्थानीय हिन्दी/संस्कृत Voice नहीं है। " +
+      "ऑनलाइन या स्थानीयता-अज्ञात Voice को इस ऑफलाइन App में चलाना अवरुद्ध है।",
+      "warn"
+    );
+  } else {
+    setVoiceUiStatus(
+      "Chrome की Android SpeechSynthesis सूची अभी खाली है। Android Text-to-speech output में हिन्दी Voice Data डाउनलोड/सक्रिय करें; फिर 'Voice फिर जाँचें' दबाएँ।",
+      "warn"
+    );
+  }
 }
 
-async function refreshVoices() {
-  if (!state.engine || state.destroyed) return;
-  try {
-    let voices = [];
-    for (const delay of [0, 220, 550, 1000, 1600]) {
-      if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
-      if (state.destroyed) return;
-      voices = await state.engine.getVoices({ backendId: "native" });
-      if (Array.isArray(voices) && voices.some(voice => voice && voice.localService === true)) break;
-    }
-    state.voices = (Array.isArray(voices) ? voices : []).filter(voice =>
-      voice && voice.localService === true &&
-      /^(hi|sa)(-|$)/i.test(String(voice.lang || ""))
-    );
+async function refreshVoices(userInitiated = false) {
+  if (state.destroyed) return;
+  const token = ++state.voiceRefreshToken;
+  const synthesis = window.speechSynthesis;
+  if (!synthesis || typeof synthesis.getVoices !== "function") {
+    state.systemVoices = [];
     renderVoiceOptions();
+    setVoiceUiStatus("इस Chrome में SpeechSynthesis Voice सूची API उपलब्ध नहीं है।", "error");
+    if (state.engineReady) setPlayerButtons();
+    return;
+  }
+
+  const refreshButton = byId("studio-voice-refresh");
+  if (refreshButton) refreshButton.textContent = "↻ Voice सूची जाँची जा रही है…";
+  try {
+    let discovered = [];
+    for (const delay of [0, 250, 550, 950, 1500, 2200]) {
+      if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
+      if (state.destroyed || token !== state.voiceRefreshToken) return;
+      const current = synthesis.getVoices();
+      if (Array.isArray(current)) discovered = current.slice();
+      /* Do not stop merely because an unrelated local voice (for example English) appeared. */
+      if (discovered.some(isSelectableLocalVoice)) break;
+    }
+    if (state.destroyed || token !== state.voiceRefreshToken) return;
+
+    const unique = new Map();
+    discovered.forEach(voice => {
+      if (voice && typeof voice === "object") unique.set(voiceIdentity(voice), voice);
+    });
+    state.systemVoices = Array.from(unique.values()).sort((a, b) => {
+      const aSupported = supportsStudioLanguage(a) ? 1 : 0;
+      const bSupported = supportsStudioLanguage(b) ? 1 : 0;
+      if (aSupported !== bSupported) return bSupported - aSupported;
+      return scoreVoice(b) - scoreVoice(a);
+    });
+    renderVoiceOptions();
+    if (userInitiated && state.voices.length) {
+      setStatus("Android की स्थानीय हिन्दी/संस्कृत Voice सूची अपडेट हो गई।", "success");
+    } else if (userInitiated) {
+      setStatus("Voice सूची जाँची गई; कोई चयनयोग्य स्थानीय हिन्दी/संस्कृत Voice नहीं मिली।", "warn");
+    }
     if (state.engineReady) setPlayerButtons();
   } catch (error) {
-    setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " + error.message, "error");
-    if (state.engineReady) setPlayerButtons();
+    setVoiceUiStatus(
+      "Android Voice सूची पढ़ते समय त्रुटि: " +
+      (error && error.message ? error.message : "अज्ञात त्रुटि"),
+      "error"
+    );
+  } finally {
+    if (refreshButton && token === state.voiceRefreshToken) {
+      refreshButton.textContent = "↻ Android Voice फिर जाँचें";
+    }
   }
 }
 
@@ -677,6 +854,67 @@ function ensureRecordingPreview() {
   return preview;
 }
 
+async function playSelectedVoiceSample() {
+  if (!state.engineReady) {
+    setVoiceUiStatus("Native TTS Engine अभी तैयार नहीं है।", "warn");
+    return;
+  }
+  if (state.speaking) {
+    setVoiceUiStatus("पहले चल रहे वाचन को समाप्त करें, फिर Voice का नमूना सुनें।", "warn");
+    return;
+  }
+  const voice = currentVoice();
+  if (!voice || !isSelectableLocalVoice(voice)) {
+    setVoiceUiStatus(
+      "नमूना सुनाने के लिए चयनयोग्य स्थानीय हिन्दी/संस्कृत Voice उपलब्ध नहीं है। Android Voice Settings जाँचें।",
+      "warn"
+    );
+    return;
+  }
+
+  const language = /^sa([_-]|$)/i.test(String(voice.lang || "")) ? "sa" : "hi";
+  const sample = language === "sa" ? "ॐ नमः शिवाय" : "नमस्ते। यह चयनित आवाज़ का परीक्षण है।";
+  const generation = ++state.generation;
+  state.speaking = true;
+  state.paused = false;
+  state.currentLine = sample;
+  state.currentPrepared = state.engine.prepareSpeech(sample, { backendType: "native", voice });
+  state.revealedCount = 0;
+  setPlayerButtons();
+  startCharacterFallback(sample);
+  drawStage();
+  try {
+    const result = await state.engine.speak(sample, {
+      voice,
+      lang: voice.lang || (language === "sa" ? "sa-IN" : "hi-IN"),
+      rate: Number(byId("studio-rate").value) || 1,
+      pitch: 1,
+      volume: 1,
+      replace: false
+    });
+    if (generation === state.generation && result && result.status === "ended") {
+      setVoiceUiStatus("चयनित Voice का नमूना वाचन पूरा हुआ। स्वर की गुणवत्ता स्वयं सुनकर जाँचें।", "success");
+    } else if (generation === state.generation && result && result.status === "cancelled") {
+      setVoiceUiStatus("Voice नमूना रोक दिया गया।", "warn");
+    }
+  } catch (error) {
+    if (generation === state.generation) {
+      setVoiceUiStatus(
+        "Voice नमूना नहीं चला: " + (error && error.message ? error.message : "Native TTS त्रुटि"),
+        "error"
+      );
+    }
+  } finally {
+    if (generation === state.generation) {
+      state.speaking = false;
+      state.paused = false;
+      clearCharacterFallback();
+      setPlayerButtons();
+      if (!state.destroyed) drawStage();
+    }
+  }
+}
+
 function getRecorderMimeType() {
   if (typeof MediaRecorder === "undefined") return "";
   const options = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"];
@@ -874,6 +1112,7 @@ function bind() {
   byId("studio-avatar-overlay").addEventListener("change", drawStage);
   byId("studio-text").addEventListener("input", updateTextPreview);
   byId("studio-text-mode").addEventListener("change", drawStage);
+  installVoiceSelectorTools();
   byId("studio-fullscreen-play").addEventListener("click", startFullscreenPlayback);
   byId("studio-record-download").addEventListener("click", startRecordingAndPlayback);
   byId("studio-play-preview").addEventListener("click", () => {
@@ -959,6 +1198,18 @@ export function selfTest() {
     { id: "player-control-manager", passed: typeof setPlayerButtons === "function" &&
       ["studio-fullscreen-play", "studio-play-preview", "studio-pause", "studio-resume", "studio-stop"].every(id => Boolean(byId(id))) },
     { id: "video-preview-support", passed: typeof video.play === "function" && typeof video.load === "function" },
+    { id: "voice-language-filter", passed:
+      isSelectableLocalVoice({ lang: "hi-IN", localService: true }) &&
+      isSelectableLocalVoice({ lang: "sa-IN", localService: true }) &&
+      !isSelectableLocalVoice({ lang: "hi-IN", localService: false }) &&
+      !isSelectableLocalVoice({ lang: "en-US", localService: true }) },
+    { id: "voice-locality-labels", passed:
+      voiceLocalityLabel({ localService: true }) === "स्थानीय" &&
+      voiceLocalityLabel({ localService: false }) === "ऑनलाइन / स्थानीय नहीं" &&
+      voiceLocalityLabel({}) === "स्थानीयता अज्ञात" },
+    { id: "voice-selector-never-hides-system-inventory", passed:
+      typeof renderVoiceOptions === "function" && typeof refreshVoices === "function" &&
+      typeof installVoiceSelectorTools === "function" },
     { id: "all-visible-player-buttons-available", passed:
       ["studio-fullscreen-play", "studio-play-preview", "studio-record-download",
         "studio-pause", "studio-resume", "studio-stop"].every(id =>
