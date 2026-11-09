@@ -57,6 +57,20 @@ function normalizeLocale(value) {
   return typeof value === "string" ? value.trim().replace(/_/g, "-").toLowerCase() : "";
 }
 
+function normalizeBcp47Locale(value) {
+  if (!isNonEmptyString(value)) return "";
+  const candidate = value.trim().replace(/_/g, "-");
+  if (!isValidLocale(candidate)) return "";
+  return candidate.split("-").map((part, index) => {
+    if (index === 0) return part.toLowerCase();
+    if (/^[a-z]{4}$/i.test(part)) {
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }
+    if (/^(?:[a-z]{2}|[0-9]{3})$/i.test(part)) return part.toUpperCase();
+    return part.toLowerCase();
+  }).join("-");
+}
+
 function isValidLocale(value) {
   return typeof value === "string" && /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(value.trim());
 }
@@ -104,21 +118,43 @@ function resolveVoiceProfile(voice, suppliedProfile = {}) {
   if (!isObject(voice)) {
     return { valid: false, code: "NATIVE_VOICE_MISSING", message: "चयनित Native Speech Voice उपलब्ध नहीं है।" };
   }
-  if (voice.localService === false) {
-    return { valid: false, code: "NATIVE_VOICE_NOT_LOCAL", message: "चयनित Voice स्थानीय Native Voice नहीं है।" };
+  if (voice.localService !== true) {
+    return {
+      valid: false,
+      code: voice.localService === false ? "NATIVE_VOICE_NOT_LOCAL" : "NATIVE_VOICE_LOCALITY_UNVERIFIED",
+      message: "केवल localService=true वाली सत्यापित स्थानीय Native Voice स्वीकार है।"
+    };
   }
 
   const name = isNonEmptyString(voice.name) ? voice.name.trim() : "";
   const voiceURI = isNonEmptyString(voice.voiceURI) ? voice.voiceURI.trim() : "";
-  const locale = isNonEmptyString(voice.lang) ? voice.lang.trim() : "";
+  const rawLocale = isNonEmptyString(voice.lang) ? voice.lang.trim() : "";
+  const normalizedVoiceLocale = normalizeBcp47Locale(rawLocale);
+  const suppliedNormalizedLocale = normalizeBcp47Locale(
+    suppliedProfile.normalizedLocale || suppliedProfile.locale || rawLocale
+  );
+  const locale = normalizedVoiceLocale;
   const engine = isNonEmptyString(suppliedProfile.engine) ? suppliedProfile.engine.trim() : NATIVE_TTS_ENGINE;
   const platform = isNonEmptyString(suppliedProfile.platform) ? suppliedProfile.platform.trim() : "";
 
-  if (!name || !voiceURI || !isValidLocale(locale)) {
-    return { valid: false, code: "NATIVE_VOICE_PROFILE_INCOMPLETE", message: "चयनित Native Voice का नाम, voiceURI और BCP-47 locale आवश्यक हैं।" };
+  if (!name || !voiceURI || !rawLocale || !normalizedVoiceLocale) {
+    return { valid: false, code: "NATIVE_VOICE_PROFILE_INCOMPLETE", message: "चयनित Native Voice का नाम, voiceURI और मान्य BCP-47 locale आवश्यक हैं।" };
   }
-  if (!platform) {
-    return { valid: false, code: "NATIVE_VOICE_PLATFORM_UNSPECIFIED", message: "Native Voice का सत्यापित platform स्पष्ट रूप से देना आवश्यक है।" };
+  if (!suppliedNormalizedLocale || normalizeLocale(suppliedNormalizedLocale) !== normalizeLocale(normalizedVoiceLocale)) {
+    return {
+      valid: false,
+      code: "SELECTED_VOICE_PROFILE_MISMATCH",
+      message: "Raw locale और supplied normalizedLocale एक ही भाषा पहचान नहीं बताते।",
+      details: { rawLocale, normalizedLocale: normalizedVoiceLocale, suppliedNormalizedLocale }
+    };
+  }
+  if (suppliedProfile.rawLocale && String(suppliedProfile.rawLocale).trim() !== rawLocale) {
+    return {
+      valid: false,
+      code: "SELECTED_VOICE_PROFILE_MISMATCH",
+      message: "दिए गए Raw locale और वास्तविक Native Voice.lang में अंतर है।",
+      details: { rawLocale, suppliedRawLocale: suppliedProfile.rawLocale }
+    };
   }
   if (engine !== NATIVE_TTS_ENGINE) {
     return { valid: false, code: "NATIVE_TTS_ENGINE_UNSUPPORTED", message: "केवल Web Speech API SpeechSynthesis Voice Profile समर्थित है।" };
@@ -143,10 +179,15 @@ function resolveVoiceProfile(voice, suppliedProfile = {}) {
     profile: deepFreeze({
       engine,
       platform,
+      platformVerified: Boolean(platform),
+      runtimeBrowser: isNonEmptyString(suppliedProfile.runtimeBrowser) ? suppliedProfile.runtimeBrowser : "",
+      platformEvidence: isNonEmptyString(suppliedProfile.platformEvidence) ? suppliedProfile.platformEvidence : "",
       voiceName: name,
       voiceURI,
+      rawLocale,
       locale,
-      localService: voice.localService === true
+      normalizedLocale: locale,
+      localService: true
     })
   };
 }
@@ -188,8 +229,12 @@ function validateLexiconEntryForSpeech(entry, selectedVoiceProfile) {
     if (isNonEmptyString(profile.engine) && profile.engine !== selectedVoiceProfile.engine) {
       reasons.push("voice-engine-mismatch");
     }
-    if (isNonEmptyString(profile.platform) && profile.platform !== selectedVoiceProfile.platform) {
-      reasons.push("voice-platform-mismatch");
+    if (isNonEmptyString(profile.platform)) {
+      if (!isNonEmptyString(selectedVoiceProfile.platform)) {
+        reasons.push("voice-platform-unverified");
+      } else if (profile.platform !== selectedVoiceProfile.platform) {
+        reasons.push("voice-platform-mismatch");
+      }
     }
     if (isNonEmptyString(declaredVoiceName) && declaredVoiceName !== selectedVoiceProfile.voiceName) {
       reasons.push("voice-name-mismatch");
@@ -510,6 +555,14 @@ export function compileSanskritSpeech(input, options = {}) {
       return fallbackResult(originalText, warnings, analysis);
     }
     const selectedVoiceProfile = voiceResult.profile;
+    if (!selectedVoiceProfile.platformVerified) {
+      warnings.push(makeWarning(
+        "NATIVE_VOICE_PLATFORM_UNVERIFIED",
+        "Chrome ब्राउज़र की पहचान उपलब्ध है, लेकिन Android OS/platform की पुष्टि browser metadata से नहीं हुई। Android Chrome-विशिष्ट Lexicon नियम तब तक लागू नहीं होंगे जब तक platform सत्यापित न हो।",
+        "warning",
+        { browser: selectedVoiceProfile.runtimeBrowser || null, evidence: selectedVoiceProfile.platformEvidence || null }
+      ));
+    }
     const pronunciationOptions = {
       voiceLocale: selectedVoiceProfile.locale,
       voiceProfile: {
@@ -961,6 +1014,42 @@ export function selfTest() {
     check("explicit-authorization-diagnostics", getCompilerDiagnostics(unreviewed).policy.onlyReviewedEntries === false &&
       getCompilerDiagnostics(unreviewed).policy.primarySourceRequired === false &&
       getCompilerDiagnostics(unreviewed).policy.explicitSpeechAuthorizationRequired === true);
+
+    const underscoreLocale = compile("अग्निः", [fixtureEntry()], {
+      voice: { ...voice, lang: "hi_IN" },
+      voiceProfile: {
+        ...voiceProfile,
+        rawLocale: "hi_IN",
+        locale: "hi-IN",
+        normalizedLocale: "hi-IN"
+      }
+    });
+    check("underscore-native-locale-normalized-to-bcp47", underscoreLocale.speechText === "अग्नि" &&
+      underscoreLocale.modified && !underscoreLocale.warnings.some(item => item.code === "NATIVE_VOICE_PROFILE_INCOMPLETE"));
+
+    const normalizedLocaleMismatch = compile("अग्निः", [fixtureEntry()], {
+      voice: { ...voice, lang: "hi_IN" },
+      voiceProfile: { ...voiceProfile, normalizedLocale: "en-US", locale: "en-US" }
+    });
+    check("normalized-locale-mismatch-safe-fallback", normalizedLocaleMismatch.speechText === "अग्निः" &&
+      normalizedLocaleMismatch.warnings.some(item => item.code === "SELECTED_VOICE_PROFILE_MISMATCH"));
+
+    const unverifiedPlatform = compile("अग्निः", [fixtureEntry()], {
+      voice: { ...voice, lang: "hi_IN" },
+      voiceProfile: {
+        engine: NATIVE_TTS_ENGINE,
+        platform: "",
+        rawLocale: "hi_IN",
+        locale: "hi-IN",
+        normalizedLocale: "hi-IN",
+        runtimeBrowser: "Chrome"
+      }
+    });
+    check("unverified-platform-does-not-authorize-platform-specific-lexicon", unverifiedPlatform.speechText === "अग्निः" &&
+      !unverifiedPlatform.modified &&
+      unverifiedPlatform.warnings.some(item => item.code === "NATIVE_VOICE_PLATFORM_UNVERIFIED") &&
+      unverifiedPlatform.warnings.some(item => item.details && Array.isArray(item.details.reasons) &&
+        item.details.reasons.includes("voice-platform-unverified")));
 
     const unsupportedVoice = compile("अग्निः", [fixtureEntry()], { voice: null });
     check("missing-voice-safe-fallback", unsupportedVoice.speechText === "अग्निः" && unsupportedVoice.warnings.some(item => item.code === "NATIVE_VOICE_MISSING"));
