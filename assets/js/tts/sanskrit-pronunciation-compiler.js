@@ -1,8 +1,9 @@
 /* Swar-Sadhika — Sanskrit Pronunciation Compiler.
- * SWR-TTS-COMPILER-04 — deterministic, explicitly authorized Native TTS text compiler.
+ * SWR-TTS-COMPILER-05 — deterministic Native TTS compiler with bounded compatibility hints.
  * No DOM, network, storage, dynamic imports, code execution, or global browser access.
  * Original Sanskrit text changes only for exact/contextual-exact Lexicon matches whose
- * speech application is explicitly enabled and whose nativeSpeechText is valid.
+ * speech application is explicitly enabled and whose nativeSpeechText is valid, or for
+ * the narrowly scoped, exact Hindi-voice compatibility forms declared below.
  * Review, primary-source verification, phonetic review, and voice-test status are not
  * speech-application gates; declared voice restrictions and structural safety checks remain.
  */
@@ -11,14 +12,31 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.1.0";
-export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-04";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.2.0";
+export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-05";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
 const MAX_TEXT_LENGTH = 100000;
 const DEVANAGARI_TOKEN = /^[\u0900-\u097F\uA8E0-\uA8FF\u{11B00}-\u{11B0A}\u{1CD0}-\u{1CFA}]+$/u;
 const WORD_PATTERN_SOURCE = "[\\u0900-\\u097F\\uA8E0-\\uA8FF\\u{11B00}-\\u{11B0A}\\u{1CD0}-\\u{1CFA}]+";
 const CONFIDENCE_STATES = new Set(["verified", "fallback", "ambiguous"]);
+
+/*
+ * These exact-token aliases are a temporary Native Hindi TTS compatibility layer.
+ * They affect only speechText for hi-IN local voices. The original Sanskrit, on-screen
+ * text, and G2P source remain unchanged. These are not grammar/orthography corrections,
+ * IPA, voice-cloning, or a claim of verified recitation; they require device listening.
+ */
+const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
+  Object.freeze({ id: "rudrashtaka-final-anusvara-nirvanarupam", term: "निर्वाणरूपं", nativeSpeechText: "निर्वाणरूपम्" }),
+  Object.freeze({ id: "rudrashtaka-final-anusvara-nijam", term: "निजं", nativeSpeechText: "निजम्" }),
+  Object.freeze({ id: "rudrashtaka-final-anusvara-niriham", term: "निरीहं", nativeSpeechText: "निरीहम्" }),
+  Object.freeze({ id: "rudrashtaka-final-anusvara-gotitamisham", term: "गोतीतमीशं", nativeSpeechText: "गोतीतमीशम्" }),
+  Object.freeze({ id: "rudrashtaka-janga-hi-tts", term: "भुजङ्गा", nativeSpeechText: "भुजंगा" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-bajeham", term: "भजेऽहं", nativeSpeechText: "भजेहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-natoham", term: "नतोऽहम्", nativeSpeechText: "नतोहम्" })
+]);
+
 
 export class SanskritPronunciationCompilerError extends Error {
   constructor(message, code = "SANSKRIT_COMPILER_ERROR", details = null) {
@@ -73,6 +91,88 @@ function normalizeBcp47Locale(value) {
 
 function isValidLocale(value) {
   return typeof value === "string" && /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(value.trim());
+}
+
+
+function createNativeHiTtsCompatibilityEntries(selectedVoiceProfile, existingEntries = []) {
+  if (!selectedVoiceProfile || normalizeLocale(selectedVoiceProfile.locale) !== "hi-in") return [];
+  const existingTerms = new Set(existingEntries
+    .filter(entry => isObject(entry) && isNonEmptyString(entry.term))
+    .map(entry => normalizeTextToken(entry.term)));
+  const documentId = "native-hi-tts-compatibility-rules";
+  const documentVersion = "1.0.0";
+  return NATIVE_HI_TTS_COMPATIBILITY_RULES
+    .filter(rule => !existingTerms.has(normalizeTextToken(rule.term)))
+    .map(rule => ({
+      id: "native-compatibility:" + rule.id,
+      term: rule.term,
+      matchType: "exact",
+      phoneticStructure: {
+        status: "pending-review",
+        orthographicUnits: [],
+        phonemeSequence: [],
+        syllableBoundaries: [],
+        analysisSource: "explicit-user-reported-native-tts-compatibility-hint",
+        reviewedBy: null,
+        reviewedAt: null
+      },
+      phonemeReference: { system: "IPA", value: null, status: "pending-review", source: null },
+      ipa: null,
+      nativeSpeechText: rule.nativeSpeechText,
+      voiceLocales: ["hi-IN"],
+      voiceProfile: {
+        engine: NATIVE_TTS_ENGINE,
+        platform: null,
+        voiceName: null,
+        voiceURI: null,
+        locale: null,
+        testStatus: "not-tested",
+        testEvidence: null,
+        testedAt: null
+      },
+      context: {
+        scope: "general",
+        shakha: null,
+        patha: null,
+        requiredSequence: null,
+        precedingWords: [],
+        followingWords: [],
+        notes: "सीमित exact-token Hindi Native TTS compatibility hint; मूल संस्कृत पाठ और G2P अपरिवर्तित। वास्तविक Voice परीक्षण लंबित।"
+      },
+      scope: "general",
+      source: {
+        type: "user-reported-native-tts-compatibility-trial",
+        documentId,
+        documentVersion,
+        entryId: rule.id,
+        reportedReference: null,
+        primarySourceVerified: false,
+        sourceReviewStatus: "needs-review",
+        sourceNote: "यह रूप केवल उपयोगकर्ता द्वारा बताई गई Native TTS उच्चारण समस्या के लिए परीक्षणार्थ है; इसे संस्कृत वर्तनी या शास्त्रीय पाठ का संशोधन न मानें।",
+        primarySource: null
+      },
+      documentVersion,
+      documentSource: {
+        id: documentId,
+        title: "Swar-Sadhika Native Hindi TTS compatibility rules",
+        documentVersion,
+        sha256: null,
+        catalogVersion: "built-in"
+      },
+      reviewStatus: "needs-review",
+      activation: {
+        enabled: true,
+        lookupEnabled: true,
+        analysisEnabled: true,
+        reviewEnabled: true,
+        reason: "केवल घोषित hi-IN Voice और पूर्ण exact-token match पर सीमित speech-only परीक्षण।"
+      },
+      speechApplication: {
+        enabled: true,
+        status: "experimental-device-listening-required",
+        reason: "मूल पाठ/विश्लेषण सुरक्षित रखते हुए केवल स्थानीय Hindi TTS के लिए परीक्षणार्थ वाचन-रूप।"
+      }
+    }));
 }
 
 function normalizeShakha(value) {
@@ -598,6 +698,10 @@ export function compileSanskritSpeech(input, options = {}) {
           candidateMap.set(entry.id, entry);
         }
       }
+    }
+    const existingCandidates = Array.from(candidateMap.values());
+    for (const entry of createNativeHiTtsCompatibilityEntries(selectedVoiceProfile, existingCandidates)) {
+      candidateMap.set(entry.id, entry);
     }
     const candidates = Array.from(candidateMap.values());
     if (!candidates.length) {
@@ -1136,6 +1240,25 @@ export function selfTest() {
 
     const noLexicon = compile("अग्निः", []);
     check("missing-lexicon-fallback", noLexicon.speechText === "अग्निः" && noLexicon.confidence === "fallback");
+
+    const compatibilityInput = "निर्वाणरूपं निजं निरीहं गोतीतमीशं भुजङ्गा भजेऽहं नतोऽहम्";
+    const compatibilityExpected = "निर्वाणरूपम् निजम् निरीहम् गोतीतमीशम् भुजंगा भजेहम् नतोहम्";
+    const compatibility = compile(compatibilityInput, []);
+    check("hi-in-compatibility-exact-forms", compatibility.speechText === compatibilityExpected &&
+      compatibility.modified && compatibility.appliedRules.length === 7);
+    check("compatibility-preserves-original-and-source-map", compatibility.originalText === compatibilityInput &&
+      validateCompiledSpeech(compatibility).valid &&
+      compatibility.appliedRules.every(rule => rule.source.primarySourceVerified === false &&
+        rule.voiceProfile.testStatus === "not-tested"));
+    const compatibilityNearMatch = compile("निर्वाणरूपंकार", []);
+    check("compatibility-does-not-rewrite-substrings", compatibilityNearMatch.speechText === "निर्वाणरूपंकार" &&
+      !compatibilityNearMatch.modified);
+    const sanskritLocaleCompatibility = compile(compatibilityInput, [], {
+      voice: { ...voice, lang: "sa-IN" }
+    });
+    check("compatibility-is-limited-to-hi-in-voice", sanskritLocaleCompatibility.speechText === compatibilityInput &&
+      !sanskritLocaleCompatibility.modified);
+
     check("diagnostics-contract", getCompilerDiagnostics(exact).outputValidation.valid === true);
   } catch (_) {
     check("self-test-unexpected-exception", false);
