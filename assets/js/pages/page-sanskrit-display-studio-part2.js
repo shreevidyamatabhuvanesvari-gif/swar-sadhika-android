@@ -173,12 +173,7 @@ async function initializeEngine() {
   }
   state.engineReady = true;
   await refreshVoices();
-  byId("studio-fullscreen-play").disabled = !state.voices.length;
-  byId("studio-record-download").disabled = !state.voices.length;
-  byId("studio-play-preview").disabled = !state.voices.length;
-  byId("studio-stop").disabled = true;
-  byId("studio-pause").disabled = true;
-  byId("studio-resume").disabled = true;
+  setPlayerButtons();
 }
 
 function sourceGraphemeCountAtOutputIndex(prepared, outputIndex) {
@@ -519,10 +514,11 @@ function installPlayerStyles() {
   const style = document.createElement("style");
   style.id = "studio-player-runtime-styles";
   style.textContent = [
-    "#studio-fullscreen-play:not(:disabled),#studio-play-preview:not(:disabled){background:linear-gradient(135deg,#7958aa,#4e3a75);border-color:#c8a8ff;color:#fff;box-shadow:0 0 0 1px rgba(200,168,255,.22),0 0 14px rgba(199,164,255,.28)}",
-    "#studio-pause:not(:disabled),#studio-resume:not(:disabled){background:linear-gradient(135deg,#80602e,#5d4425);border-color:#f0cf91;color:#fff;box-shadow:0 0 12px rgba(243,200,125,.24)}",
-    "#studio-stop:not(:disabled){background:linear-gradient(135deg,#874157,#633548);border-color:#e69bb1;color:#fff;box-shadow:0 0 12px rgba(230,155,177,.22)}",
-    ".studio-control-active{outline:2px solid rgba(255,228,141,.72);outline-offset:2px;transform:translateY(-1px)}",
+    "#studio-fullscreen-play,#studio-play-preview{background:linear-gradient(135deg,#7958aa,#4e3a75);border-color:#c8a8ff;color:#fff;box-shadow:0 0 0 1px rgba(200,168,255,.22),0 0 14px rgba(199,164,255,.28);opacity:1!important}",
+    "#studio-pause,#studio-resume{background:linear-gradient(135deg,#80602e,#5d4425);border-color:#f0cf91;color:#fff;box-shadow:0 0 12px rgba(243,200,125,.24);opacity:1!important}",
+    "#studio-stop{background:linear-gradient(135deg,#874157,#633548);border-color:#e69bb1;color:#fff;box-shadow:0 0 12px rgba(230,155,177,.22);opacity:1!important}",
+    "#studio-record-download{opacity:1!important;filter:none}",
+    ".studio-control-active{outline:2px solid rgba(255,228,141,.82);outline-offset:2px;transform:translateY(-1px)}",
     "#studio-record-preview{display:block;width:100%;max-width:100%;margin-top:12px;border:1px solid rgba(210,190,245,.25);border-radius:10px;background:#090713}"
   ].join("");
   document.head.appendChild(style);
@@ -531,19 +527,22 @@ function installPlayerStyles() {
 function setPlayerButtons() {
   const active = state.speaking;
   const ready = state.engineReady && state.voices.length > 0;
-  const setButton = (id, enabled, highlighted = false) => {
+  const setButton = (id, highlighted = false) => {
     const button = byId(id);
-    button.disabled = !enabled;
-    button.setAttribute("aria-disabled", String(!enabled));
-    button.dataset.playerState = highlighted ? "active" : enabled ? "ready" : "idle";
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "false");
+    button.dataset.playerState = highlighted ? "active" : ready ? "ready" : "available";
     button.classList.toggle("studio-control-active", highlighted);
   };
-  setButton("studio-fullscreen-play", ready && !active, false);
-  setButton("studio-play-preview", ready && !active, false);
-  setButton("studio-pause", active && !state.paused, active && !state.paused);
-  setButton("studio-resume", active && state.paused, active && state.paused);
-  setButton("studio-stop", active, active);
+
+  setButton("studio-fullscreen-play", false);
+  setButton("studio-play-preview", active && !state.paused);
+  setButton("studio-record-download", false);
+  setButton("studio-pause", active && !state.paused);
+  setButton("studio-resume", active && state.paused);
+  setButton("studio-stop", active);
   stage.dataset.playerState = active ? (state.paused ? "paused" : "playing") : "idle";
+  stage.dataset.voiceReady = String(ready);
 }
 
 function currentVoice() {
@@ -685,7 +684,14 @@ function getRecorderMimeType() {
 }
 
 async function startRecordingAndPlayback() {
-  if (state.speaking || state.recorder) return;
+  if (state.speaking || state.recorder) {
+    setStatus("वाचन या रिकॉर्डिंग का एक कार्य पहले से चल रहा है।", "warn");
+    return;
+  }
+  if (!state.engineReady || !state.voices.length || !currentVoice()) {
+    setStatus("आवाज़ सहित वीडियो बनाने के लिए पहले Android की Text-to-speech output सेटिंग में स्थानीय हिन्दी/संस्कृत Voice डाउनलोड और सक्रिय करें। अभी रिकॉर्डिंग शुरू नहीं की गई है।", "warn");
+    return;
+  }
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
     setStatus("इस ब्राउज़र में माइक्रोफ़ोन रिकॉर्डिंग उपलब्ध नहीं है; आवाज़ सहित डाउनलोड नहीं बन सकेगा।", "error");
     return;
@@ -767,6 +773,11 @@ async function startRecordingAndPlayback() {
 }
 
 async function stopPlayback() {
+  if (!state.speaking && (!state.recorder || state.recorder.state === "inactive")) {
+    setStatus("अभी कोई वाचन या रिकॉर्डिंग चल नहीं रही है।", "info");
+    setPlayerButtons();
+    return;
+  }
   state.generation += 1;
   state.speaking = false;
   state.paused = false;
@@ -784,7 +795,14 @@ async function stopPlayback() {
 }
 
 function pausePlayback() {
-  if (!state.speaking || state.paused) return;
+  if (!state.speaking) {
+    setStatus("रोकने के लिए पहले पेज पर सुनें या Full Screen + महिला आवाज़ दबाएँ।", "info");
+    return;
+  }
+  if (state.paused) {
+    setStatus("वाचन पहले से रुका हुआ है। जारी रखें दबाएँ।", "info");
+    return;
+  }
   state.paused = true;
   void state.engine.pause();
   video.pause();
@@ -793,7 +811,10 @@ function pausePlayback() {
 }
 
 function resumePlayback() {
-  if (!state.speaking || !state.paused) return;
+  if (!state.speaking || !state.paused) {
+    setStatus("अभी कोई रुका हुआ वाचन उपलब्ध नहीं है। पहले वाचन शुरू करें और फिर रोकें।", "info");
+    return;
+  }
   state.paused = false;
   void state.engine.resume();
   if (video.src) {
@@ -907,18 +928,16 @@ function bind() {
   byId("studio-avatar-overlay").disabled = true;
   byId("studio-main-index-full").hidden = true;
   byId("studio-exit-fullscreen").hidden = true;
-  byId("studio-fullscreen-play").disabled = true;
-  byId("studio-record-download").disabled = true;
-  byId("studio-play-preview").disabled = true;
-  byId("studio-stop").disabled = true;
-  byId("studio-pause").disabled = true;
-  byId("studio-resume").disabled = true;
   updateTextPreview();
   drawStage();
+  setPlayerButtons();
   void initializeEngine().then(() => {
     if (state.destroyed) return;
     setPlayerButtons();
-  }).catch(error => setStatus("TTS तैयार नहीं हुआ: " + error.message, "error"));
+  }).catch(error => {
+    setPlayerButtons();
+    setStatus("TTS तैयार नहीं हुआ: " + error.message, "error");
+  });
 }
 
 if (document.readyState === "loading") {
@@ -939,7 +958,11 @@ export function selfTest() {
       wrapShapedText("क्षि ज्ञ त्र्य", CANVAS_WIDTH, "700 44px sans-serif").join(" ") === "क्षि ज्ञ त्र्य" },
     { id: "player-control-manager", passed: typeof setPlayerButtons === "function" &&
       ["studio-fullscreen-play", "studio-play-preview", "studio-pause", "studio-resume", "studio-stop"].every(id => Boolean(byId(id))) },
-    { id: "video-preview-support", passed: typeof video.play === "function" && typeof video.load === "function" }
+    { id: "video-preview-support", passed: typeof video.play === "function" && typeof video.load === "function" },
+    { id: "all-visible-player-buttons-available", passed:
+      ["studio-fullscreen-play", "studio-play-preview", "studio-record-download",
+        "studio-pause", "studio-resume", "studio-stop"].every(id =>
+          byId(id) && byId(id).disabled === false) }
   ];
   return {
     passed: checks.every(item => item.passed),
