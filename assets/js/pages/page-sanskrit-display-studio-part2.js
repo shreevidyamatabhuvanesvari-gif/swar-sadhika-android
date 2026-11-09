@@ -88,6 +88,22 @@ function graphemes(text) {
   return result;
 }
 
+function voiceGenderHint(voice) {
+  const name = String(voice && voice.name || "").toLowerCase();
+  return FEMALE_HINTS.some(hint => name.includes(hint)) ? "female" : "unknown";
+}
+
+function scoreVoice(voice) {
+  const language = String(voice && voice.lang || "").toLowerCase();
+  let score = voiceGenderHint(voice) === "female" ? 100 : 0;
+  if (language === "hi-in") score += 35;
+  else if (language.startsWith("hi")) score += 30;
+  else if (language.startsWith("sa")) score += 28;
+  if (voice && voice.localService === true) score += 10;
+  if (voice && voice.default) score += 2;
+  return score;
+}
+
 function supportsStudioLanguage(voice) {
   return Boolean(voice && /^(hi|sa)([-_]|$)/i.test(String(voice.lang || "").trim()));
 }
