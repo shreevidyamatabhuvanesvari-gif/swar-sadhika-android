@@ -1,5 +1,5 @@
 /* Swar-Sadhika — Sanskrit Pronunciation Compiler.
- * SWR-TTS-COMPILER-06 — exact-token Hindi Native TTS compatibility before Lexicon matching.
+ * SWR-TTS-COMPILER-07 — exact-token Hindi Native TTS phonetic-spelling trial.
  * No DOM, network, storage, dynamic imports, code execution, or global browser access.
  * Original Sanskrit text changes only for exact/contextual-exact Lexicon matches whose
  * speech application is explicitly enabled and whose nativeSpeechText is valid, or for
@@ -12,8 +12,8 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.3.0";
-export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-06";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.0";
+export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-07";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
 const MAX_TEXT_LENGTH = 100000;
@@ -32,8 +32,8 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "rudrashtaka-final-anusvara-nijam", term: "निजं", nativeSpeechText: "निजम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-niriham", term: "निरीहं", nativeSpeechText: "निरीहम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-gotitamisham", term: "गोतीतमीशं", nativeSpeechText: "गोतीतमीशम्" }),
-  Object.freeze({ id: "rudrashtaka-janga-short-hi-tts", term: "भुजङ्ग", nativeSpeechText: "भुजंग" }),
-  Object.freeze({ id: "rudrashtaka-janga-hi-tts", term: "भुजङ्गा", nativeSpeechText: "भुजंगा" }),
+  Object.freeze({ id: "rudrashtaka-janga-short-hi-tts", term: "भुजङ्ग", nativeSpeechText: "भुजन्ग" }),
+  Object.freeze({ id: "rudrashtaka-janga-hi-tts", term: "भुजङ्गा", nativeSpeechText: "भुजन्गा" }),
   Object.freeze({ id: "rudrashtaka-avagraha-bajeham", term: "भजेऽहं", nativeSpeechText: "भजेहम्" }),
   Object.freeze({ id: "rudrashtaka-avagraha-natoham", term: "नतोऽहम्", nativeSpeechText: "नतोहम्" })
 ]);
@@ -1374,7 +1374,7 @@ export function selfTest() {
         voiceProfile: { ...fixtureEntry().voiceProfile, platform: "Android Chrome" } })
     ]);
     check("reported-bhujanga-bhajeham-forms-applied-before-inactive-lexicon",
-      exactUserWords.speechText === "भुजंग, भजेहम्" &&
+      exactUserWords.speechText === "भुजन्ग, भजेहम्" &&
       exactUserWords.appliedRules.length === 2 &&
       exactUserWords.appliedRules[0].originalForm === "भुजङ्ग" &&
       exactUserWords.appliedRules[1].originalForm === "भजेऽहं");
@@ -1383,6 +1383,16 @@ export function selfTest() {
       validateCompiledSpeech(exactUserWords).valid &&
       exactUserWords.appliedRules.every(rule => rule.source.primarySourceVerified === false &&
         rule.voiceProfile.testStatus === "not-tested"));
+    const phoneticBhujanga = compile("भुजङ्ग", []);
+    check("bhujanga-phonetic-hint-uses-halant-na",
+      phoneticBhujanga.speechText === "भुजन्ग" &&
+      phoneticBhujanga.appliedRules.length === 1 &&
+      validateCompiledSpeech(phoneticBhujanga).valid);
+    const phoneticBhujangaLong = compile("भुजङ्गा", []);
+    check("bhujanga-long-form-phonetic-hint-uses-halant-na",
+      phoneticBhujangaLong.speechText === "भुजन्गा" &&
+      phoneticBhujangaLong.appliedRules.length === 1 &&
+      validateCompiledSpeech(phoneticBhujangaLong).valid);
     const avagrahaOnly = compile("भजेऽहं", []);
     check("avagraha-word-exact-match", avagrahaOnly.speechText === "भजेहम्" &&
       avagrahaOnly.appliedRules.length === 1);
@@ -1391,7 +1401,7 @@ export function selfTest() {
       bhujangaSubstring.speechText === "भुजङ्गाधिप" && !bhujangaSubstring.modified);
 
     const compatibilityInput = "निर्वाणरूपं निजं निरीहं गोतीतमीशं भुजङ्गा भजेऽहं नतोऽहम्";
-    const compatibilityExpected = "निर्वाणरूपम् निजम् निरीहम् गोतीतमीशम् भुजंगा भजेहम् नतोहम्";
+    const compatibilityExpected = "निर्वाणरूपम् निजम् निरीहम् गोतीतमीशम् भुजन्गा भजेहम् नतोहम्";
     const compatibility = compile(compatibilityInput, []);
     check("hi-in-compatibility-exact-forms", compatibility.speechText === compatibilityExpected &&
       compatibility.modified && compatibility.appliedRules.length === 7);
