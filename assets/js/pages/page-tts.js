@@ -133,6 +133,29 @@ export async function mount(context) {
     root.appendChild(voiceProfileDiagnosticsPanel);
   }
 
+  const g2pPreviewPanel = doc.createElement("section");
+  g2pPreviewPanel.className = "note tts-g2p-preview";
+  g2pPreviewPanel.setAttribute("aria-label", "संस्कृत G2P ध्वनि-विश्लेषण");
+  g2pPreviewPanel.setAttribute("data-role", "sanskrit-g2p-preview");
+  const g2pPreviewHeading = doc.createElement("h3");
+  g2pPreviewHeading.textContent = "Sanskrit G2P — ध्वनि-विश्लेषण";
+  const g2pPreviewIntro = doc.createElement("p");
+  g2pPreviewIntro.className = "note";
+  g2pPreviewIntro.textContent = "यह मूल संस्कृत अक्षरों से तैयार व्यापक ध्वन्यात्मक विश्लेषण है। प्रदर्शित लिप्यंतरण IPA, प्रमाणित बोलने योग्य पाठ या गायन ऑडियो नहीं है। G2P परिणाम अपने-आप Native TTS के पाठ को नहीं बदलता।";
+  const g2pPreviewSummary = doc.createElement("div");
+  g2pPreviewSummary.className = "status";
+  g2pPreviewSummary.setAttribute("role", "status");
+  g2pPreviewSummary.setAttribute("aria-live", "polite");
+  g2pPreviewSummary.textContent = "संस्कृत पाठ दर्ज करने पर G2P विश्लेषण यहाँ दिखाई देगा।";
+  const g2pPreviewList = doc.createElement("div");
+  g2pPreviewList.className = "tts-g2p-preview-list";
+  g2pPreviewPanel.append(g2pPreviewHeading, g2pPreviewIntro, g2pPreviewSummary, g2pPreviewList);
+  if (pronunciationPreview.parentNode) {
+    pronunciationPreview.parentNode.insertBefore(g2pPreviewPanel, voiceProfileDiagnosticsPanel);
+  } else {
+    root.appendChild(g2pPreviewPanel);
+  }
+
   const engine = createTtsEngine({ target: win, defaultBackend: "native" });
   const state = {
     voices: [],
@@ -577,10 +600,24 @@ export async function mount(context) {
   function previewEntryForLine(originalLine, index, voice) {
     const numbered = stripTerminalVerseNumber(originalLine);
     const speechSourceText = numbered.text.trim();
-    let prepared = null, failure = null;
-    if (speechSourceText && state.engineReady && voice) {
-      try { prepared = engine.prepareSpeech(speechSourceText, compilerOptionsForVoice(voice)); }
-      catch (error) { failure = error && error.message ? error.message : String(error); }
+    let prepared = null, failure = null, g2pAnalysis = null, g2pFailure = null;
+    if (speechSourceText && state.engineReady) {
+      if (voice) {
+        try { prepared = engine.prepareSpeech(speechSourceText, compilerOptionsForVoice(voice)); }
+        catch (error) { failure = error && error.message ? error.message : String(error); }
+      }
+      if (prepared && prepared.g2pAnalysis) {
+        g2pAnalysis = prepared.g2pAnalysis;
+      } else if (typeof engine.analyzeG2P === "function") {
+        try {
+          const context = getPronunciationContext();
+          g2pAnalysis = engine.analyzeG2P(speechSourceText, { shakha: context.shakha || undefined });
+        } catch (error) {
+          g2pFailure = error && error.message ? error.message : String(error);
+        }
+      } else {
+        g2pFailure = "TTS Engine में G2P विश्लेषण API उपलब्ध नहीं है।";
+      }
     }
     const validated = Boolean(prepared && prepared.compilerValidation &&
       prepared.compilerValidation.valid === true && prepared.originalText === speechSourceText &&
@@ -596,7 +633,8 @@ export async function mount(context) {
     return {
       index, originalLine, speechSourceText, speechText, validated, confidence, applied, status,
       rules, warnings, prepared, voiceURI: voice && voice.voiceURI || null,
-      numberRemoved: numbered.removed, failure
+      numberRemoved: numbered.removed, failure, g2pAnalysis, g2pFailure,
+      g2pDiagnostics: prepared && prepared.g2pDiagnostics || null
     };
   }
 
@@ -663,6 +701,143 @@ export async function mount(context) {
     return row;
   }
 
+  function renderG2PPreviewEntry(entry) {
+    const row = doc.createElement("article");
+    row.className = "tts-g2p-line";
+    row.setAttribute("data-line-index", String(entry.index));
+    const heading = doc.createElement("div");
+    heading.className = "tts-preview-line-title";
+    heading.textContent = "पंक्ति " + (entry.index + 1) + " — G2P विश्लेषण";
+    row.appendChild(heading);
+
+    const analysis = entry.g2pAnalysis;
+    if (!analysis) {
+      const unavailable = doc.createElement("p");
+      unavailable.className = "status warn";
+      unavailable.textContent = entry.g2pFailure
+        ? "G2P उपलब्ध नहीं: " + entry.g2pFailure
+        : "G2P विश्लेषण अभी उपलब्ध नहीं है; Engine initialization की प्रतीक्षा है।";
+      row.appendChild(unavailable);
+      return row;
+    }
+
+    const sourceMatches = analysis.originalText === entry.speechSourceText &&
+      analysis.originalTextPreserved === true;
+    const statusLabels = {
+      complete: "सीमित orthographic mapping पूरी",
+      "context-sensitive": "संदर्भ-संवेदनशील ध्वनि — वास्तविक रूप संदर्भ पर निर्भर",
+      "needs-context": "अतिरिक्त पाठ/शाखा संदर्भ आवश्यक",
+      partial: "आंशिक विश्लेषण — कुछ अक्षर/चिह्न समर्थित नहीं"
+    };
+    const status = doc.createElement("p");
+    status.className = "tts-preview-meta";
+    status.textContent = "स्थिति: " + (statusLabels[analysis.status] || "अज्ञात") +
+      " (" + String(analysis.status || "unknown") + ")" +
+      " · ध्वनि-टोकन: " + (Number(analysis.phonemeCount) || 0) +
+      " · स्वर-केंद्र: " + (Array.isArray(analysis.vowelNuclei) ? analysis.vowelNuclei.length : 0);
+    row.appendChild(status);
+
+    const source = doc.createElement("p");
+    source.className = "tts-preview-original";
+    source.textContent = "G2P का मूल इनपुट: " + String(analysis.originalText || "");
+    row.appendChild(source);
+
+    const transliteration = doc.createElement("p");
+    transliteration.className = "tts-preview-compiled";
+    transliteration.textContent = "व्यापक ध्वन्यात्मक लिप्यंतरण (IAST-जैसा; IPA नहीं): " +
+      (sourceMatches && typeof analysis.phonemicTransliteration === "string"
+        ? analysis.phonemicTransliteration
+        : "पूर्ण परिणाम उपलब्ध नहीं — संदर्भ/असमर्थित चिह्न की जाँच आवश्यक।");
+    row.appendChild(transliteration);
+
+    const sequence = Array.isArray(analysis.phonemeSequence) ? analysis.phonemeSequence : [];
+    if (sequence.length) {
+      const sequenceNode = doc.createElement("p");
+      sequenceNode.className = "tts-preview-meta";
+      sequenceNode.textContent = "ध्वनि-टोकन क्रम: " + sequence.map(token => {
+        if (token && typeof token.symbol === "string" && token.symbol) return token.symbol;
+        if (token && token.type === "vowel-nasalization") return "[स्वर-नासिक्य]";
+        if (token && token.type === "elision-marker") return "ऽ";
+        return "[" + String(token && token.type || "अचिह्नित") + "]";
+      }).join(" · ");
+      row.appendChild(sequenceNode);
+    }
+
+    const rules = Array.isArray(analysis.rulesApplied) ? analysis.rulesApplied : [];
+    if (rules.length) {
+      const ruleNode = doc.createElement("p");
+      ruleNode.className = "tts-preview-meta";
+      ruleNode.textContent = "लागू orthographic नियम: " + rules.join(" · ");
+      row.appendChild(ruleNode);
+    }
+
+    const speech = doc.createElement("p");
+    speech.className = "tts-preview-compiled";
+    speech.textContent = "Native TTS के लिए तैयार वाचन-पाठ: " +
+      (sourceMatches ? String(entry.speechText || entry.speechSourceText) : String(entry.speechSourceText));
+    row.appendChild(speech);
+
+    const separation = doc.createElement("p");
+    separation.className = sourceMatches ? "note" : "status warn";
+    separation.textContent = sourceMatches
+      ? "स्रोत-पाठ सुरक्षित है। G2P का transliteration केवल विश्लेषण metadata है; Native TTS को ऊपर अलग वाचन-पाठ दिया जाता है। केवल अलग से Compiler द्वारा अधिकृत परिवर्तन ही वाचन-पाठ बदल सकता है।"
+      : "G2P स्रोत-मिलान विफल हुआ। इस विश्लेषण पर भरोसा नहीं किया गया और Native TTS के लिए मूल पाठ सुरक्षित रखा गया।";
+    row.appendChild(separation);
+
+    const warnings = Array.isArray(analysis.warnings) ? analysis.warnings : [];
+    warnings.slice(0, 8).forEach(warning => {
+      const warningNode = doc.createElement("p");
+      warningNode.className = "status warn";
+      warningNode.textContent = (warning && warning.code ? warning.code + ": " : "") +
+        String(warning && warning.message || "G2P संदर्भ/उच्चारण चेतावनी।");
+      row.appendChild(warningNode);
+    });
+    if (warnings.length > 8) {
+      const more = doc.createElement("p");
+      more.className = "tts-preview-meta";
+      more.textContent = "अतिरिक्त चेतावनियाँ: " + (warnings.length - 8);
+      row.appendChild(more);
+    }
+    if (entry.g2pFailure) {
+      const failure = doc.createElement("p");
+      failure.className = "status warn";
+      failure.textContent = "G2P त्रुटि: " + entry.g2pFailure + "। मूल पाठ सुरक्षित है।";
+      row.appendChild(failure);
+    }
+    return row;
+  }
+
+  function renderG2PPreview() {
+    if (state.destroyed) return;
+    g2pPreviewList.replaceChildren();
+    if (!state.previewEntries.length) {
+      g2pPreviewSummary.className = "status";
+      g2pPreviewSummary.textContent = "पाठ दर्ज करने पर G2P ध्वनि-विश्लेषण दिखाई देगा।";
+      const empty = doc.createElement("p");
+      empty.className = "note";
+      empty.textContent = "अभी कोई संस्कृत पंक्ति उपलब्ध नहीं है।";
+      g2pPreviewList.appendChild(empty);
+      return;
+    }
+
+    const counts = { complete: 0, contextSensitive: 0, needsContext: 0, partial: 0, unavailable: 0 };
+    state.previewEntries.forEach(entry => {
+      const analysis = entry.g2pAnalysis;
+      if (!analysis) { counts.unavailable += 1; return; }
+      if (analysis.status === "complete") counts.complete += 1;
+      else if (analysis.status === "context-sensitive") counts.contextSensitive += 1;
+      else if (analysis.status === "needs-context") counts.needsContext += 1;
+      else counts.partial += 1;
+    });
+    g2pPreviewSummary.className = "status" +
+      (counts.needsContext || counts.partial || counts.unavailable ? " warn" : "");
+    g2pPreviewSummary.textContent = state.previewEntries.length + " पंक्तियाँ · " +
+      counts.complete + " mapping पूर्ण · " + counts.contextSensitive + " संदर्भ-संवेदनशील · " +
+      counts.needsContext + " संदर्भ आवश्यक · " + counts.partial + " आंशिक · " +
+      counts.unavailable + " अनुपलब्ध। यह ध्वनि-विश्लेषण है, ऑडियो/गायन नहीं।";
+    state.previewEntries.forEach(entry => g2pPreviewList.appendChild(renderG2PPreviewEntry(entry)));
+  }
+
   function renderSpeechPreview() {
     if (state.destroyed) return;
     const lines = ui.input.value.split(/\r?\n/u).filter(line => line.trim());
@@ -688,6 +863,7 @@ export async function mount(context) {
       describePronunciationContext() + " · " +
       (voice ? "चयनित Voice: " + voice.name : "स्थानीय Voice चयन उपलब्ध नहीं।");
     state.previewEntries.forEach(entry => previewList.appendChild(renderPreviewEntry(entry)));
+    renderG2PPreview();
   }
 
   function updateButtons() {
@@ -1071,6 +1247,7 @@ export async function mount(context) {
     if (knowledgeStatus.parentNode) knowledgeStatus.parentNode.removeChild(knowledgeStatus);
     if (pronunciationPreview.parentNode) pronunciationPreview.parentNode.removeChild(pronunciationPreview);
     if (pronunciationContextPanel.parentNode) pronunciationContextPanel.parentNode.removeChild(pronunciationContextPanel);
+    if (g2pPreviewPanel.parentNode) g2pPreviewPanel.parentNode.removeChild(g2pPreviewPanel);
     if (voiceProfileDiagnosticsPanel.parentNode) voiceProfileDiagnosticsPanel.parentNode.removeChild(voiceProfileDiagnosticsPanel);
     setLine("");
     updateButtons();
@@ -1126,8 +1303,14 @@ export async function mount(context) {
       entry.status = applied ? "Validated Lexicon Rule लागू" :
         confidence === "ambiguous" ? "Ambiguous — मूल पाठ सुरक्षित" :
         confidence === "verified" ? "Validated — मूल पाठ यथावत" : "Fallback — मूल पाठ सुरक्षित";
+      if (detail.g2pAnalysis && detail.g2pAnalysis.originalText === current.sourceText &&
+          detail.g2pAnalysis.originalTextPreserved === true) {
+        entry.g2pAnalysis = detail.g2pAnalysis;
+        entry.g2pDiagnostics = detail.g2pDiagnostics || entry.g2pDiagnostics;
+      }
       const row = previewList.querySelector('[data-line-index="' + current.index + '"]');
       if (row) row.replaceWith(renderPreviewEntry(entry));
+      renderG2PPreview();
     }
     const compilerNotice = applied ? " · " + rules.length + " सत्यापित Lexicon नियम लागू।" : " · " + confidence + " — मूल पाठ सुरक्षित।";
     const specialNotice = current.analysis && (current.analysis.needsBranchContext ||
@@ -1170,7 +1353,8 @@ export async function mount(context) {
         state.pronunciationInfo && state.pronunciationInfo.available &&
         state.pronunciationInfo.selfTest && state.pronunciationInfo.selfTest.status === "PASSED" &&
         state.pronunciationInfo.selfTest.failed === 0 &&
-        (!state.pronunciationInfo.compilerSelfTest || state.pronunciationInfo.compilerSelfTest.status === "PASSED")
+        (!state.pronunciationInfo.compilerSelfTest || state.pronunciationInfo.compilerSelfTest.status === "PASSED") &&
+        (!state.pronunciationInfo.g2pSelfTest || state.pronunciationInfo.g2pSelfTest.status === "PASSED")
       );
     } catch (error) {
       state.pronunciationInfo = null;
