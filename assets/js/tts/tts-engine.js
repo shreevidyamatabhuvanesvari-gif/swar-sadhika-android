@@ -23,8 +23,8 @@ import {
  * Speech Synthesis API; it performs no network requests and loads no model.
  */
 
-export const TTS_ENGINE_VERSION = "1.3.0";
-export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-07";
+export const TTS_ENGINE_VERSION = "1.4.0";
+export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-08";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -62,6 +62,9 @@ const BACKEND_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/i;
 const REQUIRED_BACKEND_METHODS = [
   "probe", "initialize", "getVoices", "speak", "pause", "resume", "cancel", "dispose"
 ];
+const REQUIRED_KNOWLEDGE_ADAPTER_METHODS = Object.freeze([
+  "loadKnowledge", "getGuidance", "getPronunciationEntries", "getDiagnostics", "getLoadedDocuments", "dispose"
+]);
 
 function asError(error, fallbackCode) {
   if (error instanceof TtsEngineError) return error;
@@ -70,15 +73,23 @@ function asError(error, fallbackCode) {
 }
 
 function finiteNumber(value, fallback, minimum, maximum) {
-  const number = Number(value);
+  let number;
+  try { number = Number(value); } catch (_) { return fallback; }
   if (!Number.isFinite(number)) return fallback;
   return Math.min(maximum, Math.max(minimum, number));
 }
 
-function freezeCopy(value) {
-  if (Array.isArray(value)) return Object.freeze(value.slice());
-  if (value && typeof value === "object") return Object.freeze({ ...value });
-  return value;
+function freezeCopy(value, seen = new WeakMap()) {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  const copy = Array.isArray(value) ? [] : {};
+  seen.set(value, copy);
+  for (const key of Object.keys(value)) {
+    Object.defineProperty(copy, key, {
+      value: freezeCopy(value[key], seen), enumerable: true, writable: false, configurable: false
+    });
+  }
+  return Object.freeze(copy);
 }
 
 const NATIVE_TTS_ENGINE_NAME = "Web Speech API SpeechSynthesis";
@@ -116,6 +127,18 @@ function makeCompilerFallbackResult(originalText, code, message) {
     improvementId: SWR_TTS_COMPILER_IMPROVEMENT_ID,
     analysisSummary: null
   });
+}
+
+function validateKnowledgeAdapter(adapter) {
+  if (!adapter || typeof adapter !== "object" || Array.isArray(adapter)) {
+    throw new TtsEngineError("Knowledge Adapter object आवश्यक है।", "INVALID_KNOWLEDGE_ADAPTER");
+  }
+  const missing = REQUIRED_KNOWLEDGE_ADAPTER_METHODS.filter(method => typeof adapter[method] !== "function");
+  if (missing.length) {
+    throw new TtsEngineError("Knowledge Adapter contract अधूरा है: " + missing.join(", "),
+      "KNOWLEDGE_ADAPTER_CONTRACT_MISMATCH", { missing });
+  }
+  return adapter;
 }
 
 function validateEngineCompilerOutput(compiled, originalText) {
@@ -378,6 +401,16 @@ export function selfTest() {
     const fallback = makeCompilerFallbackResult("अग्निः", "TEST_FALLBACK", "Self-test fallback.");
     return validateEngineCompilerOutput(fallback, "अग्निः").valid;
   })());
+  add("numeric-options-handle-coercion-errors", finiteNumber(Symbol("bad"), 1, 0, 2) === 1);
+  add("event-detail-copy-is-deeply-frozen-and-cycle-safe", (() => {
+    const sample = { nested: { value: 1 } }; sample.self = sample;
+    const copy = freezeCopy(sample);
+    return Object.isFrozen(copy) && Object.isFrozen(copy.nested) && copy.self === copy;
+  })());
+  add("incomplete-knowledge-adapter-is-rejected", (() => {
+    try { validateKnowledgeAdapter({}); return false; }
+    catch (error) { return error.code === "KNOWLEDGE_ADAPTER_CONTRACT_MISMATCH"; }
+  })());
   return Object.freeze({
     module: "tts-engine", version: TTS_ENGINE_VERSION,
     improvementId: SWR_TTS_ENGINE_IMPROVEMENT_ID,
@@ -389,6 +422,114 @@ export function selfTest() {
       status: compilerTest.status, total: compilerTest.total,
       passed: compilerTest.passed, failed: compilerTest.failed
     }) : null
+  });
+}
+
+export async function runIntegrationSelfTest() {
+  const checks = [];
+  const add = (id, passed) => checks.push(Object.freeze({ id, passed: Boolean(passed) }));
+  const voice = Object.freeze({
+    name: "Swar-Sadhika Integration Hindi Voice",
+    voiceURI: "local://swar-sadhika-integration/hi-IN",
+    lang: "hi-IN", localService: true, default: true
+  });
+  const capturedSpeech = [];
+  class TestSpeechSynthesisUtterance {
+    constructor(text) { this.text = text; this.rate = 1; this.pitch = 1; this.volume = 1; }
+  }
+  const synthesis = {
+    getVoices() { return [voice]; },
+    speak(utterance) {
+      capturedSpeech.push(utterance.text);
+      Promise.resolve().then(() => {
+        if (typeof utterance.onend === "function") utterance.onend({ elapsedTime: 1 });
+      });
+    },
+    cancel() {}, pause() {}, resume() {}
+  };
+  const manifestEntry = Object.freeze({
+    id: "swar-sadhika-engine-integration-rules",
+    entryType: "knowledge-document", enabled: true, format: "json",
+    title: "Swar-Sadhika Engine Integration Fixture",
+    sha256: "a".repeat(64), documentVersion: "1.0.0", language: "sa"
+  });
+  const manifest = Object.freeze({
+    catalogVersion: "engine-integration-test-1", entries: Object.freeze([manifestEntry])
+  });
+  const fixtureDocument = Object.freeze({
+    schema: "swar-sadhika.integration-test.generic-pronunciation",
+    version: "1.0.0", language: "sa",
+    rules: Object.freeze([Object.freeze({
+      id: "integration-agni-rule", word: "अग्निः",
+      rule: "Integration fixture only; not a published pronunciation recommendation.",
+      speechText: "अग्नि"
+    })])
+  });
+  const knowledgeAPI = {
+    async initialize() { return Object.freeze({ status: "ready" }); },
+    getManifest() { return manifest; },
+    listEntries() { return [manifestEntry]; },
+    async readDocument(id) {
+      if (id !== manifestEntry.id) throw new TtsEngineError("Integration fixture ID mismatch.", "INTEGRATION_FIXTURE_NOT_FOUND");
+      return fixtureDocument;
+    }
+  };
+  const host = {
+    navigator: {
+      userAgent: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36",
+      onLine: true
+    },
+    isSecureContext: true, speechSynthesis: synthesis,
+    SpeechSynthesisUtterance: TestSpeechSynthesisUtterance, console: { error() {} }
+  };
+  let adapter = null, engine = null, failure = null;
+  try {
+    adapter = createNanoServerTtsKnowledgeAdapter({ knowledgeAPI });
+    engine = createTtsEngine({ target: host, knowledgeAdapter: adapter, autoLoadKnowledge: false, defaultLanguage: "hi" });
+    const initialized = await engine.initialize({ backendId: "native" });
+    add("native-test-backend-initialized", initialized && initialized.ready === true);
+    const loaded = await engine.loadKnowledge({ downloadIfMissing: false });
+    add("manifest-knowledge-loaded-through-adapter",
+      loaded && loaded.status === "COMPLETE" && loaded.loaded === true &&
+      loaded.genericKnowledgeDocuments === 1 && loaded.genericKnowledgeEntries === 2);
+    const guidance = engine.getKnowledgeGuidance("अग्निः");
+    add("adapter-guidance-reaches-engine", guidance.available === true && guidance.matches.length === 1);
+    const preparation = engine.prepareSpeech("अग्निः", {
+      voice, voiceProfile: { engine: NATIVE_TTS_ENGINE_NAME, platform: "Android Chrome" }
+    });
+    add("adapter-entry-reaches-pronunciation-compiler",
+      preparation.knowledgeAppliedToSpeech === true && preparation.speechText === "अग्नि" &&
+      preparation.compilerValidation && preparation.compilerValidation.valid === true);
+    add("compiler-replacement-retains-source-provenance",
+      preparation.appliedRules.length === 1 &&
+      preparation.appliedRules[0].documentSource.id === manifestEntry.id &&
+      preparation.appliedRules[0].documentVersion === "1.0.0");
+    const outcome = await engine.speak("अग्निः", { voice, language: "hi" });
+    add("native-tts-receives-compiled-speech-text",
+      outcome && outcome.status === "ended" && capturedSpeech.length === 1 && capturedSpeech[0] === "अग्नि");
+    add("engine-status-reports-loaded-adapter-knowledge", engine.getStatus().knowledgeLoaded === true);
+  } catch (error) {
+    failure = asError(error, "TTS_INTEGRATION_SELF_TEST_FAILED");
+    add("integration-runtime-completed", false);
+  } finally {
+    if (engine) {
+      try { await engine.dispose(); }
+      catch (error) { failure = failure || asError(error, "TTS_INTEGRATION_CLEANUP_FAILED"); add("engine-cleanup", false); }
+    }
+    if (adapter) {
+      try { adapter.dispose(); }
+      catch (error) { failure = failure || asError(error, "TTS_INTEGRATION_CLEANUP_FAILED"); add("adapter-cleanup", false); }
+    }
+  }
+  return Object.freeze({
+    module: "tts-engine-adapter-integration", engineVersion: TTS_ENGINE_VERSION,
+    improvementId: SWR_TTS_ENGINE_IMPROVEMENT_ID,
+    status: checks.every(item => item.passed) ? "PASSED" : "FAILED",
+    total: checks.length, passed: checks.filter(item => item.passed).length,
+    failed: checks.filter(item => !item.passed).length,
+    checks: Object.freeze(checks),
+    error: failure ? Object.freeze({ code: failure.code, message: failure.message }) : null,
+    capturedSpeechText: Object.freeze(capturedSpeech.slice())
   });
 }
 
@@ -411,6 +552,13 @@ export function createTtsEngine(options = {}) {
       knowledgeAdapter = createNanoServerTtsKnowledgeAdapter({ knowledgeAPI });
     } catch (error) {
       knowledgeAdapterError = asError(error, "KNOWLEDGE_ADAPTER_UNAVAILABLE");
+      knowledgeAdapter = null;
+    }
+  }
+  if (knowledgeAdapter) {
+    try { validateKnowledgeAdapter(knowledgeAdapter); }
+    catch (error) {
+      knowledgeAdapterError = asError(error, "KNOWLEDGE_ADAPTER_CONTRACT_MISMATCH");
       knowledgeAdapter = null;
     }
   }
@@ -457,6 +605,14 @@ export function createTtsEngine(options = {}) {
     }
   }
 
+  function isKnowledgeLoaded() {
+    if (!knowledgeAdapter) return false;
+    try {
+      const diagnostics = knowledgeAdapter.getDiagnostics();
+      return Boolean(diagnostics && diagnostics.loaded === true);
+    } catch (_) { return false; }
+  }
+
   function getStatus() {
     const backend = activeBackend;
     return Object.freeze({
@@ -471,7 +627,7 @@ export function createTtsEngine(options = {}) {
       backendLabel: backend ? backend.label : null,
       language: selectedLanguage,
       supportedLanguages: TTS_LANGUAGE_OPTIONS,
-      knowledgeLoaded: Boolean(knowledgeAdapter && knowledgeAdapter.getDiagnostics().loaded),
+      knowledgeLoaded: isKnowledgeLoaded(),
       localOnly: true,
       lastError: lastError ? Object.freeze({ code: lastError.code, message: lastError.message }) : null,
       pronunciationKnowledgeBaseVersion: VEDIC_PRONUNCIATION_VERSION,
@@ -874,7 +1030,7 @@ export function createTtsEngine(options = {}) {
         backendId, backendType: adapter.type,
         reasons: preparedSpeech.fallbackRules,
         knowledgeAppliedToSpeech: preparedSpeech.knowledgeAppliedToSpeech,
-        message: "केवल Compiler द्वारा validated तथा सभी review/source/voice/context शर्तें पूरी करने वाले नियम ही लागू किए गए हैं।"
+        message: "केवल संरचनात्मक रूप से वैध, स्पष्ट रूप से सक्रिय तथा चयनित Voice/Context से मेल खाने वाले नियम लागू किए गए हैं।"
       });
     }
     if (preparedSpeech.blockedReasons && preparedSpeech.blockedReasons.length) {
@@ -1072,7 +1228,19 @@ export function createTtsEngine(options = {}) {
 
   function getKnowledgeDiagnostics() {
     ensureNotDisposed();
-    if (knowledgeAdapter) return knowledgeAdapter.getDiagnostics();
+    if (knowledgeAdapter) {
+      try {
+        const diagnostics = knowledgeAdapter.getDiagnostics();
+        if (diagnostics && typeof diagnostics === "object" && !Array.isArray(diagnostics)) return diagnostics;
+        throw new TtsEngineError("Knowledge Adapter diagnostics object अमान्य है।", "INVALID_KNOWLEDGE_DIAGNOSTICS");
+      } catch (error) {
+        const failure = asError(error, "KNOWLEDGE_DIAGNOSTICS_FAILED");
+        return Object.freeze({
+          available: true, loaded: false, hasGuidance: false,
+          error: Object.freeze({ code: failure.code, message: failure.message })
+        });
+      }
+    }
     return Object.freeze({
       available: false, loaded: false, hasGuidance: false,
       error: knowledgeAdapterError
@@ -1090,13 +1258,22 @@ export function createTtsEngine(options = {}) {
       note: "Nano Server Knowledge Adapter उपलब्ध नहीं है; मूल पाठ अक्षरशः सुरक्षित रहेगा।"
     });
     const guidance = knowledgeAdapter.getGuidance(text, guidanceOptions);
-    const sourceMatches = Array.isArray(guidance && guidance.matches) ? guidance.matches : [];
-    const reviewedMatches = sourceMatches.filter(item => item && item.reviewStatus === "reviewed");
+    if (!guidance || typeof guidance !== "object" || !Array.isArray(guidance.matches)) {
+      throw new TtsEngineError("Knowledge Adapter ने वैध guidance result नहीं दिया।", "INVALID_KNOWLEDGE_GUIDANCE");
+    }
+    const sourceMatches = guidance.matches.filter(item => item && typeof item === "object");
+    const deliverableMatches = sourceMatches.filter(item =>
+      item.deliveryStatus === "available-to-tts" || item.reviewStatus === "reviewed");
+    const declaredPendingCount = sourceMatches.filter(item => {
+      const status = item.declaredReviewStatus || item.reviewStatus;
+      return typeof status === "string" && status !== "reviewed";
+    }).length;
+    const pendingReviewCount = Math.max(sourceMatches.length - deliverableMatches.length, declaredPendingCount);
     return Object.freeze({
       ...guidance,
-      matches: Object.freeze(reviewedMatches),
-      matchedTermCount: new Set(reviewedMatches.map(item => item.term)).size,
-      pendingReviewCount: sourceMatches.length - reviewedMatches.length,
+      matches: Object.freeze(deliverableMatches),
+      matchedTermCount: new Set(deliverableMatches.map(item => item.term)).size,
+      pendingReviewCount,
       available: true
     });
   }
@@ -1305,7 +1482,7 @@ export function createTtsEngine(options = {}) {
       version: VEDIC_PRONUNCIATION_VERSION,
       compilerVersion: SANSKRIT_PRONUNCIATION_COMPILER_VERSION,
       improvementId: SWR_TTS_ENGINE_IMPROVEMENT_ID,
-      integrationMode: "review-gated native speech compiler; original text retained separately; validated output only",
+      integrationMode: "Adapter-backed native speech compiler; exact/contextual matches, source provenance and validated output; original text retained separately",
       coverage,
       selfTest: Object.freeze({ status: selfTest.status, total: selfTest.total, passed: selfTest.passed, failed: selfTest.failed }),
       compilerSelfTest: Object.freeze({
@@ -1374,7 +1551,7 @@ export function createTtsEngine(options = {}) {
           code: cleanupError.code, message: cleanupError.message, backendId
         }));
         if (ownsKnowledgeAdapter && knowledgeAdapter && typeof knowledgeAdapter.dispose === "function") {
-          try { knowledgeAdapter.dispose(); }
+          try { await knowledgeAdapter.dispose(); }
           catch (error) { emit("warning", { code: "KNOWLEDGE_ADAPTER_DISPOSE_FAILED", message: asError(error).message }); }
         }
         if (ownsKnowledgeAPI && knowledgeAPI && typeof knowledgeAPI.dispose === "function") {
@@ -1414,6 +1591,7 @@ export function createTtsEngine(options = {}) {
     getPronunciationKnowledgeBaseInfo,
     getSpeechCompilerDiagnostics,
     runPronunciationSelfTest,
+    runIntegrationSelfTest,
     getDiagnostics,
     runDiagnostics,
     listBackends,
