@@ -12,25 +12,73 @@
 //      That matches the codec's stable synthesis region and avoids the
 //      "behind a fan" smear seen when decoding the whole sequence in one shot.
 
-import {
-  AutoTokenizer,
-  AutoModelForCausalLM,
-  LogitsProcessor,
-  LogitsProcessorList,
-  Tensor,
-  env as transformersEnv,
-} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
-import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/esm/ort.webgpu.min.js";
+// Load runtime dependencies dynamically so a failed CDN import can report
+// the exact failing URL and module stage to the page instead of a blank Worker error.
+let AutoTokenizer;
+let AutoModelForCausalLM;
+let LogitsProcessor;
+let LogitsProcessorList;
+let Tensor;
+let transformersEnv;
+let ort;
 
-// Model and runtime assets are distributed from public CDNs/Hugging Face;
-// all text inference and SNAC decoding execute locally on this device.
-transformersEnv.useBrowserCache = true;
-transformersEnv.useWasmCache = true;
-if (transformersEnv.backends?.onnx?.wasm) {
-  transformersEnv.backends.onnx.wasm.wasmPaths =
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+async function loadRuntimeModules() {
+  const stage = "runtime-module-import";
+  const transformersUrl = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
+  const onnxRuntimeUrl = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/esm/ort.webgpu.min.js";
+  try {
+    const transformersModule = await import(transformersUrl);
+    const requiredExports = [
+      "AutoTokenizer", "AutoModelForCausalLM",
+      "LogitsProcessor", "LogitsProcessorList", "Tensor", "env"
+    ];
+    const missingExports = requiredExports.filter(name => !(name in transformersModule));
+    if (missingExports.length) {
+      throw new Error("Transformers.js exports missing: " + missingExports.join(", "));
+    }
+    ({
+      AutoTokenizer,
+      AutoModelForCausalLM,
+      LogitsProcessor,
+      LogitsProcessorList,
+      Tensor,
+      env: transformersEnv
+    } = transformersModule);
+
+    ort = await import(onnxRuntimeUrl);
+    if (!ort.InferenceSession || !ort.Tensor || !ort.env) {
+      throw new Error("ONNX Runtime WebGPU module did not expose InferenceSession, Tensor and env.");
+    }
+
+    // Model/runtime binaries are distributed via public CDNs; inference itself is local.
+    transformersEnv.useBrowserCache = true;
+    transformersEnv.useWasmCache = true;
+    if (transformersEnv.backends?.onnx?.wasm) {
+      transformersEnv.backends.onnx.wasm.wasmPaths =
+        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+    }
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+    self.postMessage({
+      status: "module-success",
+      stage,
+      transformers: "@huggingface/transformers@4.2.0",
+      onnxRuntime: "onnxruntime-web@1.25.1"
+    });
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    self.postMessage({
+      status: "module-error",
+      stage,
+      message,
+      transformersUrl,
+      onnxRuntimeUrl,
+      stack: error && error.stack ? String(error.stack).slice(0, 4000) : null
+    });
+    throw error;
+  }
 }
-ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+
+await loadRuntimeModules();
 
 // --- WebGPU feature detection -----------------------------------------------
 let fp16_supported = false;
