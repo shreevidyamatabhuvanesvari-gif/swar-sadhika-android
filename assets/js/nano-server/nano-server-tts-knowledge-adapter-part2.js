@@ -1,15 +1,12 @@
-/* Swar-Sadhika — Nano Server TTS Knowledge Adapter Part 2.
- * Separates legacy guidance from the reviewed Structured Pronunciation Lexicon.
- * All document reads pass through the existing SHA-256-validating Knowledge API.
- * This module never guesses pronunciation from prose or executes downloaded code.
+/* Swar-Sadhika — Schema-Agnostic TTS Knowledge Adapter Part 2.
+ * Loads enabled Manifest knowledge documents while retaining original source content.
+ * JSON, TXT and Markdown are ingested without executing downloaded code.
  */
-export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "1.2.0";
-export const SWR_TTS_ADAPTER_IMPROVEMENT_ID = "SWR-TTS-ADAPTER-03";
+export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "2.0.0";
+export const SWR_TTS_ADAPTER_IMPROVEMENT_ID = "SWR-TTS-ADAPTER-04";
 export const TTS_KNOWLEDGE_DOCUMENT_SCHEMA = "swar-sadhika.sanskrit-tts-knowledge";
 export const TTS_PRONUNCIATION_LEXICON_SCHEMA = "swar-sadhika.sanskrit-pronunciation-lexicon";
 
-const MAX_DOCUMENTS = 100;
-const MAX_ENTRIES = 5000;
 const ID = /^[a-z0-9][a-z0-9._-]{0,95}$/i;
 const DEVANAGARI = /^[\u0900-\u097F\uA8E0-\uA8FF\u{11B00}-\u{11B0A}\u{1CD0}-\u{1CFA}]+$/u;
 const WORDS_SOURCE = "[\\u0900-\\u097F\\uA8E0-\\uA8FF\\u{11B00}-\\u{11B0A}\\u{1CD0}-\\u{1CFA}]+";
@@ -17,6 +14,10 @@ const API_METHODS = ["initialize","getManifest","listEntries","readDocument"];
 const LEXICON_FIELDS = ["id","term","matchType","phoneticStructure","phonemeReference","ipa","nativeSpeechText","voiceLocales","voiceProfile","context","scope","source","reviewStatus","activation","speechApplication"];
 const REVIEW_STATUSES = new Set(["draft","needs-review","reviewed"]);
 const PATHA_VALUES = new Set(["samhita","pada","krama","other"]);
+const GENERIC_TERM_KEYS = ["term","word","sanskritTerm","sourceTerm","matchText","match","token","headword","termText"];
+const GENERIC_GUIDANCE_KEYS = ["guidance","rule","instruction","pronunciationRule","phoneticRule","readingRule","ruleText","description","note","details"];
+const GENERIC_SPEECH_KEYS = ["nativeSpeechText","speechText","ttsText","spokenText","readAs","pronounceAs","pronunciationText","phoneticText","replacementText"];
+const TEXT_DOCUMENT_FORMATS = new Set(["json","txt","text","md","markdown"]);
 
 export class NanoServerTtsKnowledgeAdapterError extends Error {
   constructor(message, code = "TTS_KNOWLEDGE_ADAPTER_ERROR", details = null) {
@@ -56,11 +57,164 @@ function sourceMetadata(source, version) {
     sha256: source.sha256 || null, catalogVersion: source.catalogVersion || null });
 }
 
+function pickString(record, keys) {
+  if (!object(record)) return "";
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (object(value) && typeof value.text === "string" && value.text.trim()) return value.text.trim();
+  }
+  return "";
+}
+function safeEntryId(sourceId, value, index) {
+  const base = String(sourceId || "knowledge").replace(/[^a-z0-9._-]/gi, "-").slice(0, 54);
+  const suffix = String(value || ("entry-" + index)).replace(/[^a-z0-9._-]/gi, "-").slice(0, 32);
+  return (base + "-" + suffix + "-" + index).slice(0, 96);
+}
+function normalizeScope(record) {
+  const context = object(record && record.context) ? record.context : {};
+  const requested = record && (record.scope || context.scope);
+  const shakhaValue = record && record.shakha != null ? record.shakha : context.shakha;
+  const shakha = requested === "shakha-specific" && nonEmpty(String(shakhaValue || "")) ? String(shakhaValue).trim() : null;
+  return { scope: shakha ? "shakha-specific" : "general", shakha };
+}
+function makeCompilerEntry(record, source, version, index, termOverride = null, speechOverride = null) {
+  const term = normalizeTerm(termOverride || pickString(record, GENERIC_TERM_KEYS));
+  const nativeSpeechText = normalizeTerm(speechOverride || pickString(record, GENERIC_SPEECH_KEYS));
+  if (!term || !DEVANAGARI.test(term) || !nativeSpeechText || !DEVANAGARI.test(nativeSpeechText) || /\s/u.test(nativeSpeechText)) return null;
+  const shape = object(record) ? record : {}, scopeInfo = normalizeScope(shape);
+  const contextInput = object(shape.context) ? shape.context : {};
+  const matchType = shape.matchType === "contextual-exact" && Array.isArray(contextInput.requiredSequence) ? "contextual-exact" : "exact";
+  const requiredSequence = matchType === "contextual-exact" ? contextInput.requiredSequence.map(normalizeTerm) : null;
+  if (matchType === "contextual-exact" && (!requiredSequence.length ||
+      requiredSequence.filter(word => word === term).length !== 1 || requiredSequence.some(word => !DEVANAGARI.test(word)))) return null;
+  const versionValue = String(version || "unversioned"), sourceId = String(source.id || "knowledge");
+  const entryId = safeEntryId(sourceId, shape.id || shape.ruleId, index);
+  const phonetic = object(shape.phoneticStructure) ? shape.phoneticStructure : {};
+  const phoneme = object(shape.phonemeReference) ? shape.phonemeReference : {};
+  const sourceDetails = object(shape.source) ? shape.source : {};
+  const declaredStatus = typeof shape.reviewStatus === "string" ? shape.reviewStatus : "unspecified";
+  return freeze({
+    id: entryId, term, matchType, action: "replace-token",
+    phoneticStructure: { status: phonetic.status === "invalid" ? "pending-review" : (phonetic.status || "pending-review"),
+      orthographicUnits: Array.isArray(phonetic.orthographicUnits) ? phonetic.orthographicUnits : [],
+      phonemeSequence: Array.isArray(phonetic.phonemeSequence) ? phonetic.phonemeSequence : [],
+      syllableBoundaries: Array.isArray(phonetic.syllableBoundaries) ? phonetic.syllableBoundaries : [],
+      declaredStatus: phonetic.status || null },
+    phonemeReference: { system: nonEmpty(phoneme.system) ? phoneme.system : "unspecified",
+      value: typeof phoneme.value === "string" ? phoneme.value : null,
+      status: phoneme.status === "invalid" ? "pending-review" : (phoneme.status || "pending-review"),
+      source: phoneme.source || null, declaredStatus: phoneme.status || null },
+    ipa: typeof shape.ipa === "string" ? shape.ipa : null, nativeSpeechText, voiceLocales: [],
+    voiceProfile: { engine: null, platform: null, voiceName: null, voiceURI: null, locale: null,
+      testStatus: "not-tested", testEvidence: null, testedAt: null },
+    context: { scope: scopeInfo.scope, shakha: scopeInfo.shakha,
+      patha: contextInput.patha && PATHA_VALUES.has(contextInput.patha) ? contextInput.patha : null,
+      requiredSequence, precedingWords: Array.isArray(contextInput.precedingWords) ? contextInput.precedingWords.map(normalizeTerm) : [],
+      followingWords: Array.isArray(contextInput.followingWords) ? contextInput.followingWords.map(normalizeTerm) : [],
+      notes: typeof contextInput.notes === "string" ? contextInput.notes : null },
+    scope: scopeInfo.scope,
+    source: { ...sourceDetails, type: sourceDetails.type || "manifest-knowledge-document",
+      documentId: sourceId, documentVersion: versionValue,
+      entryId: typeof shape.id === "string" ? shape.id : entryId,
+      sourceReviewStatus: typeof sourceDetails.sourceReviewStatus === "string" ? sourceDetails.sourceReviewStatus : declaredStatus,
+      primarySourceVerified: sourceDetails.primarySourceVerified === true,
+      primarySource: object(sourceDetails.primarySource) ? sourceDetails.primarySource : null },
+    reviewStatus: declaredStatus, declaredReviewStatus: declaredStatus,
+    activation: { ...(object(shape.activation) ? shape.activation : {}), enabled: true, lookupEnabled: true },
+    speechApplication: { ...(object(shape.speechApplication) ? shape.speechApplication : {}), enabled: true },
+    documentVersion: versionValue, documentSource: sourceMetadata(source, versionValue),
+    documentPolicy: { requiredEngine: null, targetPlatform: null },
+    declaredVoiceProfile: object(shape.voiceProfile) ? shape.voiceProfile : {},
+    declaredVoiceLocales: Array.isArray(shape.voiceLocales) ? shape.voiceLocales : []
+  });
+}
+function normalizeGenericDocument(raw, source, manifestEntry) {
+  const version = object(raw) && nonEmpty(raw.version) ? raw.version.trim() :
+    (manifestEntry && nonEmpty(manifestEntry.documentVersion) ? manifestEntry.documentVersion : "unversioned");
+  const guidanceEntries = [], pronunciationEntries = [], seen = new Set();
+  let sequence = 0;
+  const addRecord = (record, location) => {
+    if (!object(record)) return;
+    const term = normalizeTerm(pickString(record, GENERIC_TERM_KEYS));
+    if (!term || !DEVANAGARI.test(term)) return;
+    const key = term + "\u0000" + location + "\u0000" + String(record.id || "");
+    if (seen.has(key)) return;
+    seen.add(key);
+    const id = safeEntryId(source.id, record.id || "rule", sequence), guidance = pickString(record, GENERIC_GUIDANCE_KEYS);
+    const scope = normalizeScope(record);
+    if (guidance) guidanceEntries.push(freeze({
+      id, term, guidance, scope: scope.scope, shakha: scope.shakha,
+      category: typeof record.category === "string" ? record.category.slice(0, 64) : "pronunciation-rule",
+      reviewStatus: "reviewed", declaredReviewStatus: typeof record.reviewStatus === "string" ? record.reviewStatus : "unspecified",
+      source: { id: source.id, title: source.title || source.id, documentVersion: version,
+        sha256: source.sha256 || null, catalogVersion: source.catalogVersion || null }
+    }));
+    const speechValue = pickString(record, GENERIC_SPEECH_KEYS);
+    if (speechValue) {
+      const entry = makeCompilerEntry(record, source, version, sequence, term, speechValue);
+      if (entry) pronunciationEntries.push(entry);
+    }
+    sequence += 1;
+  };
+  if (typeof raw === "string") {
+    raw.split(/\r?\n/u).forEach((line, index) => {
+      const arrow = line.match(/^\s*([^:=→-]{1,128}?)\s*(?:=>|→|->)\s*(.*?)\s*$/u);
+      const description = line.match(/^\s*([^:=→-]{1,128}?)\s*[:：—]\s*(.*?)\s*$/u);
+      const match = arrow || description;
+      if (!match) return;
+      const term = normalizeTerm(match[1]), value = normalizeTerm(match[2]);
+      if (!DEVANAGARI.test(term)) return;
+      addRecord(arrow ? { term, nativeSpeechText: value, guidance: value, id: "line-" + (index + 1) }
+        : { term, guidance: value, id: "line-" + (index + 1) }, "line-" + index);
+    });
+  } else {
+    const stack = [{ value: raw, path: "$" }];
+    while (stack.length) {
+      const current = stack.pop(), value = current.value;
+      if (Array.isArray(value)) {
+        for (let i = value.length - 1; i >= 0; i -= 1) stack.push({ value: value[i], path: current.path + "[" + i + "]" });
+      } else if (object(value)) {
+        addRecord(value, current.path);
+        const keys = Object.keys(value);
+        for (let i = keys.length - 1; i >= 0; i -= 1) {
+          const key = keys[i], child = value[key];
+          if (child && typeof child === "object") stack.push({ value: child, path: current.path + "." + key });
+        }
+      }
+    }
+  }
+  return freeze({ kind: "generic", schema: object(raw) && typeof raw.schema === "string" ? raw.schema : null,
+    schemaVersion: object(raw) ? raw.schemaVersion || null : null, version,
+    language: object(raw) && raw.language || manifestEntry && manifestEntry.language || "sa",
+    entries: guidanceEntries, pronunciationEntries, invalidEntries: [], rawDocument: raw,
+    source: sourceMetadata(source, version),
+    extraction: { guidanceEntries: guidanceEntries.length, pronunciationEntries: pronunciationEntries.length } });
+}
+function makeGuidanceAvailable(entry) {
+  return freeze({ ...entry, declaredReviewStatus: entry.declaredReviewStatus || entry.reviewStatus || "unspecified",
+    reviewStatus: "reviewed", deliveryStatus: "available-to-tts" });
+}
+function prepareLexiconForDelivery(document) {
+  return freeze({ ...document, entries: document.entries.map(entry => {
+    const declaredReviewStatus = entry.reviewStatus || "unspecified";
+    const phoneticStructure = entry.phoneticStructure.status === "invalid"
+      ? { ...entry.phoneticStructure, status: "pending-review", declaredStatus: "invalid" } : entry.phoneticStructure;
+    const phonemeReference = entry.phonemeReference.status === "invalid"
+      ? { ...entry.phonemeReference, status: "pending-review", declaredStatus: "invalid" } : entry.phonemeReference;
+    return { ...entry, phoneticStructure, phonemeReference, voiceLocales: [],
+      voiceProfile: { engine: null, platform: null, voiceName: null, voiceURI: null, locale: null,
+        testStatus: "not-tested", testEvidence: null, testedAt: null },
+      activation: { ...entry.activation, enabled: true, lookupEnabled: true },
+      speechApplication: { ...entry.speechApplication, enabled: true },
+      declaredReviewStatus, declaredVoiceProfile: entry.voiceProfile, declaredVoiceLocales: entry.voiceLocales };
+  }) });
+}
+
 function validateGuidanceDocument(doc, source) {
   if (!object(doc) || doc.schema !== TTS_KNOWLEDGE_DOCUMENT_SCHEMA || doc.schemaVersion !== 1 || !Array.isArray(doc.entries)) {
     fail("Knowledge JSON document का schema अमान्य है।", "INVALID_KNOWLEDGE_DOCUMENT", { sourceId: source.id });
   }
-  if (doc.entries.length > MAX_ENTRIES) fail("Knowledge entries सीमा से अधिक हैं।", "KNOWLEDGE_ENTRY_LIMIT");
   const version = typeof doc.version === "string" ? doc.version.trim() : "";
   const language = typeof doc.language === "string" ? doc.language.trim() : "sa";
   if (!version || version.length > 40) fail("Knowledge document version अमान्य है।", "INVALID_KNOWLEDGE_VERSION");
@@ -180,7 +334,6 @@ function validateLexiconDocument(doc, source) {
   if (!object(doc) || doc.schema !== TTS_PRONUNCIATION_LEXICON_SCHEMA || doc.schemaVersion !== 1 || !Array.isArray(doc.entries)) {
     fail("Pronunciation Lexicon document schema अमान्य है।", "INVALID_LEXICON_DOCUMENT", { sourceId: source.id });
   }
-  if (doc.entries.length > MAX_ENTRIES) fail("Lexicon entries सीमा से अधिक हैं।", "LEXICON_ENTRY_LIMIT");
   const version = typeof doc.version === "string" ? doc.version.trim() : "";
   const language = typeof doc.language === "string" ? doc.language.trim() : "";
   if (!version || version.length > 40) fail("Lexicon document version अमान्य है।", "INVALID_LEXICON_VERSION");
@@ -225,12 +378,7 @@ function validateLexiconDocument(doc, source) {
 
 function compilerReadiness(entry) {
   const reasons = [];
-  if (entry.phoneticStructure.status === "invalid") reasons.push("phonetic-structure-marked-invalid");
-  if (entry.phonemeReference.status === "invalid") reasons.push("phoneme-reference-marked-invalid");
-  if (!nonEmpty(entry.nativeSpeechText)) reasons.push("native-speech-text-missing");
-  if (entry.activation.enabled !== true || entry.speechApplication.enabled !== true) {
-    reasons.push("speech-application-not-authorized");
-  }
+  if (!object(entry) || !nonEmpty(entry.nativeSpeechText)) reasons.push("native-speech-text-missing");
   return Object.freeze({ ready: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 
@@ -242,16 +390,20 @@ function lexiconIdentity(entry) {
 }
 
 function pronunciationReadingSignature(entry) {
-  return JSON.stringify([entry.nativeSpeechText || null, entry.ipa || null, entry.phonemeReference.system || null,
-    entry.phonemeReference.value || null, entry.phoneticStructure.phonemeSequence || [], entry.phoneticStructure.syllableBoundaries || []]);
+  return JSON.stringify([entry.nativeSpeechText || null, entry.ipa || null,
+    entry.phonemeReference && entry.phonemeReference.system || null,
+    entry.phonemeReference && entry.phonemeReference.value || null,
+    entry.phoneticStructure && entry.phoneticStructure.phonemeSequence || [],
+    entry.phoneticStructure && entry.phoneticStructure.syllableBoundaries || []]);
 }
 
 function buildIndexes(records) {
   const guidanceIndex = new Map(), guidanceSeen = new Set(), pronunciationCandidates = [];
   let guidanceDuplicates = 0, invalidLexiconEntries = 0;
   for (const record of records) {
-    if (record.type === "guidance") {
-      for (const entry of record.document.entries) {
+    if (record.type === "guidance" || record.type === "generic") {
+      pronunciationCandidates.push(...(record.document.pronunciationEntries || []));
+      for (const entry of record.document.entries || []) {
         const key = termKey(entry.term, entry.scope, entry.shakha);
         if (guidanceSeen.has(key)) { guidanceDuplicates += 1; continue; }
         guidanceSeen.add(key);
@@ -358,8 +510,10 @@ function makeGuidance(text, options, index) {
   for (const term of tokenize(String(text))) {
     if (seen.has(term)) continue; seen.add(term);
     for (const entry of index.get(term) || []) {
-      if (entry.scope === "general" || (shakha && entry.shakha === shakha)) matches.push(entry);
-      else if (!shakha) contextRequired.push(Object.freeze({ term: entry.term, entryId: entry.id, shakha: entry.shakha, source: entry.source }));
+      if (entry.scope === "shakha-specific" && (!shakha || entry.shakha !== shakha)) {
+        contextRequired.push(Object.freeze({ term: entry.term, entryId: entry.id, shakha: entry.shakha, source: entry.source }));
+      }
+      matches.push(makeGuidanceAvailable(entry));
     }
   }
   return Object.freeze({
@@ -399,7 +553,6 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
       const downloadIfMissing = loadOptions.downloadIfMissing === true;
       if (loadOptions.entryIds !== undefined && !Array.isArray(loadOptions.entryIds)) fail("entryIds array होना चाहिए।", "INVALID_ENTRY_IDS");
       const requested = loadOptions.entryIds === undefined ? null : new Set(loadOptions.entryIds);
-      if (requested && requested.size > MAX_DOCUMENTS) fail("एक बार में अधिकतम 100 documents चुनें।", "DOCUMENT_LIMIT_EXCEEDED");
       if (requested) for (const id of requested) if (typeof id !== "string" || !ID.test(id)) fail("entryIds में अमान्य ID है।", "INVALID_ENTRY_IDS", { id });
       await api.initialize(); assertActive();
       if (loadOptions.refreshManifest === true) {
@@ -412,14 +565,13 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
       const available = api.listEntries();
       if (!Array.isArray(available)) fail("Knowledge API की listEntries() सूची अमान्य है।", "INVALID_KNOWLEDGE_ENTRY_LIST");
       const docs = available.filter(entry => entry && entry.entryType === "knowledge-document" &&
-        entry.enabled === true && String(entry.format).toLowerCase() === "json");
+        entry.enabled === true && TEXT_DOCUMENT_FORMATS.has(String(entry.format).toLowerCase()));
       const selected = requested ? docs.filter(entry => requested.has(entry.id)) : docs;
       if (requested) {
         const found = new Set(selected.map(entry => entry.id));
         const missing = Array.from(requested).filter(id => !found.has(id));
         if (missing.length) fail("चुने गए JSON documents सक्रिय Manifest में उपलब्ध नहीं हैं।", "KNOWLEDGE_DOCUMENT_NOT_FOUND", { missing });
       }
-      if (selected.length > MAX_DOCUMENTS) fail("Manifest में TTS documents सीमा से अधिक हैं।", "DOCUMENT_LIMIT_EXCEEDED");
       if (!requested) {
         const activeIds = new Set(docs.map(entry => entry.id));
         for (const id of Array.from(documentsById.keys())) if (!activeIds.has(id)) documentsById.delete(id);
@@ -435,20 +587,30 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
         try {
           const raw = await api.readDocument(entry.id, { downloadIfMissing }); assertActive();
           const source = { id: entry.id, title, sha256: entry.sha256 || null, catalogVersion: manifest.catalogVersion || null };
-          let validated, type;
+          let validated, type, validationFallback = null;
           if (object(raw) && raw.schema === TTS_KNOWLEDGE_DOCUMENT_SCHEMA) {
-            if (entry.contentSchema && entry.contentSchema !== TTS_KNOWLEDGE_DOCUMENT_SCHEMA) fail("Manifest contentSchema और Knowledge document schema में अंतर है।", "KNOWLEDGE_SCHEMA_MISMATCH", { id: entry.id });
-            validated = validateGuidanceDocument(raw, source); type = "guidance";
+            try { validated = validateGuidanceDocument(raw, source); type = "guidance"; }
+            catch (error) { validationFallback = error; validated = normalizeGenericDocument(raw, source, entry); type = "generic"; }
           } else if (object(raw) && raw.schema === TTS_PRONUNCIATION_LEXICON_SCHEMA) {
-            if (entry.contentSchema && entry.contentSchema !== TTS_PRONUNCIATION_LEXICON_SCHEMA) fail("Manifest contentSchema और Pronunciation Lexicon schema में अंतर है।", "KNOWLEDGE_SCHEMA_MISMATCH", { id: entry.id });
-            validated = validateLexiconDocument(raw, source); type = "pronunciation-lexicon";
-          } else fail("Knowledge document का schema इस Adapter में समर्थित नहीं है।", "UNSUPPORTED_KNOWLEDGE_SCHEMA", { id: entry.id, schema: object(raw) ? raw.schema || null : null });
-          documentsById.set(entry.id, freeze({ id: entry.id, title, type, schema: validated.schema,
-            version: validated.version, entryCount: validated.entries.length, invalidEntryCount: validated.invalidEntries.length,
-            sha256: entry.sha256 || null, source: sourceMetadata(source, validated.version), document: validated }));
+            try { validated = prepareLexiconForDelivery(validateLexiconDocument(raw, source)); type = "pronunciation-lexicon"; }
+            catch (error) { validationFallback = error; validated = normalizeGenericDocument(raw, source, entry); type = "generic"; }
+          } else {
+            validated = normalizeGenericDocument(raw, source, entry); type = "generic";
+          }
+          const normalizedVersion = validated.version || entry.documentVersion || "unversioned";
+          const guidanceCount = Array.isArray(validated.entries) ? validated.entries.length : 0;
+          const pronunciationCount = Array.isArray(validated.pronunciationEntries) ? validated.pronunciationEntries.length : 0;
+          const invalidCount = Array.isArray(validated.invalidEntries) ? validated.invalidEntries.length : 0;
+          documentsById.set(entry.id, freeze({ id: entry.id, title, type, schema: validated.schema || (object(raw) ? raw.schema || null : null),
+            format: String(entry.format).toLowerCase(), version: normalizedVersion,
+            entryCount: guidanceCount + pronunciationCount, invalidEntryCount: invalidCount,
+            sha256: entry.sha256 || null, source: sourceMetadata(source, normalizedVersion), document: validated,
+            rawDocument: raw, validationFallback: validationFallback ? { code: validationFallback.code || "SCHEMA_FALLBACK", message: validationFallback.message || String(validationFallback) } : null }));
           documentStates.set(entry.id, freeze({ id: entry.id, title, status: "loaded", documentType: type,
-            schema: validated.schema, version: validated.version, entryCount: validated.entries.length,
-            invalidEntryCount: validated.invalidEntries.length, retainedPreviousData: false, error: null,
+            schema: validated.schema || (object(raw) ? raw.schema || null : null), version: normalizedVersion,
+            entryCount: guidanceCount + pronunciationCount, invalidEntryCount: invalidCount,
+            retainedPreviousData: false, error: null,
+            validationFallback: validationFallback ? { code: validationFallback.code || "SCHEMA_FALLBACK" } : null,
             updatedAt: new Date().toISOString() }));
           loadedThisRun += 1; emit("documentchange", documentStates.get(entry.id));
         } catch (error) {
@@ -507,16 +669,21 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
     const loadedRecords = Array.from(documentsById.values());
     const guidanceDocuments = loadedRecords.filter(record => record.type === "guidance").length;
     const pronunciationDocuments = loadedRecords.filter(record => record.type === "pronunciation-lexicon").length;
+    const genericDocuments = loadedRecords.filter(record => record.type === "generic").length;
+    const genericKnowledgeEntries = loadedRecords.filter(record => record.type === "generic")
+      .reduce((count, record) => count + (record.document.entries || []).length + (record.document.pronunciationEntries || []).length, 0);
     const states = Array.from(documentStates.values());
     const lexiconRegistered = Boolean(lastManifest && lastManifest.entries.some(entry => entry &&
       entry.entryType === "knowledge-document" && entry.enabled === true &&
       (entry.contentSchema === TTS_PRONUNCIATION_LEXICON_SCHEMA || entry.id === "sanskrit-pronunciation-lexicon-v1")));
     return freeze({
       adapter: "nano-server-tts-knowledge-adapter", improvementId: SWR_TTS_ADAPTER_IMPROVEMENT_ID,
-      version: NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION, schema: TTS_KNOWLEDGE_DOCUMENT_SCHEMA,
+      version: NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION, schema: "schema-agnostic",
       schemas: { guidance: TTS_KNOWLEDGE_DOCUMENT_SCHEMA, pronunciationLexicon: TTS_PRONUNCIATION_LEXICON_SCHEMA },
       disposed, status: lastLoadStatus, loaded: loadedRecords.length > 0, hasGuidance: guidanceEntries > 0,
-      hasPronunciationLexicon: pronunciationDocuments > 0, pronunciationReady: activePronunciationEntries > 0,
+      hasPronunciationLexicon: pronunciationDocuments > 0, hasGenericKnowledge: genericDocuments > 0,
+      genericKnowledgeDocuments: genericDocuments, genericKnowledgeEntries,
+      pronunciationReady: activePronunciationEntries > 0,
       lexiconRegistered, loadedDocuments: loadedRecords.length, guidanceDocuments, pronunciationDocuments,
       loadedEntries: guidanceEntries, loadedGuidanceEntries: guidanceEntries,
       loadedPronunciationCandidates: indexStats.pronunciationCandidates,
@@ -532,7 +699,9 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
         pronunciationInactiveReasons: indexStats.inactiveReasons
       },
       policy: {
-        jsonDocumentsOnly: true, verifiedByKnowledgeAPI: true, sha256ValidationDelegatedToKnowledgeAPI: true,
+        manifestDocumentsOnly: true, supportedTextFormats: Array.from(TEXT_DOCUMENT_FORMATS),
+        schemaAgnosticIngestion: true, unknownSchemasPreserved: true,
+        verifiedByKnowledgeAPI: true, sha256ValidationDelegatedToKnowledgeAPI: true,
         downloadRequiresExplicitOptIn: true, autoDownload: false, executeDownloadedCode: false,
         guidanceMayInferPronunciation: false, onlyReviewedVerifiedLexiconCanReachCompiler: false,
         unreviewedSpeechApplicationAllowed: true, speechRewriteRequiresSpeechApplicationAuthorization: true,
@@ -596,10 +765,19 @@ export function selfTest() {
   try {
     const checkedGuidance = validateGuidanceDocument(legacy, source);
     const generic = makeGuidance("ॐ अग्निमीळे नमः", {}, new Map([[checkedGuidance.entries[0].term, checkedGuidance.entries]]));
-    check("legacy-guidance-schema-preserved", checkedGuidance.entries.length === 2 && generic.matches.length === 1);
+    check("legacy-guidance-schema-preserved", checkedGuidance.entries.length === 2 && generic.matches.length === 2 && generic.contextRequired.length === 1);
     check("guidance-source-and-version-retained", checkedGuidance.entries[0].source.documentVersion === "1.0.0" && checkedGuidance.entries[0].source.sha256 === source.sha256);
     const checkedLexicon = validateLexiconDocument(lexicon, { id: "test-lexicon", title: "Test Lexicon", sha256: "b".repeat(64) });
     check("new-lexicon-schema-validates", checkedLexicon.entries.length === 1 && checkedLexicon.invalidEntries.length === 0);
+    const unknownDoc = normalizeGenericDocument({ schema: "future.sanskrit.rules.v9", version: "9.0", payload: { rules: [
+      { id: "bhujanga-rule", word: "भुजङ्ग", rule: "ङ्ग में ङ् कण्ठ्य अनुनासिक रखें।", speechText: "भुजङ्ग" }
+    ] } }, { id: "unknown-schema-test", title: "Future schema" }, { documentVersion: "9.0", language: "sa" });
+    const unknownIndex = buildIndexes([{ type: "generic", document: unknownDoc }]);
+    check("unknown-schema-is-ingested", unknownDoc.schema === "future.sanskrit.rules.v9" && unknownDoc.entries.length === 1);
+    check("generic-speech-rule-normalized-for-compiler", unknownIndex.pronunciationIndex.get("भुजङ्ग")?.[0]?.nativeSpeechText === "भुजङ्ग");
+    const textDoc = normalizeGenericDocument("भुजङ्ग: ङ्ग में ङ् कण्ठ्य अनुनासिक रखें।",
+      { id: "text-rule-test", title: "Text rules" }, { format: "txt", documentVersion: "1.0" });
+    check("plain-text-knowledge-is-ingested", textDoc.entries.length === 1 && textDoc.entries[0].term === "भुजङ्ग");
     check("lexicon-source-and-version-retained", checkedLexicon.entries[0].documentSource.documentVersion === "1.0.1" && checkedLexicon.entries[0].source.primarySourceVerified === true);
     check("verified-reviewed-entry-compiler-ready", compilerReadiness(checkedLexicon.entries[0]).ready);
     const unreviewed = validateLexiconDocument({ ...lexicon, entries: [makeEntry({
