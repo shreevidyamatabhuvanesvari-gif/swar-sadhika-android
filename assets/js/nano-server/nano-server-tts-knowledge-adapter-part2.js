@@ -2,14 +2,15 @@
  * Loads enabled Manifest knowledge documents while retaining original source content.
  * JSON, TXT and Markdown are ingested without executing downloaded code.
  */
-export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "2.0.0";
-export const SWR_TTS_ADAPTER_IMPROVEMENT_ID = "SWR-TTS-ADAPTER-04";
+export const NANO_SERVER_TTS_KNOWLEDGE_ADAPTER_VERSION = "2.1.0";
+export const SWR_TTS_ADAPTER_IMPROVEMENT_ID = "SWR-TTS-ADAPTER-05";
 export const TTS_KNOWLEDGE_DOCUMENT_SCHEMA = "swar-sadhika.sanskrit-tts-knowledge";
 export const TTS_PRONUNCIATION_LEXICON_SCHEMA = "swar-sadhika.sanskrit-pronunciation-lexicon";
 
 const ID = /^[a-z0-9][a-z0-9._-]{0,95}$/i;
 const DEVANAGARI = /^[\u0900-\u097F\uA8E0-\uA8FF\u{11B00}-\u{11B0A}\u{1CD0}-\u{1CFA}]+$/u;
 const WORDS_SOURCE = "[\\u0900-\\u097F\\uA8E0-\\uA8FF\\u{11B00}-\\u{11B0A}\\u{1CD0}-\\u{1CFA}]+";
+const DEVANAGARI_PHRASE = new RegExp("^" + WORDS_SOURCE + "(?:\\s+" + WORDS_SOURCE + ")*$", "u");
 const API_METHODS = ["initialize","getManifest","listEntries","readDocument"];
 const LEXICON_FIELDS = ["id","term","matchType","phoneticStructure","phonemeReference","ipa","nativeSpeechText","voiceLocales","voiceProfile","context","scope","source","reviewStatus","activation","speechApplication"];
 const REVIEW_STATUSES = new Set(["draft","needs-review","reviewed"]);
@@ -38,6 +39,12 @@ function freeze(value) {
 function nonEmpty(value) { return typeof value === "string" && value.trim().length > 0; }
 
 function normalizeTerm(value) { return String(value || "").normalize("NFC").trim(); }
+
+function normalizeGuidanceTerm(value) {
+  if (typeof value !== "string") return "";
+  const term = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  return term && DEVANAGARI_PHRASE.test(term) ? term : "";
+}
 
 function normalizeLocale(value) { return typeof value === "string" ? value.trim().replace(/_/g, "-").toLowerCase() : ""; }
 
@@ -136,8 +143,8 @@ function normalizeGenericDocument(raw, source, manifestEntry) {
   let sequence = 0;
   const addRecord = (record, location) => {
     if (!object(record)) return;
-    const term = normalizeTerm(pickString(record, GENERIC_TERM_KEYS));
-    if (!term || !DEVANAGARI.test(term)) return;
+    const term = normalizeGuidanceTerm(pickString(record, GENERIC_TERM_KEYS));
+    if (!term) return;
     const key = term + "\u0000" + location + "\u0000" + String(record.id || "");
     if (seen.has(key)) return;
     seen.add(key);
@@ -163,8 +170,8 @@ function normalizeGenericDocument(raw, source, manifestEntry) {
       const description = line.match(/^\s*([^:=→-]{1,128}?)\s*[:：—]\s*(.*?)\s*$/u);
       const match = arrow || description;
       if (!match) return;
-      const term = normalizeTerm(match[1]), value = normalizeTerm(match[2]);
-      if (!DEVANAGARI.test(term)) return;
+      const term = normalizeGuidanceTerm(match[1]), value = normalizeTerm(match[2]);
+      if (!term) return;
       addRecord(arrow ? { term, nativeSpeechText: value, guidance: value, id: "line-" + (index + 1) }
         : { term, guidance: value, id: "line-" + (index + 1) }, "line-" + index);
     });
@@ -224,12 +231,12 @@ function validateGuidanceDocument(doc, source) {
     if (!object(item) || typeof item.id !== "string" || !ID.test(item.id)) fail("Knowledge entry ID अमान्य है।", "INVALID_KNOWLEDGE_ENTRY", { index });
     if (ids.has(item.id)) fail("Duplicate Knowledge entry ID है।", "DUPLICATE_KNOWLEDGE_ENTRY_ID", { entryId: item.id });
     ids.add(item.id);
-    const term = normalizeTerm(item.term);
+    const term = normalizeGuidanceTerm(item.term);
     const guidance = typeof item.guidance === "string" ? item.guidance.trim() : "";
     const scope = item.scope === undefined ? "general" : String(item.scope);
     const shakha = item.shakha == null ? "" : String(item.shakha).trim();
     const reviewStatus = item.reviewStatus === undefined ? "needs-review" : String(item.reviewStatus);
-    if (!term || term.length > 128 || !DEVANAGARI.test(term)) fail("Knowledge term वैध देवनागरी शब्द होना चाहिए।", "INVALID_KNOWLEDGE_TERM", { entryId: item.id });
+    if (!term || term.length > 128) fail("Knowledge term वैध देवनागरी शब्द/पद होना चाहिए; प्रत्येक शब्द देवनागरी में होना चाहिए।", "INVALID_KNOWLEDGE_TERM", { entryId: item.id });
     if (!guidance || guidance.length > 1200) fail("Knowledge guidance रिक्त या बहुत लंबा है।", "INVALID_KNOWLEDGE_GUIDANCE", { entryId: item.id });
     if (!["general", "shakha-specific"].includes(scope) || (scope === "shakha-specific" && !shakha) || shakha.length > 64) {
       fail("Knowledge scope/shakha metadata अमान्य है।", "INVALID_KNOWLEDGE_SCOPE", { entryId: item.id });
@@ -398,7 +405,8 @@ function pronunciationReadingSignature(entry) {
 }
 
 function buildIndexes(records) {
-  const guidanceIndex = new Map(), guidanceSeen = new Set(), pronunciationCandidates = [];
+  const guidanceIndex = new Map(), guidanceSeen = new Set(), uniqueGuidanceTerms = new Set(), uniqueGuidancePhrases = new Set();
+  const pronunciationCandidates = [];
   let guidanceDuplicates = 0, invalidLexiconEntries = 0;
   for (const record of records) {
     if (record.type === "guidance" || record.type === "generic") {
@@ -407,7 +415,12 @@ function buildIndexes(records) {
         const key = termKey(entry.term, entry.scope, entry.shakha);
         if (guidanceSeen.has(key)) { guidanceDuplicates += 1; continue; }
         guidanceSeen.add(key);
-        const bucket = guidanceIndex.get(entry.term) || []; bucket.push(entry); guidanceIndex.set(entry.term, bucket);
+        const termTokens = tokenize(entry.term);
+        if (!termTokens.length) continue;
+        uniqueGuidanceTerms.add(entry.term);
+        if (termTokens.length > 1) uniqueGuidancePhrases.add(entry.term);
+        const indexKey = termTokens[0];
+        const bucket = guidanceIndex.get(indexKey) || []; bucket.push(entry); guidanceIndex.set(indexKey, bucket);
       }
     } else if (record.type === "pronunciation-lexicon") {
       pronunciationCandidates.push(...record.document.entries); invalidLexiconEntries += record.document.invalidEntries.length;
@@ -441,6 +454,7 @@ function buildIndexes(records) {
   }
   return {
     guidanceIndex, pronunciationIndex, guidanceDuplicates,
+    uniqueGuidanceTerms: uniqueGuidanceTerms.size, uniqueGuidancePhrases: uniqueGuidancePhrases.size,
     pronunciationCandidates: pronunciationCandidates.length, reviewedLexiconEntries, compilerEligibleEntries,
     invalidLexiconEntries, duplicateEntries: duplicates.length + duplicateIds.size,
     conflictingEntries: conflicts.length, duplicates: Object.freeze(duplicates), conflicts: Object.freeze(conflicts),
@@ -506,10 +520,15 @@ function matchesVoiceProfile(entry, options) {
 
 function makeGuidance(text, options, index) {
   const shakha = options && typeof options.shakha === "string" ? options.shakha.trim() : "";
-  const matches = [], contextRequired = [], seen = new Set();
-  for (const term of tokenize(String(text))) {
-    if (seen.has(term)) continue; seen.add(term);
-    for (const entry of index.get(term) || []) {
+  const matches = [], contextRequired = [], seenEntries = new Set();
+  const tokens = tokenize(String(text));
+  for (let start = 0; start < tokens.length; start += 1) {
+    for (const entry of index.get(tokens[start]) || []) {
+      const entryTokens = tokenize(entry.term);
+      if (!entryTokens.length || !sequenceAt(tokens, entryTokens, start)) continue;
+      const entryKey = String(entry.source && entry.source.id || "") + "|" + String(entry.id || "") + "|" + entry.term;
+      if (seenEntries.has(entryKey)) continue;
+      seenEntries.add(entryKey);
       if (entry.scope === "shakha-specific" && (!shakha || entry.shakha !== shakha)) {
         contextRequired.push(Object.freeze({ term: entry.term, entryId: entry.id, shakha: entry.shakha, source: entry.source }));
       }
@@ -688,7 +707,8 @@ export function createNanoServerTtsKnowledgeAdapter(options = {}) {
       loadedEntries: guidanceEntries, loadedGuidanceEntries: guidanceEntries,
       loadedPronunciationCandidates: indexStats.pronunciationCandidates,
       reviewedPronunciationEntries: indexStats.reviewedLexiconEntries, activePronunciationEntries,
-      invalidPronunciationEntries: indexStats.invalidLexiconEntries, uniqueTerms: guidanceIndex.size,
+      invalidPronunciationEntries: indexStats.invalidLexiconEntries,
+      uniqueTerms: indexStats.uniqueGuidanceTerms, uniquePhrases: indexStats.uniqueGuidancePhrases,
       lastLoadAt, lastError, documentStates: states,
       indexDiagnostics: {
         guidanceDuplicateEntries: indexStats.guidanceDuplicates,
@@ -764,7 +784,7 @@ export function selfTest() {
   };
   try {
     const checkedGuidance = validateGuidanceDocument(legacy, source);
-    const generic = makeGuidance("ॐ अग्निमीळे नमः", {}, new Map([[checkedGuidance.entries[0].term, checkedGuidance.entries]]));
+    const generic = makeGuidance("ॐ अग्निमीळे नमः", {}, new Map([[tokenize(checkedGuidance.entries[0].term)[0], checkedGuidance.entries]]));
     check("legacy-guidance-schema-preserved", checkedGuidance.entries.length === 2 && generic.matches.length === 2 && generic.contextRequired.length === 1);
     check("guidance-source-and-version-retained", checkedGuidance.entries[0].source.documentVersion === "1.0.0" && checkedGuidance.entries[0].source.sha256 === source.sha256);
     const checkedLexicon = validateLexiconDocument(lexicon, { id: "test-lexicon", title: "Test Lexicon", sha256: "b".repeat(64) });
@@ -778,6 +798,28 @@ export function selfTest() {
     const textDoc = normalizeGenericDocument("भुजङ्ग: ङ्ग में ङ् कण्ठ्य अनुनासिक रखें।",
       { id: "text-rule-test", title: "Text rules" }, { format: "txt", documentVersion: "1.0" });
     check("plain-text-knowledge-is-ingested", textDoc.entries.length === 1 && textDoc.entries[0].term === "भुजङ्ग");
+    const phraseDoc = validateGuidanceDocument({ ...legacy, entries: [
+      { id: "phrase-rayim", term: "  रयिमश्नवत्   पोषमेव  ", guidance: "पद-क्रम मार्गदर्शन।", scope: "general" }
+    ] }, source);
+    const phraseMap = new Map([[tokenize(phraseDoc.entries[0].term)[0], phraseDoc.entries]]);
+    const phraseMatch = makeGuidance("अग्निम् रयिमश्नवत्, पोषमेव इति पठेत्।", {}, phraseMap);
+    check("multiword-guidance-term-normalized-and-accepted", phraseDoc.entries[0].term === "रयिमश्नवत् पोषमेव");
+    check("multiword-guidance-matches-exact-token-sequence", phraseMatch.matches.length === 1 && phraseMatch.matches[0].term === "रयिमश्नवत् पोषमेव");
+    check("multiword-guidance-rejects-partial-sequence", makeGuidance("रयिमश्नवत् अन्यः शब्दः", {}, phraseMap).matches.length === 0);
+    check("multiword-guidance-rejects-reordered-sequence", makeGuidance("पोषमेव रयिमश्नवत्", {}, phraseMap).matches.length === 0);
+    const genericPhrase = normalizeGenericDocument({ rules: [{ id: "phrase-rule", word: "देवो देवेभिरा गमत्", rule: "पद-क्रम सुरक्षित रखें।" }] },
+      { id: "generic-phrase-test", title: "Generic phrase" }, { documentVersion: "1.0", language: "sa" });
+    const genericPhraseIndex = buildIndexes([{ type: "generic", document: genericPhrase }]);
+    check("generic-fallback-preserves-multiword-guidance", genericPhrase.entries.length === 1 &&
+      makeGuidance("देवो देवेभिरा गमत्", {}, genericPhraseIndex.guidanceIndex).matches.length === 1 &&
+      genericPhrase.pronunciationEntries.length === 0);
+    const allVedicTerms = ["रयिमश्नवत् पोषमेव", "देवो देवेभिरा गमत्", "उप त्वाग्ने", "स्वे दमे", "सूपायनो भव", "सचस्वा नः"];
+    const allPhraseEntries = validateGuidanceDocument({ ...legacy, entries: allVedicTerms.map((term, index) => ({
+      id: "vedic-phrase-" + index, term, guidance: "पद-क्रम परीक्षण।", scope: "general"
+    })) }, source);
+    const allPhraseIndex = buildIndexes([{ type: "guidance", document: allPhraseEntries }]);
+    check("all-six-reported-vedic-phrases-index", allPhraseEntries.entries.length === 6 && allPhraseIndex.uniqueGuidancePhrases === 6 &&
+      allVedicTerms.every(term => makeGuidance(term, {}, allPhraseIndex.guidanceIndex).matches.some(entry => entry.term === term)));
     check("lexicon-source-and-version-retained", checkedLexicon.entries[0].documentSource.documentVersion === "1.0.1" && checkedLexicon.entries[0].source.primarySourceVerified === true);
     check("verified-reviewed-entry-compiler-ready", compilerReadiness(checkedLexicon.entries[0]).ready);
     const unreviewed = validateLexiconDocument({ ...lexicon, entries: [makeEntry({
