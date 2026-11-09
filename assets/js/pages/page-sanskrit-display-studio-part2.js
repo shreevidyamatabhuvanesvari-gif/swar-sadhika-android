@@ -404,9 +404,9 @@ function startCharacterFallback(line) {
   state.lineStartedAt = performance.now();
   const count = graphemes(line).length;
   const rate = Number(byId("studio-rate").value) || 1;
-  state.lineFallbackDuration = Math.max(1400, count * 105 / rate);
+  state.lineFallbackDuration = Math.max(1800, count * 170 / rate);
   state.fallbackTimer = window.setInterval(() => {
-    if (!state.speaking || state.paused || state.boundarySeen) return;
+    if (!state.speaking || state.paused) return;
     const elapsed = performance.now() - state.lineStartedAt;
     const progress = Math.min(1, elapsed / state.lineFallbackDuration);
     state.revealedCount = Math.max(state.revealedCount, Math.ceil(count * progress));
