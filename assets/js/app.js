@@ -1,35 +1,24 @@
 /* Swar-Sadhika Android — main application controller.
- * Page-level navigation modules are separate files:
+ * Only implemented page modules are routable here:
  *   assets/js/pages/page-tts.js
  *   assets/js/pages/page-nano-server.js
- *   assets/js/pages/page-avatar.js
- *   assets/js/pages/page-nano-brain.js
- *   assets/js/pages/page-file-check.js
  *
- * This file handles the shared index panel and its remaining controls:
- * local media selection, gallery selection/removal, and fullscreen.
- * TTS, avatar-page, diagnostics-page and Nano page logic belong to their
- * respective page modules; they are intentionally not implemented here.
+ * Unimplemented Avatar, Nano Brain and File Check routes are disabled
+ * rather than dynamically importing files that do not exist.
  */
 (() => {
   "use strict";
 
-  const APP_VERSION = "2.2.0";
+  const APP_VERSION = "2.2.1";
   const PAGE_BASE = "./assets/js/pages/";
   const PAGE_MODULES = Object.freeze({
     "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
-    "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
-    "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" },
-    "nano-brain": { id: "nano-brain", file: "page-nano-brain.js", root: "view-nano-brain", view: "view-nano-brain" },
-    "diagnostics": { id: "file-check", file: "page-file-check.js", root: "view-diagnostics", view: "view-diagnostics" }
+    "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" }
   });
 
   const views = Object.freeze({
     "index": "view-index",
-    "nano-server": "view-nano-server",
-    "avatar": "view-avatar",
-    "nano-brain": "view-nano-brain",
-    "diagnostics": "view-diagnostics"
+    "nano-server": "view-nano-server"
   });
 
   const state = {
@@ -78,8 +67,6 @@
 
   function pageStatusTarget(page) {
     if (page.id === "tts") return byId("tts-status");
-    if (page.id === "avatar") return byId("avatar-status");
-    if (page.id === "file-check") return byId("registry-status");
     const root = byId(page.root);
     return root ? root.querySelector(".status") : null;
   }
@@ -235,9 +222,13 @@
     const page = PAGE_MODULES[key];
     const viewId = key === "jump-text" ? "view-index" : views[key];
 
+    if (key !== "index" && key !== "jump-text" && !page) {
+      console.warn("[Swar-Sadhika] Route is disabled because its page module is not present: " + key);
+      return false;
+    }
     if (!viewId || !byId(viewId)) {
       console.warn("[Swar-Sadhika] Unknown page route: " + key);
-      return;
+      return false;
     }
 
     const navigationSequence = ++state.navigationSequence;
@@ -547,6 +538,15 @@
   function bindNavigation() {
     const nav = document.querySelector(".nav");
     if (!nav) return;
+
+    nav.querySelectorAll("button[data-route]").forEach(button => {
+      const route = button.dataset.route;
+      if (route !== "index" && !PAGE_MODULES[route]) {
+        button.disabled = true;
+        button.setAttribute("aria-disabled", "true");
+        button.title = "यह पेज सक्रिय नहीं है क्योंकि इसका वास्तविक JavaScript मॉड्यूल Repository में उपलब्ध नहीं है।";
+      }
+    });
 
     nav.addEventListener("click", event => {
       const button = event.target.closest("button");
