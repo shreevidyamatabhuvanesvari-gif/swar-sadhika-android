@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171329">
+  <meta name="description" content="Swar-Sadhika clean 9:16 Sanskrit text and avatar TTS studio.">
+  <title>संस्कृत पाठ–अवतार स्टूडियो | स्वर-साधिका</title>
+  <style>
+    :root{color-scheme:dark;--bg:#171329;--panel:#241d38;--panel2:#1c1730;--text:#f5f0ff;--muted:#c5bad8;--line:rgba(210,190,245,.18);--accent:#f3c87d;--purple:#7652a6;--danger:#f3a0a0;--good:#a7e2bb}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Noto Sans Devanagari",sans-serif}
+    header{padding:14px max(14px,env(safe-area-inset-left));border-bottom:1px solid var(--line);background:#110e20;position:sticky;top:0;z-index:5}
+    .head-inner,main{width:min(1060px,100%);margin:auto}
+    .head-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{font-size:1.2rem;margin:0;color:var(--accent)}
+    h2{font-size:1.02rem;margin:0 0 12px}
+    p{margin:7px 0}
+    .muted,.tiny{color:var(--muted);font-size:.86rem}
+    main{padding:16px 12px 44px}
+    .layout{display:grid;grid-template-columns:minmax(280px,420px) minmax(280px,1fr);gap:14px;align-items:start}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:15px;margin-bottom:13px;min-width:0}
+    .stage-panel{position:sticky;top:88px}
+    .stage{position:relative;width:min(100%,390px);aspect-ratio:9/16;margin:0 auto;background:#090713;border-radius:14px;overflow:hidden;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+    #studio-canvas{display:block;width:100%;height:100%;object-fit:contain}
+    .stage:fullscreen{width:100vw;height:100dvh;max-width:none;aspect-ratio:auto;border:0;border-radius:0;background:#05040a}
+    .stage:fullscreen #studio-canvas{width:100%;height:100%;object-fit:contain}
+    .stage:fullscreen .full-controls{display:flex}
+    .full-controls{display:none;position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));justify-content:space-between;gap:8px;pointer-events:none}
+    .full-controls button{pointer-events:auto}
+    .btn,button,.file-button{border:1px solid var(--line);border-radius:10px;background:#3b3155;color:var(--text);padding:10px 13px;font:inherit;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+    .btn.primary{background:var(--purple);border-color:#9678c0}
+    .btn.accent{background:#70512b;border-color:#c49a59}
+    .btn.danger{background:#633548}
+    button:disabled{opacity:.42;cursor:not-allowed}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .stack{display:grid;gap:10px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    label{display:block;font-weight:600;margin:8px 0 5px}
+    input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+    input[type=range]{width:100%;accent-color:var(--accent)}
+    textarea,select{display:block;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);padding:11px;font:inherit}
+    textarea{min-height:185px;resize:vertical}
+    .status{padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);white-space:pre-wrap;overflow-wrap:anywhere}
+    .status[data-kind=error]{border-color:#8a4b5b;color:var(--danger)}
+    .status[data-kind=success]{border-color:#4a805d;color:var(--good)}
+    .status[data-kind=warn]{border-color:#a37c42;color:#f3d8a5}
+    .file-name{font-size:.8rem;color:var(--muted);overflow-wrap:anywhere}
+    .download{display:block;margin-top:12px;color:#f4d18d;overflow-wrap:anywhere}
+    .hidden{display:none!important}
+    .note{padding:10px;border-left:3px solid var(--accent);background:var(--panel2);color:#efddb9;border-radius:7px;font-size:.84rem}
+    footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:18px}
+    body.studio-expanded .stage{position:fixed;inset:0;z-index:1000;width:100vw;height:100dvh;max-width:none;aspect-ratio:auto;border-radius:0}
+    body.studio-expanded .stage #studio-canvas{width:100%;height:100%;object-fit:contain}
+    body.studio-expanded .stage .full-controls{display:flex}
+    @media(max-width:760px){.layout{grid-template-columns:1fr}.stage-panel{position:static}.stage{width:min(100%,360px)}header{position:static}.grid{grid-template-columns:1fr 1fr}}
+    @media(max-width:390px){.panel{padding:12px}.grid{grid-template-columns:1fr}.btn,button,.file-button{padding:9px 10px;font-size:.9rem}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="head-inner head-row">
+      <div><h1>स्वर-साधिका — पाठ एवं अवतार स्टूडियो</h1><div class="muted">स्वच्छ 9:16 दृश्य · स्थानीय महिला-प्राथमिकता TTS</div></div>
+      <a class="btn" href="./index.html">मुख्य इंडेक्स</a>
+    </div>
+  </header>
+  <main>
+    <div class="layout">
+      <section class="panel stage-panel" aria-label="9:16 पूर्वावलोकन">
+        <div class="stage" id="studio-stage">
+          <canvas id="studio-canvas" width="540" height="960" aria-label="वीडियो और बहुरंगी पाठ का 9:16 पूर्वावलोकन"></canvas>
+          <div class="full-controls">
+            <button class="btn danger" id="studio-exit-fullscreen" type="button">पूर्ण स्क्रीन से बाहर</button>
+            <button class="btn" id="studio-main-index-full" type="button">मुख्य इंडेक्स</button>
+          </div>
+        </div>
+        <video id="studio-video" playsinline muted loop hidden></video>
+        <img id="studio-avatar-image" alt="" hidden>
+        <div class="actions">
+          <button class="btn" id="studio-fullscreen-play" type="button" disabled>⛶ Full Screen + महिला आवाज़</button>
+          <button class="btn" id="studio-play-preview" type="button" disabled>▶ पेज पर सुनें</button>
+        </div>
+        <div class="actions">
+          <button class="btn" id="studio-pause" type="button" disabled>Ⅱ रोकें</button>
+          <button class="btn" id="studio-resume" type="button" disabled>▶ जारी रखें</button>
+          <button class="btn danger" id="studio-stop" type="button" disabled>■ समाप्त</button>
+        </div>
+        <div class="actions">
+          <button class="btn" id="studio-main-index" type="button">मुख्य इंडेक्स पैनल पर जाएँ</button>
+        </div>
+        <div id="studio-status" class="status" role="status" aria-live="polite">स्थानीय TTS Voice की जाँच हो रही है…</div>
+      </section>
+
+      <div>
+        <section class="panel">
+          <h2>1. अवतार और वीडियो</h2>
+          <div class="grid">
+            <div class="stack">
+              <label class="file-button" for="studio-avatar-file">अवतार फोटो जोड़ें</label>
+              <input id="studio-avatar-file" type="file" accept="image/*">
+              <div class="file-name" id="studio-avatar-name">कोई अवतार फोटो चयनित नहीं</div>
+              <button class="btn" id="studio-remove-avatar" type="button">फोटो हटाएँ</button>
+            </div>
+            <div class="stack">
+              <label class="file-button" for="studio-video-file">वीडियो क्लिप जोड़ें</label>
+              <input id="studio-video-file" type="file" accept="video/*">
+              <div class="file-name" id="studio-video-name">कोई वीडियो क्लिप चयनित नहीं</div>
+              <button class="btn" id="studio-remove-video" type="button">वीडियो हटाएँ</button>
+            </div>
+          </div>
+          <label><input id="studio-avatar-overlay" type="checkbox" checked> वीडियो के ऊपर अवतार फोटो दिखाएँ</label>
+          <p class="tiny">वीडियो 9:16 स्टेज में Crop होकर दिखेगा और TTS पूरा होने तक Loop होगा। 5 सेकंड की क्लिप भी दोहराई जाएगी।</p>
+        </section>
+
+        <section class="panel">
+          <h2>2. स्क्रीन पर दिखने वाला पाठ</h2>
+          <label for="studio-text">अपना पाठ लिखें</label>
+          <textarea id="studio-text" maxlength="12000" placeholder="यहाँ संस्कृत श्लोक, मंत्र या अन्य पाठ लिखें…">नमामीशमीशान निर्वाणरूपं
+विभुं व्यापकं ब्रह्मवेदस्वरूपम्।
+निजं निरीहं निराकारमोंकारमूलं
+तुरीयं गिरा ज्ञान गोतीतमीशम्॥</textarea>
+          <div class="tiny" id="studio-text-count">0 / 12000 अक्षर</div>
+          <div class="grid">
+            <div>
+              <label for="studio-text-mode">टेक्स्ट की स्थिति</label>
+              <select id="studio-text-mode">
+                <option value="bottom">नीचे</option>
+                <option value="middle">मध्य</option>
+                <option value="character">वर्ण दर वर्ण</option>
+              </select>
+            </div>
+            <div>
+              <label for="studio-voice">स्थानीय महिला Voice</label>
+              <select id="studio-voice" disabled><option>Voice जाँची जा रही है…</option></select>
+            </div>
+          </div>
+          <label for="studio-rate">पढ़ने की गति: <span id="studio-rate-value">1.00×</span></label>
+          <input id="studio-rate" type="range" min="0.65" max="1.15" step="0.05" value="1">
+          <p class="tiny">हर पंक्ति वही मूल पाठ रखती है। वर्ण-दर-वर्ण मोड में उपलब्ध TTS boundary events से अक्षर/अक्षर-समूह आगे बढ़ते हैं; Android Voice boundary न दे तो अनुमानित समय-आधारित प्रदर्शन होगा।</p>
+        </section>
+
+        <section class="panel">
+          <h2>3. आवाज़ सहित वीडियो डाउनलोड</h2>
+          <div class="note">Android Chrome में Native SpeechSynthesis सीधे Audio फ़ाइल उपलब्ध नहीं कराता। इसलिए यह सुविधा फोन के माइक्रोफ़ोन से स्पीकर पर बजती TTS आवाज़ और 9:16 दृश्य को एक WebM वीडियो में रिकॉर्ड करेगी। लाउडस्पीकर चालू रखें; इयरफ़ोन हटाएँ। रिकॉर्डिंग की आवाज़ कमरे और माइक्रोफ़ोन पर निर्भर होगी।</div>
+          <div class="actions">
+            <button class="btn accent" id="studio-record-download" type="button" disabled>● आवाज़ सहित वीडियो बनाएँ</button>
+          </div>
+          <a id="studio-download-link" class="download" href="#" hidden>आवाज़ सहित वीडियो डाउनलोड करें</a>
+          <p class="tiny">रिकॉर्डिंग से पहले माइक्रोफ़ोन अनुमति आवश्यक है। यदि डिवाइस MediaRecorder/WebM का समर्थन नहीं करता, तो डाउनलोड सुविधा उपलब्ध नहीं होगी; TTS वाचन फिर भी चल सकता है।</p>
+        </section>
+      </div>
+    </div>
+    <footer>Swar-Sadhika · Local Native TTS · 9:16 Sanskrit Display Studio</footer>
+  </main>
+  <script type="module" src="./assets/js/pages/page-sanskrit-display-studio-part2.js"></script>
+</body>
+</html>
