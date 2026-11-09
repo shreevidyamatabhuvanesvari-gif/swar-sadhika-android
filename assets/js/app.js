@@ -566,6 +566,17 @@
     loadRegistry();
     await navigate("index");
 
+    // The TTS controls are part of the index panel, so mount the existing
+    // TTS page module during startup instead of waiting for the separate
+    // "पाठ / TTS" navigation button. Reuse the same PAGE_MODULES entry and
+    // Page Loader so only one TTS engine instance and one set of handlers
+    // are ever created.
+    const indexTtsPage = PAGE_MODULES["jump-text"];
+    const ttsSpeakButton = byId("speak-btn");
+    if (ttsSpeakButton) ttsSpeakButton.disabled = true;
+    setText("tts-status", "स्थानीय TTS Engine और डिवाइस की आवाज़ों की जाँच की जा रही है…");
+    await loadPageModule(indexTtsPage, state.navigationSequence);
+
     window.addEventListener("pagehide", () => {
       state.media.forEach(releaseMediaUrl);
       state.pageInstances.forEach(instance => {
