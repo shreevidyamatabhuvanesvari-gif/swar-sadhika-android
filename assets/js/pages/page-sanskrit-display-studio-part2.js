@@ -23,6 +23,7 @@ const state = {
   lineFallbackDuration: 0,
   fallbackTimer: null,
   unsubscribeBoundary: null,
+  unsubscribeVoices: null,
   avatar: null,
   avatarUrl: null,
   videoUrl: null,
@@ -63,8 +64,15 @@ function graphemes(text) {
   }
   const result = [];
   let offset = 0;
+  let joinNext = false;
+  const attachMark = /[\u0300-\u036f\u093a-\u094d\u0951-\u0957\u0962-\u0963\u200c\u200d]/u;
   for (const character of Array.from(value)) {
-    result.push({ text: character, index: offset });
+    if (result.length && (attachMark.test(character) || joinNext)) {
+      result[result.length - 1].text += character;
+    } else {
+      result.push({ text: character, index: offset });
+    }
+    joinNext = character === "\u094d" || character === "\u200c" || character === "\u200d";
     offset += character.length;
   }
   return result;
@@ -105,6 +113,7 @@ function renderVoiceOptions() {
     select.appendChild(option);
     state.selectedVoice = null;
     select.disabled = true;
+    setStatus("इस फोन पर अभी कोई स्थानीय हिन्दी/संस्कृत TTS Voice उपलब्ध नहीं मिली। Android की Text-to-speech output सेटिंग में हिन्दी Voice डाउनलोड/सक्रिय करके पेज फिर खोलें।", "warn");
     return;
   }
   const previousIndex = Number(previous);
@@ -124,7 +133,7 @@ async function refreshVoices() {
   if (!state.engine || state.destroyed) return;
   try {
     let voices = [];
-    for (const delay of [0, 160, 350, 650]) {
+    for (const delay of [0, 220, 550, 1000, 1600]) {
       if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
       if (state.destroyed) return;
       voices = await state.engine.getVoices({ backendId: "native" });
@@ -135,8 +144,10 @@ async function refreshVoices() {
       /^(hi|sa)(-|$)/i.test(String(voice.lang || ""))
     );
     renderVoiceOptions();
+    if (state.engineReady) setPlayerButtons();
   } catch (error) {
     setStatus("स्थानीय Voice सूची प्राप्त नहीं हुई: " + error.message, "error");
+    if (state.engineReady) setPlayerButtons();
   }
 }
 
@@ -149,6 +160,9 @@ async function initializeEngine() {
       Math.max(0, Number(detail.charLength) || 0);
     state.revealedCount = sourceGraphemeCountAtOutputIndex(state.currentPrepared, outputIndex);
     if (state.revealedCount > 0) drawStage();
+  });
+  state.unsubscribeVoices = state.engine.on("voiceschanged", () => {
+    if (!state.destroyed) void refreshVoices();
   });
   state.engine.on("error", detail => {
     if (detail && detail.message) setStatus("TTS Engine: " + detail.message, "error");
@@ -233,34 +247,75 @@ function drawAvatarOverlay() {
   ctx.restore();
 }
 
-function wrapGraphemes(items, maxWidth, font) {
+function wrapShapedText(text, maxWidth, font) {
   ctx.font = font;
-  const lines = [];
-  let line = [];
-  let width = 0;
-  for (const item of items) {
-    const itemWidth = ctx.measureText(item.text).width;
-    if (line.length && width + itemWidth > maxWidth && !/^\s$/u.test(item.text)) {
-      lines.push(line);
-      line = [];
-      width = 0;
+  const words = String(text || "").trim().split(/\s+/u).filter(Boolean);
+  if (!words.length) return [];
+
+  const rows = [];
+  let row = "";
+
+  function splitLongWord(word) {
+    const chunks = [];
+    let chunk = "";
+    for (const item of graphemes(word)) {
+      const candidate = chunk + item.text;
+      if (chunk && ctx.measureText(candidate).width > maxWidth) {
+        chunks.push(chunk);
+        chunk = item.text;
+      } else {
+        chunk = candidate;
+      }
     }
-    line.push({ ...item, width: itemWidth });
-    width += itemWidth;
+    if (chunk) chunks.push(chunk);
+    return chunks;
   }
-  if (line.length) lines.push(line);
-  return lines.length ? lines : [[]];
+
+  for (const word of words) {
+    const pieces = splitLongWord(word);
+    if (!pieces.length) continue;
+    const firstCandidate = row ? row + " " + pieces[0] : pieces[0];
+    if (row && ctx.measureText(firstCandidate).width > maxWidth) {
+      rows.push(row);
+      row = pieces[0];
+    } else {
+      row = firstCandidate;
+    }
+    for (let index = 1; index < pieces.length; index += 1) {
+      if (row) rows.push(row);
+      row = pieces[index];
+    }
+  }
+
+  if (row) rows.push(row);
+  return rows;
 }
 
 function drawTextLine() {
   const line = state.currentLine;
   if (!line) return;
+
   const mode = byId("studio-text-mode").value;
   const all = graphemes(line);
   const visible = mode === "character" ? all.slice(0, state.revealedCount) : all;
+  const visibleText = visible.map(item => item.text).join("");
+  if (!visibleText) {
+    if (mode === "character" && state.speaking) {
+      ctx.save();
+      ctx.fillStyle = "#ffe48d";
+      ctx.textAlign = "center";
+      ctx.font = "600 30px system-ui, 'Noto Sans Devanagari', sans-serif";
+      ctx.shadowColor = "#c7a4ff";
+      ctx.shadowBlur = 20;
+      ctx.fillText("✧", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+      ctx.restore();
+    }
+    return;
+  }
+
   const fontSize = all.length > 58 ? 34 : all.length > 40 ? 38 : 44;
   const font = "700 " + fontSize + "px system-ui, 'Noto Sans Devanagari', sans-serif";
-  const wrapped = wrapGraphemes(visible, 454, font);
+  const wrapped = wrapShapedText(visibleText, 454, font);
   const lineHeight = Math.round(fontSize * 1.38);
   const contentHeight = wrapped.length * lineHeight;
   const bottomMode = mode === "bottom";
@@ -278,31 +333,45 @@ function drawTextLine() {
   else ctx.rect(panelX, panelY, 492, panelH);
   ctx.fill();
   ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.direction = "ltr";
   ctx.font = font;
-  wrapped.forEach((glyphLine, row) => {
-    const width = glyphLine.reduce((sum, glyph) => sum + glyph.width, 0);
-    let x = (CANVAS_WIDTH - width) / 2;
-    const y = startY + row * lineHeight;
-    glyphLine.forEach((glyph, index) => {
-      const colourIndex = (all.findIndex(item => item.index === glyph.index) + row + 1) % PALETTE.length;
-      ctx.lineJoin = "round";
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(5, 4, 14, 0.95)";
-      ctx.strokeText(glyph.text, x, y);
-      ctx.fillStyle = PALETTE[colourIndex];
-      ctx.shadowColor = "rgba(0,0,0,0.85)";
-      ctx.shadowBlur = 8;
-      ctx.fillText(glyph.text, x, y);
-      x += glyph.width;
+  wrapped.forEach((textRow, rowIndex) => {
+    const width = ctx.measureText(textRow).width;
+    const x = (CANVAS_WIDTH - width) / 2;
+    const y = startY + rowIndex * lineHeight;
+    const gradient = ctx.createLinearGradient(x, y, x + Math.max(1, width), y);
+    PALETTE.forEach((colour, index) => {
+      gradient.addColorStop(index / (PALETTE.length - 1), colour);
     });
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(5, 4, 14, 0.95)";
+    ctx.shadowColor = mode === "character" && state.speaking ? "#c7a4ff" : "rgba(0,0,0,0.85)";
+    ctx.shadowBlur = mode === "character" && state.speaking ? 15 : 8;
+    ctx.strokeText(textRow, x, y);
+    ctx.fillStyle = gradient;
+    ctx.fillText(textRow, x, y);
   });
   ctx.restore();
-  if (mode === "character" && state.revealedCount < all.length) {
+
+  if (mode === "character" && state.speaking && visible.length > 0 && wrapped.length) {
+    const lastRow = wrapped[wrapped.length - 1];
+    const lastWidth = ctx.measureText(lastRow).width;
+    const tailX = Math.min(CANVAS_WIDTH - 24, (CANVAS_WIDTH + lastWidth) / 2 + 5);
+    const tailY = startY + (wrapped.length - 1) * lineHeight;
+    const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 135);
     ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.82)";
-    ctx.font = "500 18px system-ui, sans-serif";
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = "#fff5cb";
+    ctx.shadowColor = "#ffe48d";
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(tailX, tailY, 3.5 + pulse * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = "700 18px system-ui, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("वर्ण-दर-वर्ण वाचन", CANVAS_WIDTH / 2, CANVAS_HEIGHT - 44);
+    ctx.fillText("✦", Math.max(18, tailX - 7), tailY - 20);
     ctx.restore();
   }
 }
@@ -338,7 +407,7 @@ function startCanvasLoop() {
     state.animationFrame = 0;
     if (state.destroyed) return;
     drawStage();
-    if (state.speaking && !state.paused && video.src && !video.paused) {
+    if (video.src && !video.paused && video.readyState >= 2) {
       state.animationFrame = requestAnimationFrame(tick);
     }
   };
@@ -381,13 +450,39 @@ function handleVideoChange(event) {
   video.src = state.videoUrl;
   video.loop = true;
   video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
   video.load();
+
   video.onloadedmetadata = () => {
     byId("studio-video-name").textContent = file.name + " · " +
       (Number.isFinite(video.duration) ? video.duration.toFixed(1) + " सेकंड · Loop" : "Loop");
     drawStage();
   };
-  video.onerror = () => setStatus("वीडियो फ़ाइल इस ब्राउज़र में नहीं खुल सकी। MP4 (H.264) या WebM आज़माएँ।", "error");
+
+  const showVideoFrame = () => {
+    if (!video.src || video.readyState < 2) return;
+    drawStage();
+    if (video.paused) {
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise.then(() => {
+          if (!state.destroyed) startCanvasLoop();
+        }).catch(() => {
+          drawStage();
+          setStatus("वीडियो का पहला फ्रेम दिखाया गया है। चलाने के लिए पेज पर सुनें या Full Screen दबाएँ।", "warn");
+        });
+      } else {
+        startCanvasLoop();
+      }
+    } else {
+      startCanvasLoop();
+    }
+  };
+
+  video.onloadeddata = showVideoFrame;
+  video.oncanplay = showVideoFrame;
+  video.onerror = () => setStatus("वीडियो फ़ाइल इस ब्राउज़र में खुल नहीं सकी। MP4 (H.264) या WebM वीडियो आज़माएँ।", "error");
 }
 
 function mapBoundaryToVisible(detail) {
@@ -404,14 +499,14 @@ function startCharacterFallback(line) {
   state.lineStartedAt = performance.now();
   const count = graphemes(line).length;
   const rate = Number(byId("studio-rate").value) || 1;
-  state.lineFallbackDuration = Math.max(1800, count * 170 / rate);
+  state.lineFallbackDuration = Math.max(1400, count * 105 / rate);
   state.fallbackTimer = window.setInterval(() => {
     if (!state.speaking || state.paused) return;
     const elapsed = performance.now() - state.lineStartedAt;
     const progress = Math.min(1, elapsed / state.lineFallbackDuration);
     state.revealedCount = Math.max(state.revealedCount, Math.ceil(count * progress));
     if (byId("studio-text-mode").value === "character") drawStage();
-  }, 90);
+  }, 75);
 }
 
 function clearCharacterFallback() {
@@ -419,14 +514,36 @@ function clearCharacterFallback() {
   state.fallbackTimer = null;
 }
 
+function installPlayerStyles() {
+  if (byId("studio-player-runtime-styles")) return;
+  const style = document.createElement("style");
+  style.id = "studio-player-runtime-styles";
+  style.textContent = [
+    "#studio-fullscreen-play:not(:disabled),#studio-play-preview:not(:disabled){background:linear-gradient(135deg,#7958aa,#4e3a75);border-color:#c8a8ff;color:#fff;box-shadow:0 0 0 1px rgba(200,168,255,.22),0 0 14px rgba(199,164,255,.28)}",
+    "#studio-pause:not(:disabled),#studio-resume:not(:disabled){background:linear-gradient(135deg,#80602e,#5d4425);border-color:#f0cf91;color:#fff;box-shadow:0 0 12px rgba(243,200,125,.24)}",
+    "#studio-stop:not(:disabled){background:linear-gradient(135deg,#874157,#633548);border-color:#e69bb1;color:#fff;box-shadow:0 0 12px rgba(230,155,177,.22)}",
+    ".studio-control-active{outline:2px solid rgba(255,228,141,.72);outline-offset:2px;transform:translateY(-1px)}",
+    "#studio-record-preview{display:block;width:100%;max-width:100%;margin-top:12px;border:1px solid rgba(210,190,245,.25);border-radius:10px;background:#090713}"
+  ].join("");
+  document.head.appendChild(style);
+}
+
 function setPlayerButtons() {
   const active = state.speaking;
-  byId("studio-fullscreen-play").disabled = !state.engineReady || !state.voices.length || active;
-  byId("studio-record-download").disabled = !state.engineReady || !state.voices.length || active;
-  byId("studio-play-preview").disabled = !state.engineReady || !state.voices.length || active;
-  byId("studio-stop").disabled = !active;
-  byId("studio-pause").disabled = !active || state.paused;
-  byId("studio-resume").disabled = !active || !state.paused;
+  const ready = state.engineReady && state.voices.length > 0;
+  const setButton = (id, enabled, highlighted = false) => {
+    const button = byId(id);
+    button.disabled = !enabled;
+    button.setAttribute("aria-disabled", String(!enabled));
+    button.dataset.playerState = highlighted ? "active" : enabled ? "ready" : "idle";
+    button.classList.toggle("studio-control-active", highlighted);
+  };
+  setButton("studio-fullscreen-play", ready && !active, false);
+  setButton("studio-play-preview", ready && !active, false);
+  setButton("studio-pause", active && !state.paused, active && !state.paused);
+  setButton("studio-resume", active && state.paused, active && state.paused);
+  setButton("studio-stop", active, active);
+  stage.dataset.playerState = active ? (state.paused ? "paused" : "playing") : "idle";
 }
 
 function currentVoice() {
@@ -509,8 +626,8 @@ async function beginPlayback(options = {}) {
       state.speaking = false;
       state.paused = false;
       clearCharacterFallback();
-      video.pause();
-      stopCanvasLoop();
+      if (video.src && !video.paused) startCanvasLoop();
+      else stopCanvasLoop();
       setPlayerButtons();
       if (options.recording && state.recorder && state.recorder.state !== "inactive") {
         state.recorder.stop();
@@ -524,19 +641,41 @@ async function beginPlayback(options = {}) {
 
 async function startFullscreenPlayback() {
   if (state.speaking) return;
+
+  const playbackPromise = beginPlayback().catch(error => {
+    setStatus(error && error.message ? error.message : "वाचन शुरू नहीं हो सका।", "error");
+  });
+
   try {
-    if (typeof stage.requestFullscreen === "function") {
-      const request = stage.requestFullscreen();
-      if (request && typeof request.catch === "function") request.catch(() => {
-        setStatus("Full Screen अनुमति/सुविधा उपलब्ध नहीं हुई; वाचन पेज में जारी रहेगा।", "warn");
-      });
-    } else {
-      document.body.classList.add("studio-expanded");
+    if (typeof stage.requestFullscreen !== "function") {
+      throw new Error("इस ब्राउज़र में Fullscreen API उपलब्ध नहीं है।");
     }
+    const request = stage.requestFullscreen();
+    if (request && typeof request.then === "function") await request;
+    if (!document.fullscreenElement) throw new Error("ब्राउज़र ने Fullscreen सक्रिय नहीं किया।");
   } catch (error) {
-    setStatus("Full Screen प्रारंभ नहीं हुआ: " + error.message, "warn");
+    document.body.classList.add("studio-expanded");
+    byId("studio-exit-fullscreen").hidden = false;
+    byId("studio-main-index-full").hidden = false;
+    setStatus("ब्राउज़र Full Screen API उपलब्ध/स्वीकृत नहीं हुई; वैकल्पिक Full Screen दृश्य सक्रिय है। " +
+      (error && error.message ? error.message : ""), "warn");
   }
-  void beginPlayback().catch(error => setStatus(error.message, "error"));
+
+  await playbackPromise;
+}
+
+function ensureRecordingPreview() {
+  let preview = byId("studio-record-preview");
+  if (preview) return preview;
+  preview = document.createElement("video");
+  preview.id = "studio-record-preview";
+  preview.controls = true;
+  preview.playsInline = true;
+  preview.preload = "metadata";
+  preview.hidden = true;
+  const link = byId("studio-download-link");
+  link.parentNode.insertBefore(preview, link);
+  return preview;
 }
 
 function getRecorderMimeType() {
@@ -597,6 +736,10 @@ async function startRecordingAndPlayback() {
       if (state.downloadUrl) URL.revokeObjectURL(state.downloadUrl);
       if (blob.size > 0) {
         state.downloadUrl = URL.createObjectURL(blob);
+        const preview = ensureRecordingPreview();
+        preview.src = state.downloadUrl;
+        preview.hidden = false;
+        preview.load();
         const link = byId("studio-download-link");
         link.href = state.downloadUrl;
         link.download = "swar-sadhika-voice-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
@@ -681,6 +824,7 @@ function removeVideo() {
   video.load();
   byId("studio-video-file").value = "";
   byId("studio-video-name").textContent = "कोई वीडियो क्लिप चयनित नहीं";
+  stopCanvasLoop();
   drawStage();
 }
 
@@ -700,6 +844,8 @@ function goToMainIndex() {
 }
 
 function bind() {
+  installPlayerStyles();
+  byId("studio-text-mode").value = "character";
   byId("studio-avatar-file").addEventListener("change", handleAvatarChange);
   byId("studio-video-file").addEventListener("change", handleVideoChange);
   byId("studio-remove-avatar").addEventListener("click", removeAvatar);
@@ -718,17 +864,25 @@ function bind() {
   byId("studio-main-index").addEventListener("click", goToMainIndex);
   byId("studio-main-index-full").addEventListener("click", goToMainIndex);
   byId("studio-exit-fullscreen").addEventListener("click", () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else document.body.classList.remove("studio-expanded");
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      document.body.classList.remove("studio-expanded");
+      byId("studio-main-index-full").hidden = true;
+      byId("studio-exit-fullscreen").hidden = true;
+    }
   });
   byId("studio-rate").addEventListener("input", () => {
     byId("studio-rate-value").textContent = Number(byId("studio-rate").value).toFixed(2) + "×";
   });
   document.addEventListener("fullscreenchange", () => {
     const active = Boolean(document.fullscreenElement);
-    byId("studio-main-index-full").hidden = !active;
-    byId("studio-exit-fullscreen").hidden = !active;
-    if (!active) byId("studio-main-index").hidden = false;
+    const expanded = active || document.body.classList.contains("studio-expanded");
+    byId("studio-main-index-full").hidden = !expanded;
+    byId("studio-exit-fullscreen").hidden = !expanded;
+    if (!active && !document.body.classList.contains("studio-expanded")) {
+      byId("studio-main-index").hidden = false;
+    }
   });
   window.addEventListener("pagehide", () => {
     if (state.destroyed) return;
@@ -736,6 +890,7 @@ function bind() {
     state.generation += 1;
     clearCharacterFallback();
     video.pause();
+    if (typeof state.unsubscribeVoices === "function") state.unsubscribeVoices();
     if (state.engine) {
       state.engine.cancel().catch(() => {});
       state.engine.dispose().catch(() => {});
@@ -779,7 +934,12 @@ export function selfTest() {
     { id: "native-engine", passed: typeof createTtsEngine === "function" },
     { id: "grapheme-segmentation", passed: sample.length > 0 && sample.map(item => item.text).join("") === "क्षि" },
     { id: "text-limit", passed: MAX_TEXT_LENGTH === 12000 },
-    { id: "looping-video", passed: video.loop === true }
+    { id: "looping-video", passed: video.loop === true },
+    { id: "shape-aware-wrapping", passed: typeof wrapShapedText === "function" &&
+      wrapShapedText("क्षि ज्ञ त्र्य", CANVAS_WIDTH, "700 44px sans-serif").join(" ") === "क्षि ज्ञ त्र्य" },
+    { id: "player-control-manager", passed: typeof setPlayerButtons === "function" &&
+      ["studio-fullscreen-play", "studio-play-preview", "studio-pause", "studio-resume", "studio-stop"].every(id => Boolean(byId(id))) },
+    { id: "video-preview-support", passed: typeof video.play === "function" && typeof video.load === "function" }
   ];
   return {
     passed: checks.every(item => item.passed),
