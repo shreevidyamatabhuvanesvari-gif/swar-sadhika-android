@@ -93,6 +93,19 @@ function handleWorkerMessage(event) {
         "। मॉडल लोड करने से पहले स्टोरेज और RAM चेतावनी पढ़ें।");
       setBusy(false);
       break;
+    case "module-success":
+      setStatus("Runtime modules सफलतापूर्वक लोड हुए: " + data.transformers + " + " + data.onnxRuntime + "। अब WebGPU Adapter की पुष्टि होगी।");
+      break;
+    case "module-error":
+      state.webgpuReady = false;
+      state.busy = false;
+      setBusy(false);
+      setStatus("Runtime Module लोड विफल। चरण: " + data.stage +
+        "\\nकारण: " + (data.message || "अज्ञात module import त्रुटि") +
+        "\\nTransformers URL: " + (data.transformersUrl || "—") +
+        "\\nONNX Runtime URL: " + (data.onnxRuntimeUrl || "—") +
+        (data.stack ? "\\nविवरण: " + data.stack : ""), "error");
+      break;
     case "feature-error":
       state.webgpuReady = false;
       setStatus("WebGPU प्रारंभ नहीं हुआ: " + data.data, "error");
