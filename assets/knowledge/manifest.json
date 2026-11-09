@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.4.1",
+  "catalogVersion": "1.4.2",
   "appId": "swar-sadhika-android",
   "entries": [
     {
@@ -71,7 +71,7 @@
       "id": "sanskrit-pronunciation-lexicon-v1",
       "entryType": "knowledge-document",
       "title": "संस्कृत उच्चारण शब्दकोश (Pronunciation Lexicon)",
-      "documentVersion": "1.0.1",
+      "documentVersion": "1.0.2",
       "category": "pronunciation",
       "language": "sa",
       "script": "Devanagari",
@@ -82,8 +82,8 @@
       "integrationMode": "nano-server-tts-knowledge-adapter",
       "contentSchema": "swar-sadhika.sanskrit-pronunciation-lexicon",
       "contentSchemaVersion": 1,
-      "sha256": "7effda365a51cea362981583763f6fff453b7b08510c54b63600f83500e71485",
-      "reviewPolicy": "only-reviewed-source-verified-and-voice-tested-entries-can-be-applied",
+      "sha256": "bd2c18b15e92ad2fc6b84a4ff6950d2916aaeb806ed8e667c7c6356dad5fe29f",
+      "reviewPolicy": "explicit-speech-authorization-and-valid-native-speech-text-required; review, source, phonetic and voice-test states are informational, not speech-application gates",
       "loaderPolicy": "verified-json-data-only-no-code-execution",
       "enabled": true
     }
