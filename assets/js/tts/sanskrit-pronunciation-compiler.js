@@ -86,7 +86,13 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "rudrashtaka-janga-short-hi-tts", term: "भुजङ्ग", nativeSpeechText: "भुजन्ग" }),
   Object.freeze({ id: "rudrashtaka-janga-hi-tts", term: "भुजङ्गा", nativeSpeechText: "भुजन्गा" }),
   Object.freeze({ id: "rudrashtaka-avagraha-bajeham", term: "भजेऽहं", nativeSpeechText: "भजेहम्" }),
-  Object.freeze({ id: "rudrashtaka-avagraha-natoham", term: "नतोऽहम्", nativeSpeechText: "नतोहम्" })
+  Object.freeze({ id: "rudrashtaka-avagraha-natoham", term: "नतोऽहम्", nativeSpeechText: "नतोहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-bajeham-halant-variant", term: "भजेऽहम्", nativeSpeechText: "भजेहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-bajeham-explicit-a-m", term: "भजेअहम्", nativeSpeechText: "भजेहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-bajeham-explicit-a-anusvara", term: "भजेअहं", nativeSpeechText: "भजेहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-natoham-explicit-a-m", term: "नतोअहम्", nativeSpeechText: "नतोहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-natoham-explicit-a-anusvara", term: "नतोअहं", nativeSpeechText: "नतोहम्" }),
+  Object.freeze({ id: "rudrashtaka-avagraha-natoham-anusvara-variant", term: "नतोऽहं", nativeSpeechText: "नतोहम्" })
 ]);
 
 
@@ -1450,6 +1456,15 @@ export function selfTest() {
     const avagrahaOnly = compile("भजेऽहं", []);
     check("avagraha-word-exact-match", avagrahaOnly.speechText === "भजेहम्" &&
       avagrahaOnly.appliedRules.length === 1);
+    const rudrashtakaAvagrahaVariants = compile("भजेअहम् नतोअहम् भजेअहं नतोअहं भजेऽहम् नतोऽहं", []);
+    check("rudrashtaka-avagraha-variants-native-hindi-speech",
+      rudrashtakaAvagrahaVariants.speechText === "भजेहम् नतोहम् भजेहम् नतोहम् भजेहम् नतोहम्" &&
+      rudrashtakaAvagrahaVariants.appliedRules.length === 6 &&
+      validateCompiledSpeech(rudrashtakaAvagrahaVariants).valid);
+    check("rudrashtaka-avagraha-variants-preserve-source-text",
+      rudrashtakaAvagrahaVariants.originalText === "भजेअहम् नतोअहम् भजेअहं नतोअहं भजेऽहम् नतोऽहं" &&
+      rudrashtakaAvagrahaVariants.appliedRules.every(rule => rule.source.primarySourceVerified === false &&
+        rule.voiceProfile.testStatus === "not-tested"));
     const bhujangaSubstring = compile("भुजङ्गाधिप", []);
     check("bhujanga-compatibility-does-not-rewrite-compound-substring",
       bhujangaSubstring.speechText === "भुजङ्गाधिप" && !bhujangaSubstring.modified);
