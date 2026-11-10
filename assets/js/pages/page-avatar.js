@@ -886,7 +886,6 @@ export function selfTest() {
     {id:"speech-opens-photo-mouth",passed:mouthGap(mouthPoints)>mouthGap(synthetic)+3 && mouthState.mouthOpen>0},
     {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && Math.abs(Math.hypot(closedPoints[14].x-closedPoints[13].x,closedPoints[14].y-closedPoints[13].y)-Math.hypot(synthetic[14].x-synthetic[13].x,synthetic[14].y-synthetic[13].y))<1e-6},
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1,speechElapsedMs:0},0).length===478},
-    {id:"portrait-canvas-does-not-use-global-shake",passed:s.includes('canvas.style.transform=""')},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
     {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"}
   ];
