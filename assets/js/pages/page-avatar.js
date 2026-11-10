@@ -2,7 +2,7 @@
  * Browser-local face landmarks, conservative photo-mesh deformation and Native TTS.
  * A single photograph supports subtle 2.5D motion only; this is not full 3D reconstruction.
  */
-import { createTtsEngine } from "../tts/tts-engine.js";
+import { createAvatarTtsEngine } from "../tts/avatar-tts-engine.js";
 
 const MEDIAPIPE_VERSION = "0.10.21";
 const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@" + MEDIAPIPE_VERSION;
@@ -183,7 +183,7 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   const mouthCenterY=(mouthTop.y+mouthBottom.y)/2;
   const mouthWidth=Math.max(1,Math.hypot(mouthRight.x-mouthLeft.x,mouthRight.y-mouthLeft.y));
   const mouthHeight=Math.max(1,height*0.095);
-  const char = state.speechActive ? currentSpeechCharacter(state, elapsedMs) : "";
+  const char = state.speechActive && !state.paused ? currentSpeechCharacter(state, elapsedMs) : "";
   const targetOpen = state.speechActive ? characterMouthShape(char) : 0;
   state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,state.speechActive ? 0.42 : 0.16);
   const opening=state.mouthOpen;
@@ -328,7 +328,9 @@ export async function mount(context) {
     '   <div id="photo-avatar-status" class="avatar-status" role="status" aria-live="polite">पहले सामने से ली गई स्पष्ट, अच्छी रोशनी वाली फोटो चुनें।</div>',
     '   <div class="avatar-actions"><button id="photo-avatar-build" class="btn primary" type="button" disabled>फोटो पहचानें और अवतार बनाएँ</button><button id="photo-avatar-reset" class="btn" type="button" disabled>फोटो हटाएँ</button></div>',
     '   <label class="avatar-field">वाचन के लिए संस्कृत पाठ<textarea id="photo-avatar-text" maxlength="5000" placeholder="यहाँ श्लोक या मंत्र लिखें…"></textarea></label>',
-    '   <label class="avatar-field">स्थानीय Hindi/Sanskrit आवाज़<select id="photo-avatar-voice"><option value="">स्थानीय आवाज़ खोजी जा रही है…</option></select></label>',
+    '   <label class="avatar-field">स्थानीय Hindi/Sanskrit आवाज़<select id="photo-avatar-voice"><option value="">आवाज़ सूची पढ़ी जा रही है…</option></select></label>',
+    '   <div class="avatar-actions"><button id="photo-avatar-refresh-voices" class="btn" type="button">↻ आवाज़ सूची ताज़ा करें</button><button id="photo-avatar-test-voice" class="btn" type="button" disabled>♪ आवाज़ का नमूना सुनें</button></div>',
+    '   <div id="photo-avatar-voice-status" class="avatar-status" role="status" aria-live="polite">Android की वास्तविक आवाज़ सूची जाँची जा रही है…</div>',
     '   <div class="avatar-tuning">',
     '    <label class="avatar-field">वाचन गति <span id="photo-avatar-rate-value">0.88×</span><input id="photo-avatar-rate" type="range" min="0.65" max="1.15" step="0.05" value="0.88"></label>',
     '    <label class="avatar-field">दृष्टि <select id="photo-avatar-gaze"><option value="auto">स्वाभाविक स्वतः</option><option value="left">बाईं ओर</option><option value="center">सामने</option><option value="right">दाईं ओर</option></select></label>',
@@ -355,6 +357,9 @@ export async function mount(context) {
   const stopButton=byId("photo-avatar-stop");
   const textInput=byId("photo-avatar-text");
   const voiceSelect=byId("photo-avatar-voice");
+  const refreshVoicesButton=byId("photo-avatar-refresh-voices");
+  const testVoiceButton=byId("photo-avatar-test-voice");
+  const voiceStatus=byId("photo-avatar-voice-status");
   const rateInput=byId("photo-avatar-rate");
   const gazeSelect=byId("photo-avatar-gaze");
   const status=byId("photo-avatar-status");
@@ -363,8 +368,8 @@ export async function mount(context) {
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
     basePoints:null, triangles:[], faceLandmarker:null, engine:null,
-    voices:[], speechText:"", speechActive:false, speechStartedAt:0,
-    boundaryCharacter:0, rate:0.88, mouthOpen:0, blink:0,
+    voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
+    boundaryCharacter:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
     gazeTarget:0, lastFrame:0, raf:0, lastStatus:"", unsubscribers:[]
   };
@@ -378,63 +383,128 @@ export async function mount(context) {
 
   function updateButtons() {
     const ready=Boolean(state.image && state.basePoints && state.faceLandmarker);
-    speakButton.disabled=!ready || !state.engine || state.speechActive;
-    pauseButton.disabled=!state.speechActive;
+    const voiceReady=Boolean(state.engine && state.voices.length && voiceSelect.value);
+    speakButton.disabled=!ready || !voiceReady || state.speechActive;
+    pauseButton.disabled=!state.speechActive || state.paused;
     resumeButton.disabled=!state.engine || !state.paused;
     stopButton.disabled=!state.speechActive;
     resetButton.disabled=!state.image && !state.faceLandmarker;
+    refreshVoicesButton.disabled=!state.engine;
+    testVoiceButton.disabled=!voiceReady || state.speechActive;
+  }
+
+  function setVoiceStatus(message,kind) {
+    voiceStatus.textContent=String(message || "");
+    voiceStatus.classList.toggle("error",kind==="error");
+    voiceStatus.classList.toggle("success",kind==="success");
   }
 
   function fillVoices() {
     const old=voiceSelect.value;
-    const voices=state.voices.filter(voice=>voice && voice.localService===true &&
-      /^(hi|sa)(-|$)/i.test(String(voice.lang||"")));
-    state.voices=voices;
+    const inventory=state.voiceInventory || {selectable:[],informational:[],message:"आवाज़ सूची उपलब्ध नहीं है।"};
+    state.voices=Array.from(inventory.selectable || []);
     voiceSelect.replaceChildren();
-    for (const voice of voices) {
-      const option=doc.createElement("option");
-      option.value=voice.voiceURI || voice.name;
-      option.textContent=voice.name+" · "+voice.lang+" · स्थानीय";
-      voiceSelect.appendChild(option);
-    }
-    if (!voices.length) {
+    if (state.voices.length) {
+      const localGroup=doc.createElement("optgroup");
+      localGroup.label="स्थानीय आवाज़ें · offline";
+      for (const item of state.voices) {
+        const option=doc.createElement("option");
+        option.value=item.key;
+        option.textContent=item.name+" · "+item.lang+" · "+item.femaleHint;
+        localGroup.appendChild(option);
+      }
+      voiceSelect.appendChild(localGroup);
+    } else {
       const option=doc.createElement("option");
       option.value="";
       option.textContent="स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं";
+      option.disabled=true;
       voiceSelect.appendChild(option);
-    } else if (voices.some(voice=>(voice.voiceURI||voice.name)===old)) {
-      voiceSelect.value=old;
     }
+    const informational=Array.from(inventory.informational || []);
+    if (informational.length) {
+      const infoGroup=doc.createElement("optgroup");
+      infoGroup.label="जानकारी मात्र · offline playback के लिए चयन योग्य नहीं";
+      for (const item of informational) {
+        const option=doc.createElement("option");
+        option.value="";
+        option.disabled=true;
+        option.textContent=item.name+" · "+item.lang+" · "+item.localityLabel;
+        infoGroup.appendChild(option);
+      }
+      voiceSelect.appendChild(infoGroup);
+    }
+    if (state.voices.some(item=>item.key===old)) voiceSelect.value=old;
+    else if (state.voices.length) {
+      const preferred=state.voices.find(item=>item.default) || state.voices[0];
+      voiceSelect.value=preferred.key;
+    }
+    setVoiceStatus(inventory.message, state.voices.length ? "success" : "error");
     updateButtons();
+  }
+
+  function selectedVoice() {
+    return state.voices.find(item=>item.key===voiceSelect.value) || null;
   }
 
   async function initializeSpeech() {
     if (state.engine) return;
-    state.engine=createTtsEngine({target:win,defaultBackend:"native"});
+    state.engine=createAvatarTtsEngine({target:win});
     state.unsubscribers.push(
-      state.engine.on("voiceschanged",()=>{ void refreshVoices(); }),
+      state.engine.on("voiceschanged",()=> {
+        state.voiceInventory=state.engine.getInventory();
+        fillVoices();
+      }),
       state.engine.on("boundary",detail=>{
         if (!state.speechActive || !detail) return;
         const index=Math.max(0,finite(detail.charIndex,0));
         state.boundaryCharacter=Array.from(state.speechText.slice(0,index)).length;
       }),
-      state.engine.on("speechstart",()=>{ state.speechStartedAt=win.performance.now(); }),
-      state.engine.on("speechend",()=>{ state.speechActive=false; state.mouthOpen=0; updateButtons(); }),
-      state.engine.on("speechcancel",()=>{ state.speechActive=false; state.mouthOpen=0; updateButtons(); }),
-      state.engine.on("speecherror",detail=>{ state.speechActive=false; setStatus(detail && detail.message || "वाचन त्रुटि।","error"); updateButtons(); })
+      state.engine.on("speechstart",detail=>{
+        if (detail && typeof detail.text==="string") state.speechText=detail.text;
+        state.speechActive=true;
+        state.paused=false;
+        state.boundaryCharacter=0;
+        state.speechStartedAt=win.performance.now();
+        updateButtons();
+      }),
+      state.engine.on("speechend",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
+      state.engine.on("speechcancel",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
+      state.engine.on("speecherror",detail=>{ state.speechActive=false; state.paused=false; setStatus(detail && detail.message || "वाचन त्रुटि।","error"); updateButtons(); }),
+      state.engine.on("pause",()=>{ state.paused=true; updateButtons(); }),
+      state.engine.on("resume",()=>{ state.paused=false; state.speechStartedAt=win.performance.now(); updateButtons(); })
     );
-    const initialized=await state.engine.initialize({backendId:"native"});
-    if (!initialized || !initialized.ready) throw new Error("Android Native TTS तैयार नहीं हुआ।");
-    await refreshVoices();
+    const initialized=await state.engine.initialize();
+    state.voiceInventory=initialized.inventory;
+    if (!initialized.ready) {
+      setVoiceStatus("इस browser में Native SpeechSynthesis उपलब्ध नहीं है।","error");
+      updateButtons();
+      return;
+    }
+    fillVoices();
   }
 
   async function refreshVoices() {
     if (!state.engine || state.destroyed) return;
     try {
-      state.voices=await state.engine.getVoices({backendId:"native"});
+      state.voiceInventory=await state.engine.refreshVoices();
       fillVoices();
     } catch (error) {
-      setStatus("स्थानीय आवाज़ सूची पढ़ने में त्रुटि: "+error.message,"error");
+      setVoiceStatus("आवाज़ सूची पढ़ने में त्रुटि: "+(error && error.message || "अज्ञात त्रुटि"),"error");
+    }
+  }
+
+  async function testSelectedVoice() {
+    const selected=selectedVoice();
+    if (!selected || !state.engine) {
+      setVoiceStatus("नमूना सुनाने के लिए स्थानीय Hindi/Sanskrit आवाज़ चुनें।","error");
+      return;
+    }
+    try {
+      const result=await state.engine.playSample(selected.key,{rate:finite(rateInput.value,0.88),pitch:1,volume:1});
+      if (result.status==="ended") setVoiceStatus("आवाज़ का नमूना पूरा हुआ। स्वर की गुणवत्ता सुनकर स्वयं पुष्टि करें।","success");
+    } catch (error) {
+      setVoiceStatus("आवाज़ का नमूना नहीं चल सका: "+(error && error.message || "Native TTS त्रुटि"),"error");
     }
   }
 
@@ -566,8 +636,8 @@ export async function mount(context) {
     const text=textInput.value.trim();
     if (!text) { setStatus("पहले वाचन के लिए पाठ लिखें।","error"); return; }
     if (!state.engine || !state.basePoints) { setStatus("पहले फोटो से अवतार बनाएँ।","error"); return; }
-    const voice=state.voices.find(item=>(item.voiceURI||item.name)===voiceSelect.value);
-    if (!voice || voice.localService!==true) { setStatus("स्थानीय Hindi/Sanskrit आवाज़ चुनें।","error"); return; }
+    const voice=selectedVoice();
+    if (!voice || !voice.selectable) { setVoiceStatus("स्थानीय Hindi/Sanskrit आवाज़ चुनें।","error"); return; }
     state.speechText=text;
     state.boundaryCharacter=0;
     state.speechStartedAt=win.performance.now();
@@ -577,7 +647,7 @@ export async function mount(context) {
     updateButtons();
     try {
       const result=await state.engine.speak(text,{
-        voice,lang:voice.lang||"hi-IN",rate:state.rate,pitch:1,volume:1,replace:true
+        voiceKey:voice.key,rate:state.rate,pitch:1,volume:1,replace:true
       });
       if (result && result.status==="cancelled") state.speechActive=false;
     } catch (error) {
@@ -608,7 +678,7 @@ export async function mount(context) {
 
   async function stopSpeech() {
     if (!state.engine) return;
-    try { await state.engine.cancel(); } catch (_) {}
+    try { state.engine.cancel("user-stop"); } catch (_) {}
     state.speechActive=false;state.paused=false;state.mouthOpen=0;
     updateButtons();
   }
@@ -664,6 +734,9 @@ export async function mount(context) {
   buildButton.addEventListener("click",()=>void buildAvatar(),{signal:aborter.signal});
   resetButton.addEventListener("click",resetPhoto,{signal:aborter.signal});
   speakButton.addEventListener("click",()=>void speak(),{signal:aborter.signal});
+  refreshVoicesButton.addEventListener("click",()=>void refreshVoices(),{signal:aborter.signal});
+  testVoiceButton.addEventListener("click",()=>void testSelectedVoice(),{signal:aborter.signal});
+  voiceSelect.addEventListener("change",updateButtons,{signal:aborter.signal});
   pauseButton.addEventListener("click",()=>void pause(),{signal:aborter.signal});
   resumeButton.addEventListener("click",()=>void resume(),{signal:aborter.signal});
   stopButton.addEventListener("click",()=>void stopSpeech(),{signal:aborter.signal});
@@ -675,7 +748,11 @@ export async function mount(context) {
   onRate();
   try {
     await initializeSpeech();
-    setStatus("स्थानीय Native TTS तैयार है। फोटो चुनकर अवतार बनाएँ।","success");
+    if (state.voiceInventory && state.voiceInventory.selectable.length) {
+      setStatus("स्थानीय Native TTS तैयार है। फोटो चुनकर अवतार बनाएँ।","success");
+    } else {
+      setStatus("अवतार तैयार है, लेकिन इस डिवाइस में स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं है। आवाज़ सेटिंग जाँचें।","error");
+    }
   } catch (error) {
     setStatus("स्थानीय आवाज़ तैयार नहीं हुई: "+(error && error.message || "TTS initialization error"),"error");
   }
@@ -687,7 +764,7 @@ export async function mount(context) {
     state.visible=false;
     stopAnimation();
     aborter.abort();
-    try { if (state.engine) await state.engine.cancel(); } catch (_) {}
+    try { if (state.engine) state.engine.cancel("page-unmount"); } catch (_) {}
     for (const unsubscribe of state.unsubscribers) {
       try { unsubscribe(); } catch (_) {}
     }
@@ -738,7 +815,9 @@ export function selfTest() {
     {id:"mouth-index-contract",passed:OUTER_MOUTH.includes(61) && OUTER_MOUTH.includes(291) && UPPER_MOUTH.includes(13) && LOWER_MOUTH.includes(14)},
     {id:"eye-iris-index-contract",passed:EYE_GROUPS.every(group=>group.iris.length===5 && group.upper.length===4 && group.lower.length===4)},
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(Array.from({length:478},(_,index)=>({x:index%23,y:Math.floor(index/23),z:0})),{speechActive:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"},0).length===478},
-    {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")}
+    {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
+    {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"},
+    {id:"voice-controls-present",passed:["photo-avatar-refresh-voices","photo-avatar-test-voice","photo-avatar-voice-status"].every(id=>Boolean(root.querySelector("#"+id)))}
   ];
   return {status:checks.every(check=>check.passed)?"PASSED":"FAILED",total:checks.length,passed:checks.filter(check=>check.passed).length,failed:checks.filter(check=>!check.passed).length,checks};
 }
