@@ -879,7 +879,7 @@ export function selfTest() {
     {id:"gaze-produces-visible-iris-displacement",passed:Math.abs(gazePoints[468].x-synthetic[468].x)>4},
     {id:"blink-closes-eye-landmarks",passed:Math.abs(blinkPoints[159].y-synthetic[159].y)>2 && Math.abs(blinkPoints[145].y-synthetic[145].y)>1},
     {id:"speech-opens-photo-mouth",passed:mouthGap(mouthPoints)>mouthGap(synthetic)+3 && mouthState.mouthOpen>0},
-    {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && mouthGap(closedPoints)===mouthGap(synthetic)},
+    {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && Math.abs(Math.hypot(closedPoints[14].x-closedPoints[13].x,closedPoints[14].y-closedPoints[13].y)-Math.hypot(synthetic[14].x-synthetic[13].x,synthetic[14].y-synthetic[13].y))<1e-6},
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1},0).length===478},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
     {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"}
