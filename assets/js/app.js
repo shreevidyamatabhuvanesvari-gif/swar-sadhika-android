@@ -1,10 +1,10 @@
 /* Swar-Sadhika Android — main application controller.
- * Only implemented page modules are routable here:
+ * Implemented page modules are routed through PAGE_MODULES:
  *   assets/js/pages/page-tts.js
  *   assets/js/pages/page-nano-server.js
+ *   assets/js/pages/page-avatar.js
  *
- * Unimplemented Avatar, Nano Brain and File Check routes are disabled
- * rather than dynamically importing files that do not exist.
+ * Nano Brain and File Check remain disabled until their modules exist.
  */
 (() => {
   "use strict";
@@ -13,12 +13,14 @@
   const PAGE_BASE = "./assets/js/pages/";
   const PAGE_MODULES = Object.freeze({
     "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
-    "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" }
+    "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
+    "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" }
   });
 
   const views = Object.freeze({
     "index": "view-index",
-    "nano-server": "view-nano-server"
+    "nano-server": "view-nano-server",
+    "avatar": "view-avatar"
   });
 
   const state = {
