@@ -166,13 +166,15 @@ function makeAnimatedPoints(base, state, elapsedMs) {
 
   // Very small, reversible head/neck sway; source-photo identity remains the texture.
   const seconds=elapsedMs/1000;
-  const headTilt=Math.sin(seconds*0.72)*0.006;
-  const breath=Math.sin(seconds*1.18)*0.0015;
+  const speechBoost=state.speechActive && !state.paused ? 1 : 0.55;
+  const headTilt=Math.sin(seconds*0.72)*0.012*speechBoost;
+  const headBob=Math.sin(seconds*1.35)*height*0.004*speechBoost;
+  const shoulderSway=Math.sin(seconds*0.48)*width*0.0035*speechBoost;
   for (const point of points) {
     const dx=point.x-centerX;
     const dy=point.y-centerY;
-    point.x=centerX+dx*Math.cos(headTilt)-dy*Math.sin(headTilt);
-    point.y=centerY+dx*Math.sin(headTilt)+dy*Math.cos(headTilt)+breath*height;
+    point.x=centerX+dx*Math.cos(headTilt)-dy*Math.sin(headTilt)+shoulderSway*(point.y>centerY+height*0.28?1:0.25);
+    point.y=centerY+dx*Math.sin(headTilt)+dy*Math.cos(headTilt)+headBob;
   }
 
   const mouthLeft=points[61];
@@ -182,15 +184,14 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   const mouthCenterX=(mouthLeft.x+mouthRight.x)/2;
   const mouthCenterY=(mouthTop.y+mouthBottom.y)/2;
   const mouthWidth=Math.max(1,Math.hypot(mouthRight.x-mouthLeft.x,mouthRight.y-mouthLeft.y));
-  const mouthHeight=Math.max(1,height*0.095);
   const char = state.speechActive && !state.paused ? currentSpeechCharacter(state, elapsedMs) : "";
-  const targetOpen = state.speechActive ? characterMouthShape(char) : 0;
-  state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,state.speechActive ? 0.42 : 0.16);
+  const targetOpen = state.speechActive && !state.paused ? characterMouthShape(char) : 0;
+  state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,state.speechActive ? 0.58 : 0.22);
   const opening=state.mouthOpen;
-  const gap=Math.min(height*0.045,opening*height*0.035);
-  if (gap>0.15) {
-    const upperIds=[13,312,311,310,415,308,78,191,80,81,82];
-    const lowerIds=[14,317,402,318,324,308,78,95,88,178,87];
+  const gap=Math.min(height*0.055,opening*mouthWidth*0.19);
+  if (gap>0.12) {
+    const upperIds=[13,312,311,310,415,191,80,81,82];
+    const lowerIds=[14,317,402,318,324,95,88,178,87];
     for (const index of upperIds) {
       if (points[index]) points[index].y-=gap*0.46;
     }
@@ -211,18 +212,23 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   // Move only the detected iris landmarks to simulate attentive eye direction.
   const gaze=state.gaze;
   for (const group of EYE_GROUPS) {
+    const eyeWidth=Math.max(1,Math.hypot(points[group.center[1]].x-points[group.center[0]].x,points[group.center[1]].y-points[group.center[0]].y));
+    const eyeHeight=Math.max(1,Math.abs(
+      group.lower.reduce((sum,index)=>sum+points[index].y,0)/group.lower.length-
+      group.upper.reduce((sum,index)=>sum+points[index].y,0)/group.upper.length
+    ));
     for (const index of group.iris) {
       if (points[index]) {
-        points[index].x+=gaze.x*width*0.012;
-        points[index].y+=gaze.y*height*0.006;
+        points[index].x+=gaze.x*eyeWidth*0.24;
+        points[index].y+=gaze.y*eyeHeight*0.28;
       }
     }
     const topY=group.upper.reduce((sum,index)=>sum+(points[index]?.y||0),0)/group.upper.length;
     const lowY=group.lower.reduce((sum,index)=>sum+(points[index]?.y||0),0)/group.lower.length;
     const eyeCenter=(topY+lowY)/2;
     const close=state.blink;
-    for (const index of group.upper) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.94);
-    for (const index of group.lower) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.94);
+    for (const index of group.upper) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.99);
+    for (const index of group.lower) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.78);
   }
   return points;
 }
@@ -236,51 +242,61 @@ function currentSpeechCharacter(state, elapsedMs) {
   return chars[Math.min(chars.length-1,Math.max(0,position))] || "";
 }
 
-function drawWarpedPhoto(context, sourceCanvas, basePoints, targetPoints, triangles) {
+function drawWarpedPhoto(context, sourceCanvas, basePoints, targetPoints, triangles, faceLayer, faceLayerContext) {
   context.drawImage(sourceCanvas,0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
+  faceLayerContext.setTransform(1,0,0,1,0,0);
+  faceLayerContext.clearRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
   for (const triangle of triangles) {
     const source=triangle.map(index=>basePoints[index]);
     const target=triangle.map(index=>targetPoints[index]);
     const transform=affineFromTriangles(source,target);
     if (!transform) continue;
-    context.save();
-    context.beginPath();
-    context.moveTo(target[0].x,target[0].y);
-    context.lineTo(target[1].x,target[1].y);
-    context.lineTo(target[2].x,target[2].y);
-    context.closePath();
-    context.clip();
-    context.setTransform(transform.a,transform.b,transform.c,transform.d,transform.e,transform.f);
-    context.drawImage(sourceCanvas,0,0);
-    context.restore();
+    const minX=Math.max(0,Math.floor(Math.min(source[0].x,source[1].x,source[2].x)));
+    const minY=Math.max(0,Math.floor(Math.min(source[0].y,source[1].y,source[2].y)));
+    const maxX=Math.min(CANVAS_WIDTH,Math.ceil(Math.max(source[0].x,source[1].x,source[2].x))+1);
+    const maxY=Math.min(CANVAS_HEIGHT,Math.ceil(Math.max(source[0].y,source[1].y,source[2].y))+1);
+    const sourceWidth=maxX-minX;
+    const sourceHeight=maxY-minY;
+    if (sourceWidth<1 || sourceHeight<1) continue;
+    faceLayerContext.save();
+    faceLayerContext.beginPath();
+    faceLayerContext.moveTo(target[0].x,target[0].y);
+    faceLayerContext.lineTo(target[1].x,target[1].y);
+    faceLayerContext.lineTo(target[2].x,target[2].y);
+    faceLayerContext.closePath();
+    faceLayerContext.clip();
+    faceLayerContext.setTransform(transform.a,transform.b,transform.c,transform.d,transform.e,transform.f);
+    // Draw only the source rectangle touched by this triangle, not the whole portrait.
+    faceLayerContext.drawImage(sourceCanvas,minX,minY,sourceWidth,sourceHeight,minX,minY,sourceWidth,sourceHeight);
+    faceLayerContext.restore();
   }
+  context.drawImage(faceLayer,0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
 }
 
 function drawMouthCavity(context, points, open) {
-  if (open<0.19 || !points[61] || !points[291] || !points[13] || !points[14]) return;
+  if (open<0.075 || !points[61] || !points[291] || !points[13] || !points[14]) return;
   const left=points[61], right=points[291], upper=points[13], lower=points[14];
   const width=Math.hypot(right.x-left.x,right.y-left.y);
   const centerX=(left.x+right.x)/2;
   const centerY=(upper.y+lower.y)/2;
-  const gap=Math.max(1,Math.abs(lower.y-upper.y));
-  const radiusX=Math.max(2,width*0.32);
-  const radiusY=Math.max(1,gap*0.36);
+  const radiusX=Math.max(2,width*0.34);
+  const radiusY=Math.max(0.8,width*0.115*open);
   context.save();
-  context.fillStyle="#2b1015";
+  context.fillStyle="#241015";
   context.beginPath();
   context.ellipse(centerX,centerY,radiusX,radiusY,0,0,Math.PI*2);
   context.fill();
   if (open>0.34) {
-    context.fillStyle="rgba(248,239,225,"+Math.min(0.9,open*0.92)+")";
+    context.fillStyle="rgba(248,239,225,"+Math.min(0.82,open*0.78)+")";
     context.beginPath();
-    context.ellipse(centerX,centerY-radiusY*0.35,radiusX*0.78,Math.max(0.7,radiusY*0.22),0,Math.PI,Math.PI*2);
+    context.ellipse(centerX,centerY-radiusY*0.46,radiusX*0.76,Math.max(0.7,radiusY*0.24),0,Math.PI,Math.PI*2);
     context.fill();
   }
   context.restore();
 }
 
 function drawFaceMesh(context, sourceCanvas, basePoints, targetPoints, triangles, state) {
-  drawWarpedPhoto(context,sourceCanvas,basePoints,targetPoints,triangles);
+  drawWarpedPhoto(context,sourceCanvas,basePoints,targetPoints,triangles,state.faceLayer,state.faceLayerContext);
   drawMouthCavity(context,targetPoints,state.mouthOpen);
 }
 
@@ -367,7 +383,7 @@ export async function mount(context) {
 
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
-    basePoints:null, triangles:[], faceLandmarker:null, engine:null,
+    basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null, motionPulse:0,
     voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
     boundaryCharacter:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
@@ -459,6 +475,7 @@ export async function mount(context) {
         if (!state.speechActive || !detail) return;
         const index=Math.max(0,finite(detail.charIndex,0));
         state.boundaryCharacter=Array.from(state.speechText.slice(0,index)).length;
+        state.motionPulse=1;
       }),
       state.engine.on("speechstart",detail=>{
         if (detail && typeof detail.text==="string") state.speechText=detail.text;
@@ -561,6 +578,11 @@ export async function mount(context) {
       state.baseCanvas=prepared.base;
       state.basePoints=points;
       state.triangles=mesh;
+      state.faceLayer=doc.createElement("canvas");
+      state.faceLayer.width=CANVAS_WIDTH;
+      state.faceLayer.height=CANVAS_HEIGHT;
+      state.faceLayerContext=state.faceLayer.getContext("2d",{alpha:true,desynchronized:true});
+      if (!state.faceLayerContext) throw new Error("चेहरे की animation layer उपलब्ध नहीं है।");
       const categories=result.faceBlendshapes && result.faceBlendshapes[0] && result.faceBlendshapes[0].categories;
       state.initialEyeBlink=(blendshapeValue(categories,"eyeBlinkLeft")+blendshapeValue(categories,"eyeBlinkRight"))/2;
       state.mouthOpen=0;
@@ -604,8 +626,14 @@ export async function mount(context) {
     const points=makeAnimatedPoints(state.basePoints,state,elapsedMs);
     drawFaceMesh(context2d,state.baseCanvas,state.basePoints,points,state.triangles,state);
     const seconds=elapsedMs/1000;
-    const bob=Math.sin(seconds*1.1)*1.1;
-    const tilt=Math.sin(seconds*0.62)*0.09;
+    const pulse=state.speechActive && !state.paused ? state.motionPulse : 0;
+    state.motionPulse*=0.90;
+    const bob=state.speechActive && !state.paused
+      ? Math.sin(seconds*5.4)*2.0+pulse*3.0+Math.sin(seconds*2.1)*0.9
+      : Math.sin(seconds*1.15)*2.2;
+    const tilt=state.speechActive && !state.paused
+      ? Math.sin(seconds*1.8)*0.24+pulse*0.16
+      : Math.sin(seconds*0.72)*0.20;
     canvas.style.transform="translate3d(0,"+bob.toFixed(2)+"px,0) rotate("+tilt.toFixed(3)+"deg)";
   }
 
@@ -614,7 +642,13 @@ export async function mount(context) {
     if (timestamp-state.lastFrame>=FRAME_INTERVAL) {
       state.lastFrame=timestamp;
       const elapsed=state.speechActive ? Math.max(0,win.performance.now()-state.speechStartedAt) : timestamp;
-      render(elapsed);
+      try { render(elapsed); }
+      catch (error) {
+        state.visible=false;
+        stopAnimation();
+        setStatus("अवतार animation में त्रुटि: "+(error && error.message || "Canvas rendering failed"),"error");
+        return;
+      }
     }
     state.raf=win.requestAnimationFrame(animationFrame);
   }
@@ -686,9 +720,11 @@ export async function mount(context) {
   function resetPhoto() {
     void stopSpeech();
     stopAnimation();
+    state.faceLayer=null;
+    state.faceLayerContext=null;
     if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
     state.photoUrl="";
-    state.image=null;state.baseCanvas=null;state.basePoints=null;state.triangles=[];
+    state.image=null;state.baseCanvas=null;state.basePoints=null;state.triangles=[];state.faceLayer=null;state.faceLayerContext=null;
     photoInput.value="";
     context2d.fillStyle="#090914";context2d.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
     setStatus("पहले सामने से ली गई स्पष्ट फोटो चुनें।");
@@ -795,10 +831,10 @@ export async function mount(context) {
 }
 
 export function selfTest() {
-  const points=[
+  const square=[
     {x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10},{x:5,y:5}
   ];
-  const triangles=triangulate(points);
+  const triangles=triangulate(square);
   const affine=affineFromTriangles(
     [{x:0,y:0},{x:10,y:0},{x:0,y:10}],
     [{x:2,y:3},{x:22,y:3},{x:2,y:33}]
@@ -807,6 +843,32 @@ export function selfTest() {
     x:affine.a*4+affine.c*5+affine.e,
     y:affine.b*4+affine.d*5+affine.f
   } : null;
+  const synthetic=Array.from({length:478},(_,index)=>{
+    const angle=(index/468)*Math.PI*2;
+    return {x:110+Math.cos(angle)*55,y:130+Math.sin(angle)*70,z:0};
+  });
+  const put=(index,x,y)=>{synthetic[index]={x,y,z:0};};
+  // Left and right eye contours with visible vertical apertures.
+  [[159,42],[158,40],[157,41],[173,43],[145,52],[153,54],[154,53],[155,51],
+   [386,42],[385,40],[384,41],[398,43],[374,52],[380,54],[381,53],[382,51]].forEach(([i,y],n)=>put(i,n<8?38+(n%4)*4:72+(n%4)*4,y));
+  put(33,36,47);put(133,52,47);put(362,70,47);put(263,86,47);
+  [468,469,470,471,472].forEach((i,n)=>put(i,44+(n%2),47+(n%3)*0.2));
+  [473,474,475,476,477].forEach((i,n)=>put(i,78+(n%2),47+(n%3)*0.2));
+  put(61,70,91);put(291,150,91);put(13,110,88);put(14,110,94);
+  const upper=[13,312,311,310,415,191,80,81,82];
+  const lower=[14,317,402,318,324,95,88,178,87];
+  upper.forEach((index,n)=>put(index,95+n*3.6,88+Math.sin(n/8)*0.6));
+  lower.forEach((index,n)=>put(index,95+n*3.6,94+Math.sin(n/8)*0.6));
+  const gazeState={speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:1,y:0},gazeMode:"center",rate:1};
+  const gazePoints=makeAnimatedPoints(synthetic,gazeState,900);
+  const blinkState={speechActive:false,paused:false,mouthOpen:0,blink:1,gaze:{x:0,y:0},gazeMode:"center",rate:1};
+  const blinkPoints=makeAnimatedPoints(synthetic,blinkState,900);
+  const mouthState={speechActive:true,paused:false,speechText:"आ",boundaryCharacter:0,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
+  const mouthPoints=makeAnimatedPoints(synthetic,mouthState,250);
+  const closedState={speechActive:true,paused:true,speechText:"आ",boundaryCharacter:0,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
+  const closedPoints=makeAnimatedPoints(synthetic,closedState,250);
+  const maxPointDelta=(left,right)=>Math.max(...left.map((point,index)=>Math.hypot(point.x-right[index].x,point.y-right[index].y)));
+  const mouthGap=(points)=>Math.abs(points[14].y-points[13].y);
   const checks=[
     {id:"delaunay-mesh-builds",passed:triangles.length>=4},
     {id:"affine-photo-warp",passed:Boolean(mapped && Math.abs(mapped.x-10)<1e-6 && Math.abs(mapped.y-18)<1e-6)},
@@ -814,7 +876,11 @@ export function selfTest() {
     {id:"bilabial-lip-closure",passed:characterMouthShape("म")<characterMouthShape("आ")},
     {id:"mouth-index-contract",passed:OUTER_MOUTH.includes(61) && OUTER_MOUTH.includes(291) && UPPER_MOUTH.includes(13) && LOWER_MOUTH.includes(14)},
     {id:"eye-iris-index-contract",passed:EYE_GROUPS.every(group=>group.iris.length===5 && group.upper.length===4 && group.lower.length===4)},
-    {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(Array.from({length:478},(_,index)=>({x:index%23,y:Math.floor(index/23),z:0})),{speechActive:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"},0).length===478},
+    {id:"gaze-produces-visible-iris-displacement",passed:Math.abs(gazePoints[468].x-synthetic[468].x)>4},
+    {id:"blink-closes-eye-landmarks",passed:Math.abs(blinkPoints[159].y-synthetic[159].y)>2 && Math.abs(blinkPoints[145].y-synthetic[145].y)>1},
+    {id:"speech-opens-photo-mouth",passed:mouthGap(mouthPoints)>mouthGap(synthetic)+3 && mouthState.mouthOpen>0},
+    {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && mouthGap(closedPoints)===mouthGap(synthetic)},
+    {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1},0).length===478},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
     {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"}
   ];
