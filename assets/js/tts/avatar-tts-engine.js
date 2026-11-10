@@ -108,6 +108,10 @@ function copyInventory(voices) {
   });
 }
 
+export function stripTrailingPunctuationForSpeech(value) {
+  return String(value == null ? "" : value).replace(/[，,;؛।॥.!?…]+$/u,"").trim();
+}
+
 export function punctuationPauseMs(mark) {
   const value = String(mark || "");
   if (value === "॥") return 780;
@@ -287,7 +291,8 @@ export function createAvatarTtsEngine(options = {}) {
         if (pending !== record || record.token !== token || record.settled) return;
         const part = parts[record.partIndex];
         if (!part) { finish(); return; }
-        const utterance = new Utterance(part.text);
+        const spokenText = stripTrailingPunctuationForSpeech(part.text) || part.text;
+        const utterance = new Utterance(spokenText);
         utterance.voice = voice;
         utterance.lang = String(voice.lang || (normalizeLanguageTag(voice.lang)==="sa" ? "sa-IN" : "hi-IN"));
         utterance.rate = rate;
@@ -437,6 +442,7 @@ export function selfTest() {
     { id: "full-stop-pause-is-longer-than-comma", passed: punctuationPauseMs("।") > punctuationPauseMs(",") && punctuationPauseMs(".") === punctuationPauseMs("।") },
     { id: "verse-pause-is-longest", passed: punctuationPauseMs("॥") > punctuationPauseMs("।") },
     { id: "punctuation-split-retains-marks", passed: splitSpeechAtPunctuation("नमस्ते, संसार।")[0]?.punctuation === "," && splitSpeechAtPunctuation("नमस्ते, संसार।")[1]?.punctuation === "।" },
+    { id: "tts-segment-strips-terminal-mark-before-timed-pause", passed: stripTrailingPunctuationForSpeech("नमस्ते,") === "नमस्ते" && stripTrailingPunctuationForSpeech("संसार।") === "संसार" && stripTrailingPunctuationForSpeech("मन्त्र॥") === "मन्त्र" },
     { id: "voice-key-is-stable", passed: localHindi.key === "local-hi" },
     { id: "sample-texts-available", passed: SAMPLE_TEXT.hi.length > 0 && SAMPLE_TEXT.sa.length > 0 }
   ];
