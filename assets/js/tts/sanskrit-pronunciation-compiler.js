@@ -12,7 +12,7 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.0";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.1";
 export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-07";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
@@ -28,6 +28,52 @@ const CONFIDENCE_STATES = new Set(["verified", "fallback", "ambiguous"]);
  * IPA, voice-cloning, or a claim of verified recitation; they require device listening.
  */
 const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
+  Object.freeze({ id: "shiv-tandava-compound-01", term: "जटाटवीगलज्जलप्रवाहपावितस्थले", nativeSpeechText: "जटाटवी गलज्जल प्रवाह पावित स्थले" }),
+  Object.freeze({ id: "shiv-tandava-compound-02", term: "तुङ्गमालिकाम्", nativeSpeechText: "तुङ्ग मालिकाम्" }),
+  Object.freeze({ id: "shiv-tandava-compound-03", term: "चण्डताण्डवं", nativeSpeechText: "चण्ड ताण्डवं" }),
+  Object.freeze({ id: "shiv-tandava-compound-04", term: "जटाकटाहसम्भ्रमभ्रमन्निलिम्पनिर्झरी", nativeSpeechText: "जटा कटाह सम्भ्रम भ्रमन् निलिम्प निर्झरी" }),
+  Object.freeze({ id: "shiv-tandava-compound-05", term: "विलोलवीचिवल्लरीविराजमानमूर्धनि", nativeSpeechText: "विलोल वीचि वल्लरी विराजमान मूर्धनि" }),
+  Object.freeze({ id: "shiv-tandava-compound-06", term: "किशोरचन्द्रशेखरे", nativeSpeechText: "किशोर चन्द्र शेखरे" }),
+  Object.freeze({ id: "shiv-tandava-compound-07", term: "धराधरेन्द्रनन्दिनीविलासबन्धुबन्धुर", nativeSpeechText: "धराधरेन्द्र नन्दिनी विलास बन्धु बन्धुर" }),
+  Object.freeze({ id: "shiv-tandava-compound-08", term: "स्फुरद्दिगन्तसन्ततिप्रमोदमानमानसे", nativeSpeechText: "स्फुरद् दिगन्त सन्तति प्रमोदमान मानसे" }),
+  Object.freeze({ id: "shiv-tandava-compound-09", term: "कृपाकटाक्षधोरणीनिरुद्धदुर्धरापदि", nativeSpeechText: "कृपा कटाक्ष धोरणी निरुद्ध दुर्धरापदि" }),
+  Object.freeze({ id: "shiv-tandava-compound-10", term: "क्वचिद्दिगम्बरे", nativeSpeechText: "क्वचिद् दिगम्बरे" }),
+  Object.freeze({ id: "shiv-tandava-compound-11", term: "पिङ्गलस्फुरत्फणा", nativeSpeechText: "पिङ्गल स्फुरत् फणा" }),
+  Object.freeze({ id: "shiv-tandava-compound-12", term: "कदम्बकुङ्कुमद्रवप्रलिप्तदिग्वधूमुखे", nativeSpeechText: "कदम्ब कुङ्कुम द्रव प्रलिप्त दिग्वधू मुखे" }),
+  Object.freeze({ id: "shiv-tandava-compound-13", term: "मदान्धसिन्धुरस्फुरत्त्वगुत्तरीयमेदुरे", nativeSpeechText: "मदान्ध सिन्धुर स्फुरत् त्वगुत्तरीय मेदुरे" }),
+  Object.freeze({ id: "shiv-tandava-compound-14", term: "विनोदमद्भुतं", nativeSpeechText: "विनोद मद्भुतं" }),
+  Object.freeze({ id: "shiv-tandava-compound-15", term: "सहस्रलोचनप्रभृत्यशेषलेखशेखर", nativeSpeechText: "सहस्र लोचन प्रभृत्यशेष लेख शेखर" }),
+  Object.freeze({ id: "shiv-tandava-compound-16", term: "प्रसूनधूलिधोरणीविधूसराङ्घ्रिपीठभूः", nativeSpeechText: "प्रसून धूलि धोरणी विधूसराङ्घ्रि पीठ भूः" }),
+  Object.freeze({ id: "shiv-tandava-compound-17", term: "चकोरबन्धुशेखरः", nativeSpeechText: "चकोर बन्धु शेखरः" }),
+  Object.freeze({ id: "shiv-tandava-compound-18", term: "ललाटचत्वरज्वलद्धनञ्जयस्फुलिङ्गभा", nativeSpeechText: "ललाट चत्वर ज्वलद् धनञ्जय स्फुलिङ्ग भा" }),
+  Object.freeze({ id: "shiv-tandava-compound-19", term: "निपीतपञ्चसायकं", nativeSpeechText: "निपीत पञ्च सायकं" }),
+  Object.freeze({ id: "shiv-tandava-compound-20", term: "नमन्निलिम्पनायकम्", nativeSpeechText: "नमन् निलिम्प नायकम्" }),
+  Object.freeze({ id: "shiv-tandava-compound-21", term: "सुधामयूखलेखया", nativeSpeechText: "सुधा मयूख लेखया" }),
+  Object.freeze({ id: "shiv-tandava-compound-22", term: "विराजमानशेखरं", nativeSpeechText: "विराजमान शेखरं" }),
+  Object.freeze({ id: "shiv-tandava-compound-23", term: "महाकपालिसम्पदे", nativeSpeechText: "महाकपालि सम्पदे" }),
+  Object.freeze({ id: "shiv-tandava-compound-24", term: "नवीनमेघमण्डलीनिरुद्धदुर्धरस्फुरत्", nativeSpeechText: "नवीन मेघ मण्डली निरुद्ध दुर्धर स्फुरत्" }),
+  Object.freeze({ id: "shiv-tandava-compound-25", term: "कुहूनिशीथिनीतमःप्रबन्धबद्धकन्धरः", nativeSpeechText: "कुहू निशीथिनी तमः प्रबन्ध बद्ध कन्धरः" }),
+  Object.freeze({ id: "shiv-tandava-compound-26", term: "कृत्तिसिन्धुरः", nativeSpeechText: "कृत्ति सिन्धुरः" }),
+  Object.freeze({ id: "shiv-tandava-compound-27", term: "कलानिधानबन्धुरः", nativeSpeechText: "कला निधान बन्धुरः" }),
+  Object.freeze({ id: "shiv-tandava-compound-28", term: "जगद्धुरन्धरः", nativeSpeechText: "जगद् धुरन्धरः" }),
+  Object.freeze({ id: "shiv-tandava-compound-29", term: "प्रफुल्लनीलपङ्कजप्रपञ्चकालिमप्रभावलम्बिकण्ठकन्दलीरुचिप्रबद्धकन्धरम्", nativeSpeechText: "प्रफुल्ल नील पङ्कज प्रपञ्च कालिम प्रभा वलम्बि कण्ठ कन्दली रुचि प्रबद्ध कन्धरम्" }),
+  Object.freeze({ id: "shiv-tandava-compound-30", term: "अखर्वसर्वमङ्गलाकलाकदम्बमञ्जरी", nativeSpeechText: "अखर्व सर्वमङ्गला कला कदम्ब मञ्जरी" }),
+  Object.freeze({ id: "shiv-tandava-compound-31", term: "रसप्रवाहमाधुरीविजृम्भणामधुव्रतम्", nativeSpeechText: "रस प्रवाह माधुरी विजृम्भणा मधुव्रतम्" }),
+  Object.freeze({ id: "shiv-tandava-compound-32", term: "विनिर्गमत्क्रमस्फुरत्करालभालहव्यवाट्", nativeSpeechText: "विनिर्गमत् क्रम स्फुरत् कराल भाल हव्यवाट्" }),
+  Object.freeze({ id: "shiv-tandava-compound-33", term: "ध्वनिक्रमप्रवर्तितप्रचण्डताण्डवः", nativeSpeechText: "ध्वनि क्रम प्रवर्तित प्रचण्ड ताण्डवः" }),
+  Object.freeze({ id: "shiv-tandava-compound-34", term: "गरिष्ठरत्नलोष्ठयोः", nativeSpeechText: "गरिष्ठ रत्न लोष्ठयोः" }),
+  Object.freeze({ id: "shiv-tandava-compound-35", term: "सुहृद्विपक्षपक्षयोः", nativeSpeechText: "सुहृद् विपक्ष पक्षयोः" }),
+  Object.freeze({ id: "shiv-tandava-compound-36", term: "तृणारविन्दचक्षुषोः", nativeSpeechText: "तृणारविन्द चक्षुषोः" }),
+  Object.freeze({ id: "shiv-tandava-compound-37", term: "प्रजामहीमहेन्द्रयोः", nativeSpeechText: "प्रजा मही महेन्द्रयोः" }),
+  Object.freeze({ id: "shiv-tandava-compound-38", term: "समप्रवृत्तिकः", nativeSpeechText: "सम प्रवृत्तिकः" }),
+  Object.freeze({ id: "shiv-tandava-compound-39", term: "निलिम्पनिर्झरीनिकुञ्जकोटरे", nativeSpeechText: "निलिम्प निर्झरी निकुञ्ज कोटरे" }),
+  Object.freeze({ id: "shiv-tandava-compound-40", term: "विमुक्तदुर्मतिः", nativeSpeechText: "विमुक्त दुर्मतिः" }),
+  Object.freeze({ id: "shiv-tandava-compound-41", term: "विमुक्तलोललोचनो", nativeSpeechText: "विमुक्त लोल लोचनो" }),
+  Object.freeze({ id: "shiv-tandava-compound-42", term: "ललामभाललग्नकः", nativeSpeechText: "ललाम भाल लग्नकः" }),
+  Object.freeze({ id: "shiv-tandava-compound-43", term: "दशवक्त्रगीतं", nativeSpeechText: "दश वक्त्र गीतं" }),
+  Object.freeze({ id: "shiv-tandava-compound-44", term: "शम्भुपूजनपरं", nativeSpeechText: "शम्भु पूजन परं" }),
+  Object.freeze({ id: "shiv-tandava-compound-45", term: "रथगजेन्द्रतुरङ्गयुक्तां", nativeSpeechText: "रथ गजेन्द्र तुरङ्ग युक्तां" }),
+
   Object.freeze({ id: "rudrashtaka-final-anusvara-nirvanarupam", term: "निर्वाणरूपं", nativeSpeechText: "निर्वाणरूपम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-nijam", term: "निजं", nativeSpeechText: "निजम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-niriham", term: "निरीहं", nativeSpeechText: "निरीहम्" }),
@@ -308,8 +354,7 @@ function validateLexiconEntryForSpeech(entry, selectedVoiceProfile) {
     ? entry.nativeSpeechText.trim()
     : "";
   if (!nativeSpeechText ||
-      !DEVANAGARI_TOKEN.test(nativeSpeechText) ||
-      /\s/u.test(nativeSpeechText)) {
+      !nativeSpeechText.split(/\s+/u).every(part => DEVANAGARI_TOKEN.test(part))) {
     reasons.push("native-speech-text-invalid");
   }
 
@@ -711,7 +756,7 @@ export function validateCompiledSpeech(compiled) {
         if (!isNonEmptyString(segment.ruleId) || !isNonEmptyString(segment.entryId) ||
             !isObject(segment.source) || !isObject(segment.documentSource) ||
             !isNonEmptyString(segment.documentVersion)) errors.push("replacement-provenance-incomplete");
-        if (!DEVANAGARI_TOKEN.test(outputText) || /\s/u.test(outputText)) errors.push("replacement-output-is-not-a-single-devanagari-token");
+        if (!outputText.split(/\s+/u).every(part => DEVANAGARI_TOKEN.test(part))) errors.push("replacement-output-is-not-devanagari-word-sequence");
       }
 
       sourceCursor = segment.sourceEndUtf16;
@@ -1418,6 +1463,20 @@ export function selfTest() {
     check("compatibility-is-limited-to-hi-in-voice", sanskritLocaleCompatibility.speechText === compatibilityInput &&
       !sanskritLocaleCompatibility.modified);
 
+    const shivaCompoundInput = "जटाटवीगलज्जलप्रवाहपावितस्थले विलोलवीचिवल्लरीविराजमानमूर्धनि"; 
+    const shivaCompound = compile(shivaCompoundInput, []);
+    check("shiv-tandava-long-compounds-get-recitation-chunks",
+      shivaCompound.speechText === "जटाटवी गलज्जल प्रवाह पावित स्थले विलोल वीचि वल्लरी विराजमान मूर्धनि" &&
+      shivaCompound.appliedRules.length === 2);
+    check("shiv-tandava-chunking-preserves-original-text",
+      shivaCompound.originalText === shivaCompoundInput &&
+      shivaCompound.modified &&
+      validateCompiledSpeech(shivaCompound).valid &&
+      shivaCompound.appliedRules.every(rule =>
+        [...rule.originalForm].join("") === [...rule.nativeSpeechText.replace(/\\s+/gu, "")].join("")));
+    const shivaDamaru = compile("डमड्डमड्डमड्डमन्निनादवड्डमर्वयं", []);
+    check("shiv-tandava-damaru-onomatopoeia-remains-unchanged",
+      shivaDamaru.speechText === "डमड्डमड्डमड्डमन्निनादवड्डमर्वयं" && !shivaDamaru.modified);
     check("diagnostics-contract", getCompilerDiagnostics(exact).outputValidation.valid === true);
   } catch (_) {
     check("self-test-unexpected-exception", false);
