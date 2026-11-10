@@ -554,12 +554,16 @@ function buildSourceMap(originalText, replacements) {
 
 
 function compileNativeHiTtsCompatibility(originalText, selectedVoiceProfile, analysis = null) {
+  const locale = normalizeLocale(selectedVoiceProfile && selectedVoiceProfile.locale);
   if (!selectedVoiceProfile ||
-      normalizeLocale(selectedVoiceProfile.locale) !== "hi-in" ||
+      !["hi-in", "sa-in"].includes(locale) ||
       selectedVoiceProfile.localService !== true) return null;
 
   const tokens = tokenizeWithOffsets(originalText);
-  const rulesByTerm = new Map(NATIVE_HI_TTS_COMPATIBILITY_RULES.map(rule => [
+  const applicableRules = NATIVE_HI_TTS_COMPATIBILITY_RULES.filter(rule =>
+    rule.id.startsWith("shiv-tandava-compound-") || locale === "hi-in"
+  );
+  const rulesByTerm = new Map(applicableRules.map(rule => [
     normalizeTextToken(rule.term), rule
   ]));
   const documentId = "native-hi-tts-compatibility-rules";
@@ -572,7 +576,7 @@ function compileNativeHiTtsCompatibility(originalText, selectedVoiceProfile, ana
     reportedReference: null,
     primarySourceVerified: false,
     sourceReviewStatus: "needs-review",
-    sourceNote: "यह वाचन-रूप केवल उपयोगकर्ता द्वारा रिपोर्ट किए गए Hindi Native TTS दोषों के लिए परीक्षणार्थ है; यह संस्कृत वर्तनी/पाठ का संशोधन या प्रमाणित IPA नहीं है।",
+    sourceNote: "यह सीमित स्थानीय Native TTS वाचन-सहायता है; यह संस्कृत वर्तनी/मूल पाठ का संशोधन या प्रमाणित IPA नहीं है।",
     primarySource: null
   };
   const documentSource = {
@@ -653,7 +657,7 @@ function compileNativeHiTtsCompatibility(originalText, selectedVoiceProfile, ana
     warnings: [
       makeWarning(
         "NATIVE_HI_TTS_COMPATIBILITY_TRIAL",
-        "Hindi स्थानीय Voice के लिए exact शब्द-मिलान का परीक्षणार्थ वाचन-रूप लागू हुआ। वास्तविक ध्वनि की पुष्टि डिवाइस पर श्रवण से ही होगी।",
+        "स्थानीय हिन्दी/संस्कृत Voice के लिए exact शब्द-मिलान और सुरक्षित समास-खंडन का परीक्षणार्थ वाचन-रूप लागू हुआ। वास्तविक ध्वनि की पुष्टि डिवाइस पर श्रवण से ही होगी।",
         "warning",
         { locale: selectedVoiceProfile.locale, voiceURI: selectedVoiceProfile.voiceURI || null }
       )
@@ -1457,6 +1461,14 @@ export function selfTest() {
     const compatibilityNearMatch = compile("निर्वाणरूपंकार", []);
     check("compatibility-does-not-rewrite-substrings", compatibilityNearMatch.speechText === "निर्वाणरूपंकार" &&
       !compatibilityNearMatch.modified);
+    const sanskritCompoundInput = "जटाटवीगलज्जलप्रवाहपावितस्थले";
+    const sanskritCompound = compile(sanskritCompoundInput, [], {
+      voice: { ...voice, lang: "sa-IN" }
+    });
+    check("sanskrit-local-voice-gets-compound-chunking",
+      sanskritCompound.speechText === "जटाटवी गलज्जल प्रवाह पावित स्थले" &&
+      sanskritCompound.modified &&
+      validateCompiledSpeech(sanskritCompound).valid);
     const sanskritLocaleCompatibility = compile(compatibilityInput, [], {
       voice: { ...voice, lang: "sa-IN" }
     });
