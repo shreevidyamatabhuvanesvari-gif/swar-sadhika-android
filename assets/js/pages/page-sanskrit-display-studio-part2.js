@@ -782,20 +782,7 @@ function getPlaybackItemsFromLines(lines) {
   return items.filter(item => item.speechLine.length > 0);
 }
 
-function getPlaybackItemsFromLines(lines) {
-  const items = [];
-  for (const displayLine of lines) {
-    if (isStandaloneVerseNumber(displayLine)) {
-      if (items.length) items[items.length - 1].displayLine += " " + displayLine.trim();
-      continue;
-    }
-    items.push({
-      displayLine,
-      speechLine: stripVerseNumberForSpeech(displayLine)
-    });
-  }
-  return items.filter(item => item.speechLine.length > 0);
-}
+
 
 async function beginPlayback(options = {}) {
   if (!state.engineReady) throw new Error("Native TTS Engine अभी तैयार नहीं है।");
