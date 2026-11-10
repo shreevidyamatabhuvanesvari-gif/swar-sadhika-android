@@ -2,7 +2,8 @@
  * The selected clip stays unmuted and loops until Native TTS finishes the full text.
  * The caption is a single, normal-weight line that follows Native TTS boundary events.
  */
-import { createAvatarTtsEngine, SOFT_YOUNG_FEMININE_PRESET } from "../tts/avatar-tts-engine.js";
+import { createTtsEngine } from "../tts/tts-engine.js";
+import { SOFT_YOUNG_FEMININE_PRESET } from "../tts/avatar-tts-engine.js";
 
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const PORTRAIT_RATIO = 9 / 16;
@@ -176,6 +177,40 @@ export async function mount(context) {
     refreshVoiceButton.disabled = !state.engine;
   }
 
+  function normalizeVoiceKey(voice) {
+    return String(voice && (voice.voiceURI || voice.name + "|" + voice.lang) || "");
+  }
+
+  async function refreshVoices() {
+    if (!state.engine || state.destroyed) return;
+    try {
+      const [hindi, sanskrit] = await Promise.all([
+        state.engine.getVoices({language:"hi"}),
+        state.engine.getVoices({language:"sa"})
+      ]);
+      const all = Array.from(new Map([...hindi, ...sanskrit].map(voice => [normalizeVoiceKey(voice), voice])).values());
+      const selectable = all.filter(voice => voice && voice.localService === true).map(voice => ({
+        key:normalizeVoiceKey(voice),
+        name:String(voice.name || "स्थानीय आवाज़"),
+        lang:String(voice.lang || ""),
+        language:String(voice.lang || "").toLowerCase().startsWith("sa") ? "sa" : "hi",
+        default:Boolean(voice.default),
+        femaleHint:"स्वर-प्रकार की पुष्टि सुनकर करें",
+        nativeVoice:voice
+      }));
+      state.voiceInventory = {
+        selectable,
+        informational:[],
+        message:selectable.length
+          ? "स्थानीय संस्कृत/हिन्दी TTS तैयार है। चयनित आवाज़ ऐप के संस्कृत Pronunciation Compiler से होकर पढ़ेगी।"
+          : "इस डिवाइस पर स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं है। Android TTS में स्थानीय आवाज़ स्थापित करें।"
+      };
+      fillVoices();
+    } catch (error) {
+      setVoiceStatus("आवाज़ सूची पढ़ने में त्रुटि: " + safeMessage(error, "अज्ञात त्रुटि"), "error");
+    }
+  }
+
   function fillVoices() {
     const previous = voiceSelect.value;
     const inventory = state.voiceInventory || {selectable:[], informational:[], message:"आवाज़ सूची उपलब्ध नहीं है।"};
@@ -203,33 +238,15 @@ export async function mount(context) {
       const preferred = state.voices.find(item => item.default) || state.voices[0];
       voiceSelect.value = preferred.key;
     }
-    const informational = Array.from(inventory.informational || []);
-    if (informational.length) {
-      const group = doc.createElement("optgroup");
-      group.label = "जानकारी मात्र · offline playback के लिए चयन योग्य नहीं";
-      for (const item of informational) {
-        const option = doc.createElement("option");
-        option.value = "";
-        option.disabled = true;
-        option.textContent = item.name + " · " + item.lang + " · " + item.localityLabel;
-        group.appendChild(option);
-      }
-      voiceSelect.appendChild(group);
-    }
     setVoiceStatus(inventory.message, state.voices.length ? "success" : "error");
     updateControls();
   }
 
   async function initializeSpeech() {
-    state.engine = createAvatarTtsEngine({target:win});
+    state.engine = createTtsEngine({target:win,defaultLanguage:"sa",autoLoadKnowledge:false});
     state.unsubscribers.push(
-      state.engine.on("voiceschanged", () => {
-        state.voiceInventory = state.engine.getInventory();
-        fillVoices();
-      }),
       state.engine.on("speechstart", detail => {
         if (!state.reading) return;
-        // Each speak() request carries exactly one line, so only that line is shown.
         state.speechText = detail && detail.text ? detail.text : state.speechText;
         state.boundaryCharacter = 0;
         captionText.textContent = state.speechText;
@@ -248,23 +265,12 @@ export async function mount(context) {
       })
     );
     const initialized = await state.engine.initialize();
-    state.voiceInventory = initialized.inventory;
-    if (!initialized.ready) {
-      setVoiceStatus("इस browser में Native SpeechSynthesis उपलब्ध नहीं है।", "error");
+    if (!initialized || initialized.phase !== "ready") {
+      setVoiceStatus("स्थानीय Native TTS तैयार नहीं हुआ। Android TTS में Hindi/Sanskrit आवाज़ जाँचें।", "error");
       updateControls();
       return;
     }
-    fillVoices();
-  }
-
-  async function refreshVoices() {
-    if (!state.engine || state.destroyed) return;
-    try {
-      state.voiceInventory = await state.engine.refreshVoices();
-      fillVoices();
-    } catch (error) {
-      setVoiceStatus("आवाज़ सूची पढ़ने में त्रुटि: " + safeMessage(error, "अज्ञात त्रुटि"), "error");
-    }
+    await refreshVoices();
   }
 
   function setVideoFile() {
@@ -386,7 +392,8 @@ export async function mount(context) {
       caption.hidden = false;
       try {
         const result = await state.engine.speak(lines[index], {
-          voiceKey:voice.key,
+          voice:voice.nativeVoice,
+          language:voice.language,
           rate,
           pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,
           volume:SOFT_YOUNG_FEMININE_PRESET.volume,
