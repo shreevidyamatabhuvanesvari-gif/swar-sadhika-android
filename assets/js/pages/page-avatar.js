@@ -352,7 +352,7 @@ export async function mount(context) {
     '   <label class="avatar-field">स्थानीय Hindi/Sanskrit आवाज़<select id="photo-avatar-voice"><option value="">आवाज़ सूची पढ़ी जा रही है…</option></select></label>',
     '   <div class="avatar-actions"><button id="photo-avatar-refresh-voices" class="btn" type="button">↻ आवाज़ सूची ताज़ा करें</button><button id="photo-avatar-test-voice" class="btn" type="button" disabled>♪ आवाज़ का नमूना सुनें</button></div>',
     '   <div id="photo-avatar-voice-status" class="avatar-status" role="status" aria-live="polite">Android की वास्तविक आवाज़ सूची जाँची जा रही है…</div>',
-    '   <div class="avatar-note">स्वर-प्रीसेट: कोमल युवा स्त्री-शैली · विराम-चिह्नों पर स्थानीय कृत्रिम श्वास-ध्वनि। वास्तविक आयु या प्राकृतिक रिकॉर्ड की हुई साँस का दावा नहीं।</div>',
+    '   <div class="avatar-note">स्वर-प्रीसेट: कोमल युवा स्त्री-शैली · अल्पविराम और पूर्ण विराम पर स्वाभाविक ठहराव।</div>',
     '   <div class="avatar-tuning">',
     '    <label class="avatar-field">वाचन गति <span id="photo-avatar-rate-value">0.88×</span><input id="photo-avatar-rate" type="range" min="0.65" max="1.15" step="0.05" value="0.88"></label>',
     '    <label class="avatar-field">दृष्टि <select id="photo-avatar-gaze"><option value="auto">स्वाभाविक स्वतः</option><option value="left">बाईं ओर</option><option value="center">सामने</option><option value="right">दाईं ओर</option></select></label>',
@@ -390,7 +390,7 @@ export async function mount(context) {
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
     basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null, motionPulse:0,
-    voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0, breathAvailable:null,
+    voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
     boundaryCharacter:0, speechElapsedMs:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
     gazeTarget:0, lastFrame:0, raf:0, lastStatus:"", unsubscribers:[]
@@ -495,8 +495,6 @@ export async function mount(context) {
       state.engine.on("speechend",()=>{ state.speechActive=false; state.paused=false; state.speechElapsedMs=0; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speechcancel",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speecherror",detail=>{ state.speechActive=false; state.paused=false; setStatus(detail && detail.message || "वाचन त्रुटि।","error"); updateButtons(); }),
-      state.engine.on("breathunavailable",()=>{ state.breathAvailable=false; setVoiceStatus("इस browser में कृत्रिम श्वास-ध्वनि उपलब्ध नहीं है; Native TTS वाचन जारी रहेगा।","error"); }),
-      state.engine.on("breathstart",detail=>{ state.breathAvailable=true; setVoiceStatus((detail && detail.phase==="inhale" ? "हल्की श्वास अंदर लेने की ध्वनि…" : "हल्की श्वास छोड़ने की ध्वनि…"),"success"); }),
       state.engine.on("pause",()=>{ state.paused=true; updateButtons(); }),
       state.engine.on("resume",()=>{ state.paused=false; state.speechStartedAt=win.performance.now(); updateButtons(); })
     );
@@ -528,7 +526,7 @@ export async function mount(context) {
     }
     try {
       const result=await state.engine.playSample(selected.key,{...SOFT_YOUNG_FEMININE_PRESET,rate:finite(rateInput.value,SOFT_YOUNG_FEMININE_PRESET.rate)});
-      if (result.status==="ended") setVoiceStatus("नमूना पूरा हुआ: कोमल युवा स्त्री-शैली और विरामों पर कृत्रिम श्वास-ध्वनि। स्वर की गुणवत्ता सुनकर पुष्टि करें।","success");
+      if (result.status==="ended") setVoiceStatus("नमूना पूरा हुआ: कोमल युवा स्त्री-शैली और विराम-चिह्नों पर स्वाभाविक ठहराव। स्वर की गुणवत्ता सुनकर पुष्टि करें।","success");
     } catch (error) {
       setVoiceStatus("आवाज़ का नमूना नहीं चल सका: "+(error && error.message || "Native TTS त्रुटि"),"error");
     }
@@ -684,7 +682,7 @@ export async function mount(context) {
     updateButtons();
     try {
       const result=await state.engine.speak(text,{
-        voiceKey:voice.key,rate:state.rate,pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,volume:SOFT_YOUNG_FEMININE_PRESET.volume,breathLevel:SOFT_YOUNG_FEMININE_PRESET.breathLevel,replace:true
+        voiceKey:voice.key,rate:state.rate,pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,volume:SOFT_YOUNG_FEMININE_PRESET.volume,replace:true
       });
       if (result && result.status==="cancelled") state.speechActive=false;
     } catch (error) {
