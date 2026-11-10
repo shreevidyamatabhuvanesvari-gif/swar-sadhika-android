@@ -743,8 +743,14 @@ function currentVoice() {
   return Number.isInteger(selected) && state.voices[selected] ? state.voices[selected] : state.selectedVoice;
 }
 
+function normalizeSpeechLineBreaks(value) {
+  return String(value || "").replace(/[-‐‑][ \t]*\r?\n[ \t]*/gu, "");
+}
+
 function getLines() {
-  return byId("studio-text").value.split(/\r?\n/u).filter(line => line.trim().length > 0);
+  return normalizeSpeechLineBreaks(byId("studio-text").value)
+    .split(/\r?\n/u)
+    .filter(line => line.trim().length > 0);
 }
 
 async function beginPlayback(options = {}) {
@@ -1208,6 +1214,10 @@ export function selfTest() {
     { id: "native-engine", passed: typeof createTtsEngine === "function" },
     { id: "grapheme-segmentation", passed: sample.length > 0 && sample.map(item => item.text).join("") === "क्षि" },
     { id: "text-limit", passed: MAX_TEXT_LENGTH === 12000 },
+    { id: "hyphenated-compound-line-join", passed:
+      normalizeSpeechLineBreaks("ज्वल-\nद्धनञ्जय") === "ज्वलद्धनञ्जय" &&
+      normalizeSpeechLineBreaks("प्रभा-\nवलम्बि") === "प्रभावलम्बि" &&
+      normalizeSpeechLineBreaks("सामान्य\nपंक्ति") === "सामान्य\nपंक्ति" },
     { id: "looping-video", passed: video.loop === true },
     { id: "shape-aware-wrapping", passed: typeof wrapShapedText === "function" &&
       wrapShapedText("क्षि ज्ञ त्र्य", CANVAS_WIDTH, "700 44px sans-serif").join(" ") === "क्षि ज्ञ त्र्य" },
