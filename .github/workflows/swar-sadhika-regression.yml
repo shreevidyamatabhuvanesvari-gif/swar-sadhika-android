@@ -49,12 +49,16 @@ jobs:
           import { selfTest as testSanskritG2P } from "./assets/js/tts/sanskrit-g2p-engine.js";
           import { selfTest as testPronunciationCompiler } from "./assets/js/tts/sanskrit-pronunciation-compiler.js";
           import { selfTest as testTtsEngine } from "./assets/js/tts/tts-engine.js";
+          import { selfTest as testAvatarTtsEngine, runIntegrationSelfTest as testAvatarTtsIntegration } from "./assets/js/tts/avatar-tts-engine.js";
+          import { selfTest as testAvatarPage } from "./assets/js/pages/page-avatar.js";
 
           const suites = [
             ["Vedic pronunciation", testVedicPronunciation],
             ["Sanskrit G2P", testSanskritG2P],
             ["Pronunciation compiler", testPronunciationCompiler],
-            ["TTS engine", testTtsEngine]
+            ["TTS engine", testTtsEngine],
+            ["Avatar TTS engine", testAvatarTtsEngine],
+            ["Avatar page", testAvatarPage]
           ];
 
           let failed = false;
@@ -75,6 +79,20 @@ jobs:
                 if (!check.passed) console.error(`  - ${check.id}`);
               }
             }
+          }
+          try {
+            const result = await testAvatarTtsIntegration();
+            const passed = result?.status === "PASSED" && result?.failed === 0;
+            console.log(`${passed ? "PASS" : "FAIL"} Avatar TTS integration: ${result?.passed ?? 0}/${result?.total ?? 0}`);
+            if (!passed) {
+              failed = true;
+              for (const check of result?.checks || []) {
+                if (!check.passed) console.error(`  - ${check.id}`);
+              }
+            }
+          } catch (error) {
+            console.error(`FAIL Avatar TTS integration: ${error?.stack || error}`);
+            failed = true;
           }
           if (failed) process.exitCode = 1;
           NODE
