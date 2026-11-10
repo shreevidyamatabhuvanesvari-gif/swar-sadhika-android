@@ -2,16 +2,18 @@
  * Uses only the device's SpeechSynthesis inventory. No model, API, worker or server.
  * Only verified local Hindi/Sanskrit voices are selectable for offline playback.
  */
-export const AVATAR_TTS_ENGINE_VERSION = "1.0.0";
+export const AVATAR_TTS_ENGINE_VERSION = "1.1.0";
+// Gentle, youthful-feminine delivery controls; age is not measurable from a device voice.
+export const SOFT_YOUNG_FEMININE_PRESET = Object.freeze({rate:0.88,pitch:1.14,volume:0.98,breathLevel:0.19});
 const SUPPORTED_LANGUAGES = new Set(["hi", "sa"]);
 const FEMALE_NAME_HINTS = /(?:female|woman|girl|zira|samantha|susan|heera|lekha|swara|kavya)/i;
 const SAMPLE_TEXT = Object.freeze({
-  hi: "नमस्कार। यह स्वर-साधिका अवतार की आवाज़ का नमूना है।",
-  sa: "ॐ नमः शिवाय। शान्तिः शान्तिः शान्तिः।"
+  hi: "नमस्कार, मैं स्वर-साधिका हूँ। आइए, मधुर स्वर में पाठ आरम्भ करें।",
+  sa: "ॐ नमः शिवाय। शान्तिः, शान्तिः, शान्तिः।"
 });
 const EVENT_NAMES = new Set([
   "voiceschanged", "speechrequest", "speechstart", "boundary", "speechend",
-  "speechcancel", "speecherror", "pause", "resume", "warning"
+  "speechcancel", "speecherror", "pause", "resume", "breathstart", "breathend", "breathunavailable", "warning"
 ]);
 
 function normalizeLanguageTag(value) {
@@ -36,6 +38,33 @@ function clamp(value, min, max, fallback) {
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
 }
 
+export function splitSpeechAtBreathMarks(value) {
+  const text = String(value == null ? "" : value);
+  const parts = [];
+  const commaMarks = new Set([",", "，", ";", "؛"]);
+  const sentenceMarks = new Set(["।", "॥", ".", "!", "?", "…"]);
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const mark = text[index];
+    if (!commaMarks.has(mark) && !sentenceMarks.has(mark)) continue;
+    const raw = text.slice(start, index + 1);
+    const leading = raw.search(/\S/u);
+    if (leading >= 0) {
+      parts.push(Object.freeze({
+        text: raw.trim(), start: start + leading,
+        punctuation: mark, breathKind: commaMarks.has(mark) ? "comma" : "sentence"
+      }));
+    }
+    start = index + 1;
+  }
+  const tail = text.slice(start);
+  const leading = tail.search(/\S/u);
+  if (leading >= 0) {
+    parts.push(Object.freeze({text:tail.trim(),start:start+leading,punctuation:"",breathKind:""}));
+  }
+  return Object.freeze(parts);
+}
+
 export function inspectAvatarTtsVoice(voice) {
   const lang = String(voice && voice.lang || "");
   const language = normalizeLanguageTag(lang);
@@ -54,6 +83,7 @@ export function inspectAvatarTtsVoice(voice) {
   return Object.freeze({
     key: voiceKey(voice), name, lang, language, locality, localityLabel,
     supportedLanguage, selectable, default: Boolean(voice && voice.default),
+    femaleNameHinted: FEMALE_NAME_HINTS.test(name),
     femaleHint, voice
   });
 }
@@ -73,7 +103,7 @@ function copyInventory(voices) {
     }
   }
   return Object.freeze({
-    all: Object.freeze(all), selectable: Object.freeze(selectable),
+    all: Object.freeze(all), selectable: Object.freeze(selectable.sort((a,b)=>Number(b.femaleNameHinted)-Number(a.femaleNameHinted))),
     informational: Object.freeze(informational), message, total: all.length
   });
 }
@@ -90,6 +120,10 @@ export function createAvatarTtsEngine(options = {}) {
   let paused = false;
   let voiceChangeHandler = null;
   let previousVoiceHandler = null;
+  let breathContext = null;
+  let breathNoiseBuffer = null;
+  const activeBreathSources = new Set();
+  const AudioContextConstructor = host && (host.AudioContext || host.webkitAudioContext);
 
   function ensureActive() {
     if (disposed) throw new Error("Avatar TTS Engine बंद हो चुका है।");
@@ -124,6 +158,8 @@ export function createAvatarTtsEngine(options = {}) {
       modelFree: true, localOnly: true,
       voiceCount: inventory.total, selectableVoiceCount: inventory.selectable.length,
       speaking: Boolean(pending && !paused), paused, busy: Boolean(pending),
+      breathingAudioSupported: typeof AudioContextConstructor === "function",
+      voicePreset: SOFT_YOUNG_FEMININE_PRESET,
       message: inventory.message
     });
   }
@@ -153,6 +189,115 @@ export function createAvatarTtsEngine(options = {}) {
     if (!found) throw new Error("चुनी हुई आवाज़ स्थानीय Hindi/Sanskrit आवाज़ों में उपलब्ध नहीं है। आवाज़ सूची ताज़ा करें।");
     return found.voice;
   }
+  function prepareBreathAudio() {
+    if (typeof AudioContextConstructor !== "function") return Promise.resolve(null);
+    try {
+      if (!breathContext || breathContext.state === "closed") {
+        breathContext = new AudioContextConstructor();
+        breathNoiseBuffer = null;
+      }
+      if (breathContext.state === "suspended" && typeof breathContext.resume === "function") {
+        return breathContext.resume().then(() => breathContext).catch(() => null);
+      }
+      return Promise.resolve(breathContext);
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+  }
+
+  function getBreathNoiseBuffer(context) {
+    if (breathNoiseBuffer && breathNoiseBuffer.sampleRate === context.sampleRate) return breathNoiseBuffer;
+    const length = Math.ceil(context.sampleRate * 0.85);
+    const buffer = context.createBuffer(1, length, context.sampleRate);
+    const channel = buffer.getChannelData(0);
+    let pink = 0;
+    for (let index = 0; index < length; index += 1) {
+      const white = Math.random() * 2 - 1;
+      pink = pink * 0.91 + white * 0.09;
+      channel[index] = Math.max(-0.85, Math.min(0.85, pink * 0.78));
+    }
+    breathNoiseBuffer = buffer;
+    return buffer;
+  }
+
+  function playBreathBurst(context, record, phase, duration, breathLevel) {
+    if (pending !== record || record.settled || paused) return Promise.resolve(false);
+    let source = null;
+    try {
+      source = context.createBufferSource();
+      source.buffer = getBreathNoiseBuffer(context);
+      const band = context.createBiquadFilter();
+      band.type = "bandpass";
+      band.frequency.value = phase === "inhale" ? 1050 : 680;
+      band.Q.value = phase === "inhale" ? 0.62 : 0.48;
+      const highpass = context.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = phase === "inhale" ? 220 : 145;
+      const lowpass = context.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = phase === "inhale" ? 3300 : 2450;
+      const gain = context.createGain();
+      const now = context.currentTime;
+      const peak = clamp(breathLevel, 0.06, 0.32, SOFT_YOUNG_FEMININE_PRESET.breathLevel);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + duration * 0.30);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      source.connect(band);
+      band.connect(highpass);
+      highpass.connect(lowpass);
+      lowpass.connect(gain);
+      gain.connect(context.destination);
+      activeBreathSources.add(source);
+      return new Promise(resolve => {
+        source.onended = () => {
+          activeBreathSources.delete(source);
+          try { source.disconnect(); band.disconnect(); highpass.disconnect(); lowpass.disconnect(); gain.disconnect(); } catch (_) {}
+          resolve(true);
+        };
+        source.start(now);
+        source.stop(now + duration);
+      });
+    } catch (_) {
+      if (source) {
+        activeBreathSources.delete(source);
+        try { source.stop(); } catch (_) {}
+      }
+      return Promise.resolve(false);
+    }
+  }
+
+  async function playPunctuationBreath(record, part, settings) {
+    if (!part.breathKind) return true;
+    const context = await record.breathContextPromise;
+    if (!context || pending !== record || record.settled) {
+      if (pending === record && !record.settled) {
+        emit("breathunavailable", {punctuation:part.punctuation,message:"इस browser में स्थानीय breath audio उपलब्ध नहीं है।"});
+      }
+      return false;
+    }
+    const sentence = part.breathKind === "sentence";
+    const inhaleDuration = sentence ? 0.34 : 0.23;
+    const exhaleDuration = sentence ? 0.27 : 0.19;
+    const level = clamp(settings.breathLevel,0.06,0.32,SOFT_YOUNG_FEMININE_PRESET.breathLevel);
+    emit("breathstart",{punctuation:part.punctuation,kind:part.breathKind,phase:"inhale"});
+    const inhale = await playBreathBurst(context,record,"inhale",inhaleDuration,level);
+    if (pending !== record || record.settled) return false;
+    await new Promise(resolve => setTimeout(resolve,sentence ? 95 : 55));
+    if (pending !== record || record.settled) return false;
+    emit("breathstart",{punctuation:part.punctuation,kind:part.breathKind,phase:"exhale"});
+    const exhale = await playBreathBurst(context,record,"exhale",exhaleDuration,level*0.82);
+    const success = inhale && exhale;
+    emit("breathend",{punctuation:part.punctuation,kind:part.breathKind,success});
+    return success;
+  }
+
+  function stopBreathSources() {
+    for (const source of [...activeBreathSources]) {
+      try { source.stop(); } catch (_) {}
+      activeBreathSources.delete(source);
+    }
+  }
+
   function settle(record, result, error) {
     if (!record || pending !== record || record.settled) return;
     record.settled = true;
@@ -167,6 +312,7 @@ export function createAvatarTtsEngine(options = {}) {
     if (!current) return false;
     sequence += 1;
     try { synthesis.cancel(); } catch (_) {}
+    stopBreathSources();
     emit("speechcancel", { reason, text: current.text, voiceKey: current.voiceKey });
     settle(current, { status: "cancelled", reason, voiceKey: current.voiceKey });
     return true;
@@ -186,67 +332,101 @@ export function createAvatarTtsEngine(options = {}) {
       if (settings.replace === false) return Promise.reject(new Error("एक वाचन पहले से चल रहा है।"));
       cancel("replaced");
     }
+    const parts = splitSpeechAtBreathMarks(cleanText);
+    const breathContextPromise = prepareBreathAudio();
     return new Promise((resolve, reject) => {
-      const utterance = new Utterance(cleanText);
       const token = ++sequence;
-      const record = { token, utterance, resolve, reject, settled: false, text: cleanText, voiceKey: voiceKey(voice) };
+      const record = {
+        token, resolve, reject, settled:false, text:cleanText,
+        voiceKey:voiceKey(voice), parts, partIndex:0,
+        started:false, breathContextPromise
+      };
       pending = record;
       paused = false;
-      utterance.voice = voice;
-      utterance.lang = String(voice.lang || (normalizeLanguageTag(voice.lang) === "sa" ? "sa-IN" : "hi-IN"));
-      utterance.rate = clamp(settings.rate, 0.65, 1.25, 0.9);
-      utterance.pitch = clamp(settings.pitch, 0.5, 1.5, 1.0);
-      utterance.volume = clamp(settings.volume, 0, 1, 1);
-      emit("speechrequest", { text: cleanText, voiceKey: record.voiceKey, lang: utterance.lang, rate: utterance.rate });
-      utterance.onstart = event => {
+      const rate = clamp(settings.rate,0.65,1.25,SOFT_YOUNG_FEMININE_PRESET.rate);
+      const pitch = clamp(settings.pitch,0.5,1.5,SOFT_YOUNG_FEMININE_PRESET.pitch);
+      const volume = clamp(settings.volume,0,1,SOFT_YOUNG_FEMININE_PRESET.volume);
+      emit("speechrequest", {
+        text:cleanText,voiceKey:record.voiceKey,lang:String(voice.lang||"hi-IN"),
+        rate,pitch,segments:parts.length,breathMarks:parts.filter(part=>part.breathKind).length
+      });
+
+      const finish = () => {
         if (pending !== record || record.token !== token) return;
-        emit("speechstart", { text: cleanText, voiceKey: record.voiceKey, charIndex: Number(event && event.charIndex) || 0 });
+        emit("speechend",{text:cleanText,voiceKey:record.voiceKey,segments:parts.length});
+        settle(record,{status:"ended",voiceKey:record.voiceKey,segments:parts.length});
       };
-      utterance.onboundary = event => {
-        if (pending !== record || record.token !== token) return;
-        emit("boundary", {
-          text: cleanText, voiceKey: record.voiceKey,
-          charIndex: Math.max(0, Number(event && event.charIndex) || 0),
-          charLength: Math.max(0, Number(event && event.charLength) || 0),
-          name: String(event && event.name || ""),
-          elapsedTime: Math.max(0, Number(event && event.elapsedTime) || 0)
-        });
-      };
-      utterance.onend = event => {
-        if (pending !== record || record.token !== token) return;
-        emit("speechend", { text: cleanText, voiceKey: record.voiceKey, elapsedTime: Math.max(0, Number(event && event.elapsedTime) || 0) });
-        settle(record, { status: "ended", voiceKey: record.voiceKey });
-      };
-      utterance.onerror = event => {
-        if (pending !== record || record.token !== token) return;
-        const code = String(event && event.error || "unknown");
-        if (code === "canceled" || code === "interrupted") {
-          emit("speechcancel", { reason: code, text: cleanText, voiceKey: record.voiceKey });
-          settle(record, { status: "cancelled", reason: code, voiceKey: record.voiceKey });
-        } else {
-          const error = new Error("Android Native TTS त्रुटि: " + code);
-          emit("speecherror", { code, message: error.message, text: cleanText, voiceKey: record.voiceKey });
-          settle(record, null, error);
+
+      const playPart = () => {
+        if (pending !== record || record.token !== token || record.settled) return;
+        const part = parts[record.partIndex];
+        if (!part) { finish(); return; }
+        const utterance = new Utterance(part.text);
+        utterance.voice = voice;
+        utterance.lang = String(voice.lang || (normalizeLanguageTag(voice.lang)==="sa" ? "sa-IN" : "hi-IN"));
+        utterance.rate = rate;
+        utterance.pitch = pitch;
+        utterance.volume = volume;
+        record.utterance = utterance;
+        utterance.onstart = event => {
+          if (pending !== record || record.token !== token) return;
+          if (!record.started) {
+            record.started = true;
+            emit("speechstart",{text:cleanText,voiceKey:record.voiceKey,charIndex:part.start,rate,pitch});
+          }
+        };
+        utterance.onboundary = event => {
+          if (pending !== record || record.token !== token) return;
+          emit("boundary",{
+            text:cleanText,voiceKey:record.voiceKey,
+            charIndex:part.start+Math.max(0,Number(event&&event.charIndex)||0),
+            charLength:Math.max(0,Number(event&&event.charLength)||0),
+            name:String(event&&event.name||""),
+            elapsedTime:Math.max(0,Number(event&&event.elapsedTime)||0)
+          });
+        };
+        utterance.onend = () => {
+          if (pending !== record || record.token !== token) return;
+          record.partIndex += 1;
+          void playPunctuationBreath(record,part,settings).finally(()=>{
+            if (pending !== record || record.token !== token) return;
+            if (record.partIndex >= parts.length) finish();
+            else playPart();
+          });
+        };
+        utterance.onerror = event => {
+          if (pending !== record || record.token !== token) return;
+          const code=String(event&&event.error||"unknown");
+          if (code==="canceled" || code==="interrupted") {
+            emit("speechcancel",{reason:code,text:cleanText,voiceKey:record.voiceKey});
+            settle(record,{status:"cancelled",reason:code,voiceKey:record.voiceKey});
+          } else {
+            const error=new Error("Android Native TTS त्रुटि: "+code);
+            emit("speecherror",{code,message:error.message,text:cleanText,voiceKey:record.voiceKey});
+            settle(record,null,error);
+          }
+        };
+        try { synthesis.speak(utterance); }
+        catch (error) {
+          emit("speecherror",{code:"SPEAK_FAILED",message:error&&error.message||String(error)});
+          settle(record,null,error);
         }
       };
-      try { synthesis.speak(utterance); }
-      catch (error) {
-        emit("speecherror", { code: "SPEAK_FAILED", message: error && error.message || String(error) });
-        settle(record, null, error);
-      }
+      playPart();
     });
   }
   async function playSample(voiceKeyValue, settings = {}) {
     const selected = inventory.selectable.find(item => item.key === String(voiceKeyValue || ""));
     if (!selected) throw new Error("नमूना सुनाने के लिए स्थानीय Hindi/Sanskrit आवाज़ चुनें।");
     const sample = String(settings.text || SAMPLE_TEXT[selected.language] || SAMPLE_TEXT.hi);
-    return speak(sample, { ...settings, voiceKey: selected.key, replace: true });
+    return speak(sample, { ...SOFT_YOUNG_FEMININE_PRESET, ...settings, voiceKey:selected.key, replace:true });
   }
   function pause() {
     ensureActive();
     if (!pending || paused || !synthesis || typeof synthesis.pause !== "function") return false;
     try {
       synthesis.pause(); paused = true;
+      if (breathContext && typeof breathContext.suspend === "function") void breathContext.suspend().catch(()=>{});
       emit("pause", { voiceKey: pending.voiceKey, text: pending.text });
       return true;
     } catch (error) {
@@ -259,6 +439,7 @@ export function createAvatarTtsEngine(options = {}) {
     if (!pending || !paused || !synthesis || typeof synthesis.resume !== "function") return false;
     try {
       synthesis.resume(); paused = false;
+      if (breathContext && typeof breathContext.resume === "function") void breathContext.resume().catch(()=>{});
       emit("resume", { voiceKey: pending.voiceKey, text: pending.text });
       return true;
     } catch (error) {
@@ -296,6 +477,10 @@ export function createAvatarTtsEngine(options = {}) {
         else if (synthesis.onvoiceschanged === voiceChangeHandler) synthesis.onvoiceschanged = previousVoiceHandler || null;
       } catch (_) {}
     }
+    stopBreathSources();
+    if (breathContext && typeof breathContext.close === "function") {
+      try { await breathContext.close(); } catch (_) {}
+    }
     disposed = true;
     listeners.clear();
   }
@@ -319,6 +504,10 @@ export function selfTest() {
     { id: "unknown-locality-information-only", passed: !unknownHindi.selectable && unknownHindi.locality === "unknown" },
     { id: "unsupported-language-not-selectable", passed: !englishLocal.selectable },
     { id: "female-is-only-a-name-hint", passed: localHindi.femaleHint.includes("सुनकर पुष्टि") },
+    { id: "female-name-hint-detected", passed: localHindi.femaleNameHinted === true },
+    { id: "soft-feminine-preset-is-gentle", passed: SOFT_YOUNG_FEMININE_PRESET.pitch > 1 && SOFT_YOUNG_FEMININE_PRESET.pitch <= 1.2 && SOFT_YOUNG_FEMININE_PRESET.rate < 1 },
+    { id: "comma-segment-has-inhale-exhale-mark", passed: splitSpeechAtBreathMarks("नमस्ते, संसार।")[0]?.breathKind === "comma" },
+    { id: "sentence-segment-has-inhale-exhale-mark", passed: splitSpeechAtBreathMarks("नमस्ते, संसार।")[1]?.breathKind === "sentence" },
     { id: "voice-key-is-stable", passed: localHindi.key === "local-hi" },
     { id: "sample-texts-available", passed: SAMPLE_TEXT.hi.length > 0 && SAMPLE_TEXT.sa.length > 0 }
   ];
