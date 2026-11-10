@@ -152,6 +152,26 @@
     </div>
     <footer>Swar-Sadhika · Local Native TTS · 9:16 Sanskrit Display Studio</footer>
   </main>
-  <script type="module" src="./assets/js/pages/page-sanskrit-display-studio-part2.js"></script>
+  <script>
+    (function () {
+      function reportBootError(message) {
+        var status = document.getElementById("studio-status");
+        if (status) {
+          status.textContent = "स्टूडियो JavaScript शुरू नहीं हो पाया: " + String(message || "अज्ञात त्रुटि") +
+            "। पेज को पुनः लोड करें; यह त्रुटि Debug जाँच के लिए दिखाई गई है।";
+          status.dataset.kind = "error";
+        }
+      }
+      window.addEventListener("error", function (event) {
+        var detail = event && (event.message || (event.target && event.target.src)) || "Script load/runtime error";
+        reportBootError(detail);
+      }, true);
+      window.addEventListener("unhandledrejection", function (event) {
+        var reason = event && event.reason;
+        reportBootError(reason && reason.message ? reason.message : reason || "Unhandled Promise rejection");
+      });
+    })();
+  </script>
+  <script type="module" src="./assets/js/pages/page-sanskrit-display-studio-part2.js?v=swr-final-regression-20261110-01"></script>
 </body>
 </html>
