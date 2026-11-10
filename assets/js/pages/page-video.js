@@ -18,16 +18,27 @@ export function isPortrait916(width, height) {
 export function stripTrailingVerseNumber(line) {
   let text = String(line == null ? "" : line).trim();
   const digits = "[0-9०-९]+";
-  text = text.replace(new RegExp("\\s*॥\\s*" + digits + "\\s*(?:॥)?\\s*$", "u"), "");
+  text = text.replace(new RegExp("\\s*॥?\\s*" + digits + "\\s*॥?\\s*$", "u"), "");
   text = text.replace(new RegExp("\\s*[\\[(（]\\s*" + digits + "\\s*[\\])）]\\s*$", "u"), "");
+  text = text.replace(new RegExp("\\s+" + digits + "\\s*$", "u"), "");
   return text.trim();
 }
 
 export function prepareVideoReadingLines(value) {
-  return String(value == null ? "" : value)
-    .split(/\\r?\\n/u)
-    .map(stripTrailingVerseNumber)
-    .filter(line => line.length > 0);
+  const source = String(value == null ? "" : value).replace(/\\r\\n?/gu, "\\n");
+  const result = [];
+  // Honour explicit newlines, and also treat Sanskrit danda/sentence marks
+  // as line boundaries when a whole hymn is pasted as one continuous line.
+  for (const block of source.split(/\\n+/u)) {
+    const withoutVerseCounts = block.replace(/॥\\s*[0-9०-९]+\\s*॥/gu, "॥");
+    const phrases = withoutVerseCounts.split(/(?<=[।॥.!?;])/u);
+    for (const phrase of phrases) {
+      const line = stripTrailingVerseNumber(phrase);
+      if (!line || /^[।॥]+$/u.test(line) || /^[0-9०-९]+[।॥]*$/u.test(line)) continue;
+      result.push(line);
+    }
+  }
+  return result;
 }
 
 export function shouldRepeatVideoWhileReading(reading) {
