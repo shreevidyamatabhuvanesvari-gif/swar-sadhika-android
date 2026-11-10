@@ -12,7 +12,7 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.1";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.2";
 export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-07";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
@@ -73,6 +73,12 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "shiv-tandava-compound-43", term: "दशवक्त्रगीतं", nativeSpeechText: "दश वक्त्र गीतं" }),
   Object.freeze({ id: "shiv-tandava-compound-44", term: "शम्भुपूजनपरं", nativeSpeechText: "शम्भु पूजन परं" }),
   Object.freeze({ id: "shiv-tandava-compound-45", term: "रथगजेन्द्रतुरङ्गयुक्तां", nativeSpeechText: "रथ गजेन्द्र तुरङ्ग युक्तां" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-01", term: "विनोदमद्भुतं", nativeSpeechText: "विनोदमद्भुतम्" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-02", term: "प्रचण्डताण्डवं", nativeSpeechText: "प्रचण्डताण्डवम्" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-03", term: "अञ्जलिं", nativeSpeechText: "अञ्जलिम्" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-04", term: "इमं", nativeSpeechText: "इमम्" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-05", term: "उत्तमोत्तमं", nativeSpeechText: "उत्तमोत्तमम्" }),
+  Object.freeze({ id: "shiv-tandava-final-anusvara-06", term: "स्तवं", nativeSpeechText: "स्तवम्" }),
 
   Object.freeze({ id: "rudrashtaka-final-anusvara-nirvanarupam", term: "निर्वाणरूपं", nativeSpeechText: "निर्वाणरूपम्" }),
   Object.freeze({ id: "rudrashtaka-final-anusvara-nijam", term: "निजं", nativeSpeechText: "निजम्" }),
@@ -1489,6 +1495,11 @@ export function selfTest() {
     const shivaDamaru = compile("डमड्डमड्डमड्डमन्निनादवड्डमर्वयं", []);
     check("shiv-tandava-damaru-onomatopoeia-remains-unchanged",
       shivaDamaru.speechText === "डमड्डमड्डमड्डमन्निनादवड्डमर्वयं" && !shivaDamaru.modified);
+    const finalAnusvara = compile("विनोदमद्भुतं प्रचण्डताण्डवं अञ्जलिं इमं उत्तमोत्तमं स्तवं", []);
+    check("shiv-tandava-final-anusvara-is-audible",
+      finalAnusvara.speechText === "विनोदमद्भुतम् प्रचण्डताण्डवम् अञ्जलिम् इमम् उत्तमोत्तमम् स्तवम्" &&
+      finalAnusvara.appliedRules.length === 6 &&
+      validateCompiledSpeech(finalAnusvara).valid);
     check("diagnostics-contract", getCompilerDiagnostics(exact).outputValidation.valid === true);
   } catch (_) {
     check("self-test-unexpected-exception", false);
