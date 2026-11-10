@@ -12,7 +12,7 @@ import {
   analyzePronunciationCandidates
 } from "./vedic-sanskrit-pronunciation.js";
 
-export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.2";
+export const SANSKRIT_PRONUNCIATION_COMPILER_VERSION = "1.4.3";
 export const SWR_TTS_COMPILER_IMPROVEMENT_ID = "SWR-TTS-COMPILER-07";
 
 const NATIVE_TTS_ENGINE = "Web Speech API SpeechSynthesis";
@@ -41,7 +41,7 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "shiv-tandava-compound-11", term: "पिङ्गलस्फुरत्फणा", nativeSpeechText: "पिङ्गल स्फुरत् फणा" }),
   Object.freeze({ id: "shiv-tandava-compound-12", term: "कदम्बकुङ्कुमद्रवप्रलिप्तदिग्वधूमुखे", nativeSpeechText: "कदम्ब कुङ्कुम द्रव प्रलिप्त दिग्वधू मुखे" }),
   Object.freeze({ id: "shiv-tandava-compound-13", term: "मदान्धसिन्धुरस्फुरत्त्वगुत्तरीयमेदुरे", nativeSpeechText: "मदान्ध सिन्धुर स्फुरत् त्वगुत्तरीय मेदुरे" }),
-  Object.freeze({ id: "shiv-tandava-compound-14", term: "विनोदमद्भुतं", nativeSpeechText: "विनोद मद्भुतं" }),
+  Object.freeze({ id: "shiv-tandava-compound-14", term: "विनोदमद्भुतं", nativeSpeechText: "विनोद मद्भुतम्" }),
   Object.freeze({ id: "shiv-tandava-compound-15", term: "सहस्रलोचनप्रभृत्यशेषलेखशेखर", nativeSpeechText: "सहस्र लोचन प्रभृत्यशेष लेख शेखर" }),
   Object.freeze({ id: "shiv-tandava-compound-16", term: "प्रसूनधूलिधोरणीविधूसराङ्घ्रिपीठभूः", nativeSpeechText: "प्रसून धूलि धोरणी विधूसराङ्घ्रि पीठ भूः" }),
   Object.freeze({ id: "shiv-tandava-compound-17", term: "चकोरबन्धुशेखरः", nativeSpeechText: "चकोर बन्धु शेखरः" }),
@@ -73,7 +73,6 @@ const NATIVE_HI_TTS_COMPATIBILITY_RULES = Object.freeze([
   Object.freeze({ id: "shiv-tandava-compound-43", term: "दशवक्त्रगीतं", nativeSpeechText: "दश वक्त्र गीतं" }),
   Object.freeze({ id: "shiv-tandava-compound-44", term: "शम्भुपूजनपरं", nativeSpeechText: "शम्भु पूजन परं" }),
   Object.freeze({ id: "shiv-tandava-compound-45", term: "रथगजेन्द्रतुरङ्गयुक्तां", nativeSpeechText: "रथ गजेन्द्र तुरङ्ग युक्तां" }),
-  Object.freeze({ id: "shiv-tandava-final-anusvara-01", term: "विनोदमद्भुतं", nativeSpeechText: "विनोदमद्भुतम्" }),
   Object.freeze({ id: "shiv-tandava-final-anusvara-02", term: "प्रचण्डताण्डवं", nativeSpeechText: "प्रचण्डताण्डवम्" }),
   Object.freeze({ id: "shiv-tandava-final-anusvara-03", term: "अञ्जलिं", nativeSpeechText: "अञ्जलिम्" }),
   Object.freeze({ id: "shiv-tandava-final-anusvara-04", term: "इमं", nativeSpeechText: "इमम्" }),
@@ -1491,13 +1490,13 @@ export function selfTest() {
       shivaCompound.modified &&
       validateCompiledSpeech(shivaCompound).valid &&
       shivaCompound.appliedRules.every(rule =>
-        [...rule.originalForm].join("") === [...rule.nativeSpeechText.replace(/\\s+/gu, "")].join("")));
+        [...rule.originalForm].join("") === [...rule.nativeSpeechText.replace(/\s+/gu, "")].join("")));
     const shivaDamaru = compile("डमड्डमड्डमड्डमन्निनादवड्डमर्वयं", []);
     check("shiv-tandava-damaru-onomatopoeia-remains-unchanged",
       shivaDamaru.speechText === "डमड्डमड्डमड्डमन्निनादवड्डमर्वयं" && !shivaDamaru.modified);
     const finalAnusvara = compile("विनोदमद्भुतं प्रचण्डताण्डवं अञ्जलिं इमं उत्तमोत्तमं स्तवं", []);
     check("shiv-tandava-final-anusvara-is-audible",
-      finalAnusvara.speechText === "विनोदमद्भुतम् प्रचण्डताण्डवम् अञ्जलिम् इमम् उत्तमोत्तमम् स्तवम्" &&
+      finalAnusvara.speechText === "विनोद मद्भुतम् प्रचण्डताण्डवम् अञ्जलिम् इमम् उत्तमोत्तमम् स्तवम्" &&
       finalAnusvara.appliedRules.length === 6 &&
       validateCompiledSpeech(finalAnusvara).valid);
     check("diagnostics-contract", getCompilerDiagnostics(exact).outputValidation.valid === true);
