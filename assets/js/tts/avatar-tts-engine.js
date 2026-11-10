@@ -1,0 +1,379 @@
+/* Swar-Sadhika Avatar TTS Engine — native, model-free browser speech.
+ * Uses only the device's SpeechSynthesis inventory. No model, API, worker or server.
+ * Only verified local Hindi/Sanskrit voices are selectable for offline playback.
+ */
+export const AVATAR_TTS_ENGINE_VERSION = "1.0.0";
+const SUPPORTED_LANGUAGES = new Set(["hi", "sa"]);
+const FEMALE_NAME_HINTS = /(?:female|woman|girl|zira|samantha|susan|heera|lekha|swara|kavya)/i;
+const SAMPLE_TEXT = Object.freeze({
+  hi: "नमस्कार। यह स्वर-साधिका अवतार की आवाज़ का नमूना है।",
+  sa: "ॐ नमः शिवाय। शान्तिः शान्तिः शान्तिः।"
+});
+const EVENT_NAMES = new Set([
+  "voiceschanged", "speechrequest", "speechstart", "boundary", "speechend",
+  "speechcancel", "speecherror", "pause", "resume", "warning"
+]);
+
+function normalizeLanguageTag(value) {
+  return String(value || "").trim().replace(/_/g, "-").toLowerCase().split("-")[0] || "";
+}
+function getLocality(voice) {
+  if (voice && voice.localService === true) return "local";
+  if (voice && voice.localService === false) return "remote";
+  return "unknown";
+}
+function voiceKey(voice) {
+  const uri = String(voice && voice.voiceURI || "").trim();
+  const name = String(voice && voice.name || "").trim();
+  const lang = String(voice && voice.lang || "").trim();
+  return uri || [name, lang, getLocality(voice)].join("\u241f");
+}
+function isSupportedLanguage(voice) {
+  return SUPPORTED_LANGUAGES.has(normalizeLanguageTag(voice && voice.lang));
+}
+function clamp(value, min, max, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+export function inspectAvatarTtsVoice(voice) {
+  const lang = String(voice && voice.lang || "");
+  const language = normalizeLanguageTag(lang);
+  const locality = getLocality(voice);
+  const supportedLanguage = SUPPORTED_LANGUAGES.has(language);
+  const selectable = locality === "local" && supportedLanguage;
+  const name = String(voice && voice.name || "अज्ञात आवाज़");
+  const femaleHint = FEMALE_NAME_HINTS.test(name)
+    ? "नाम के आधार पर संभावित स्त्री-स्वर; सुनकर पुष्टि करें"
+    : "स्वर-प्रकार की पुष्टि सुनकर करें";
+  const localityLabel = locality === "local"
+    ? "स्थानीय · ऑफलाइन playback के योग्य"
+    : locality === "remote"
+      ? "ऑनलाइन/दूरस्थ · ऑफलाइन के रूप में चयन योग्य नहीं"
+      : "स्थानीयता अज्ञात · ऑफलाइन होने का दावा नहीं";
+  return Object.freeze({
+    key: voiceKey(voice), name, lang, language, locality, localityLabel,
+    supportedLanguage, selectable, default: Boolean(voice && voice.default),
+    femaleHint, voice
+  });
+}
+
+function copyInventory(voices) {
+  const all = voices.map(inspectAvatarTtsVoice);
+  const selectable = all.filter(item => item.selectable);
+  const informational = all.filter(item => item.supportedLanguage && !item.selectable);
+  let message = "स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध है। आवाज़ चुनकर नमूना सुनें।";
+  if (!selectable.length) {
+    if (informational.some(item => item.locality === "remote")) {
+      message = "Hindi/Sanskrit आवाज़ मिली, लेकिन वह ऑनलाइन/दूरस्थ है। स्थानीय offline playback के लिए Android में स्थानीय आवाज़ स्थापित करें।";
+    } else if (informational.length) {
+      message = "Hindi/Sanskrit आवाज़ मिली, लेकिन उसकी स्थानीयता अज्ञात है। उसे offline आवाज़ मानकर उपयोग नहीं किया जाएगा।";
+    } else {
+      message = "इस डिवाइस में स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं है। Android Text-to-speech settings में Hindi या Sanskrit आवाज़ स्थापित करके सूची ताज़ा करें।";
+    }
+  }
+  return Object.freeze({
+    all: Object.freeze(all), selectable: Object.freeze(selectable),
+    informational: Object.freeze(informational), message, total: all.length
+  });
+}
+
+export function createAvatarTtsEngine(options = {}) {
+  const host = options.target || (typeof window !== "undefined" ? window : null);
+  const synthesis = host && host.speechSynthesis;
+  const Utterance = host && host.SpeechSynthesisUtterance;
+  const listeners = new Map();
+  let inventory = copyInventory([]);
+  let pending = null;
+  let sequence = 0;
+  let disposed = false;
+  let paused = false;
+  let voiceChangeHandler = null;
+  let previousVoiceHandler = null;
+
+  function ensureActive() {
+    if (disposed) throw new Error("Avatar TTS Engine बंद हो चुका है।");
+  }
+  function emit(type, detail = {}) {
+    const callbacks = listeners.get(type);
+    if (!callbacks) return;
+    const event = Object.freeze({
+      type, detail: Object.freeze({ ...detail }), timestamp: Date.now(),
+      version: AVATAR_TTS_ENGINE_VERSION
+    });
+    for (const callback of [...callbacks]) {
+      try { callback(event.detail, event); }
+      catch (error) {
+        try { host && host.console && host.console.error("[Avatar TTS] Listener failed", error); } catch (_) {}
+      }
+    }
+  }
+  function on(type, callback) {
+    ensureActive();
+    if (!EVENT_NAMES.has(type)) throw new TypeError("अज्ञात Avatar TTS event: " + type);
+    if (typeof callback !== "function") throw new TypeError("Event listener function होना चाहिए।");
+    let bucket = listeners.get(type);
+    if (!bucket) { bucket = new Set(); listeners.set(type, bucket); }
+    bucket.add(callback);
+    return () => bucket.delete(callback);
+  }
+  function getStatus() {
+    return Object.freeze({
+      version: AVATAR_TTS_ENGINE_VERSION,
+      supported: Boolean(synthesis && Utterance && typeof synthesis.speak === "function"),
+      modelFree: true, localOnly: true,
+      voiceCount: inventory.total, selectableVoiceCount: inventory.selectable.length,
+      speaking: Boolean(pending && !paused), paused, busy: Boolean(pending),
+      message: inventory.message
+    });
+  }
+  async function refreshVoices() {
+    ensureActive();
+    if (!synthesis || typeof synthesis.getVoices !== "function") {
+      inventory = copyInventory([]);
+      emit("warning", { code: "SPEECH_SYNTHESIS_UNAVAILABLE", message: "इस browser में SpeechSynthesis उपलब्ध नहीं है।" });
+      return inventory;
+    }
+    let raw;
+    try { raw = synthesis.getVoices(); }
+    catch (error) {
+      emit("warning", { code: "VOICE_ENUMERATION_FAILED", message: error && error.message || String(error) });
+      throw error;
+    }
+    inventory = copyInventory(Array.isArray(raw) ? raw : []);
+    emit("voiceschanged", {
+      total: inventory.total, selectable: inventory.selectable.length,
+      informational: inventory.informational.length, message: inventory.message
+    });
+    return inventory;
+  }
+  function getInventory() { ensureActive(); return inventory; }
+  function resolveVoice(key) {
+    const found = inventory.selectable.find(item => item.key === String(key || ""));
+    if (!found) throw new Error("चुनी हुई आवाज़ स्थानीय Hindi/Sanskrit आवाज़ों में उपलब्ध नहीं है। आवाज़ सूची ताज़ा करें।");
+    return found.voice;
+  }
+  function settle(record, result, error) {
+    if (!record || pending !== record || record.settled) return;
+    record.settled = true;
+    pending = null;
+    paused = false;
+    if (error) record.reject(error);
+    else record.resolve(Object.freeze(result));
+  }
+  function cancel(reason = "user") {
+    ensureActive();
+    const current = pending;
+    if (!current) return false;
+    sequence += 1;
+    try { synthesis.cancel(); } catch (_) {}
+    emit("speechcancel", { reason, text: current.text, voiceKey: current.voiceKey });
+    settle(current, { status: "cancelled", reason, voiceKey: current.voiceKey });
+    return true;
+  }
+  function speak(text, settings = {}) {
+    ensureActive();
+    if (!synthesis || !Utterance) return Promise.reject(new Error("इस Android browser में Native SpeechSynthesis उपलब्ध नहीं है।"));
+    const cleanText = String(text == null ? "" : text).trim();
+    if (!cleanText) return Promise.reject(new TypeError("वाचन के लिए पाठ आवश्यक है।"));
+    let voice;
+    try { voice = resolveVoice(settings.voiceKey); }
+    catch (error) { return Promise.reject(error); }
+    if (!isSupportedLanguage(voice) || voice.localService !== true) {
+      return Promise.reject(new Error("केवल स्थानीय Hindi/Sanskrit आवाज़ से offline वाचन की अनुमति है।"));
+    }
+    if (pending) {
+      if (settings.replace === false) return Promise.reject(new Error("एक वाचन पहले से चल रहा है।"));
+      cancel("replaced");
+    }
+    return new Promise((resolve, reject) => {
+      const utterance = new Utterance(cleanText);
+      const token = ++sequence;
+      const record = { token, utterance, resolve, reject, settled: false, text: cleanText, voiceKey: voiceKey(voice) };
+      pending = record;
+      paused = false;
+      utterance.voice = voice;
+      utterance.lang = String(voice.lang || (normalizeLanguageTag(voice.lang) === "sa" ? "sa-IN" : "hi-IN"));
+      utterance.rate = clamp(settings.rate, 0.65, 1.25, 0.9);
+      utterance.pitch = clamp(settings.pitch, 0.5, 1.5, 1.0);
+      utterance.volume = clamp(settings.volume, 0, 1, 1);
+      emit("speechrequest", { text: cleanText, voiceKey: record.voiceKey, lang: utterance.lang, rate: utterance.rate });
+      utterance.onstart = event => {
+        if (pending !== record || record.token !== token) return;
+        emit("speechstart", { text: cleanText, voiceKey: record.voiceKey, charIndex: Number(event && event.charIndex) || 0 });
+      };
+      utterance.onboundary = event => {
+        if (pending !== record || record.token !== token) return;
+        emit("boundary", {
+          text: cleanText, voiceKey: record.voiceKey,
+          charIndex: Math.max(0, Number(event && event.charIndex) || 0),
+          charLength: Math.max(0, Number(event && event.charLength) || 0),
+          name: String(event && event.name || ""),
+          elapsedTime: Math.max(0, Number(event && event.elapsedTime) || 0)
+        });
+      };
+      utterance.onend = event => {
+        if (pending !== record || record.token !== token) return;
+        emit("speechend", { text: cleanText, voiceKey: record.voiceKey, elapsedTime: Math.max(0, Number(event && event.elapsedTime) || 0) });
+        settle(record, { status: "ended", voiceKey: record.voiceKey });
+      };
+      utterance.onerror = event => {
+        if (pending !== record || record.token !== token) return;
+        const code = String(event && event.error || "unknown");
+        if (code === "canceled" || code === "interrupted") {
+          emit("speechcancel", { reason: code, text: cleanText, voiceKey: record.voiceKey });
+          settle(record, { status: "cancelled", reason: code, voiceKey: record.voiceKey });
+        } else {
+          const error = new Error("Android Native TTS त्रुटि: " + code);
+          emit("speecherror", { code, message: error.message, text: cleanText, voiceKey: record.voiceKey });
+          settle(record, null, error);
+        }
+      };
+      try { synthesis.speak(utterance); }
+      catch (error) {
+        emit("speecherror", { code: "SPEAK_FAILED", message: error && error.message || String(error) });
+        settle(record, null, error);
+      }
+    });
+  }
+  async function playSample(voiceKeyValue, settings = {}) {
+    const selected = inventory.selectable.find(item => item.key === String(voiceKeyValue || ""));
+    if (!selected) throw new Error("नमूना सुनाने के लिए स्थानीय Hindi/Sanskrit आवाज़ चुनें।");
+    const sample = String(settings.text || SAMPLE_TEXT[selected.language] || SAMPLE_TEXT.hi);
+    return speak(sample, { ...settings, voiceKey: selected.key, replace: true });
+  }
+  function pause() {
+    ensureActive();
+    if (!pending || paused || !synthesis || typeof synthesis.pause !== "function") return false;
+    try {
+      synthesis.pause(); paused = true;
+      emit("pause", { voiceKey: pending.voiceKey, text: pending.text });
+      return true;
+    } catch (error) {
+      emit("warning", { code: "PAUSE_FAILED", message: error && error.message || String(error) });
+      return false;
+    }
+  }
+  function resume() {
+    ensureActive();
+    if (!pending || !paused || !synthesis || typeof synthesis.resume !== "function") return false;
+    try {
+      synthesis.resume(); paused = false;
+      emit("resume", { voiceKey: pending.voiceKey, text: pending.text });
+      return true;
+    } catch (error) {
+      emit("warning", { code: "RESUME_FAILED", message: error && error.message || String(error) });
+      return false;
+    }
+  }
+  if (synthesis) {
+    if (typeof synthesis.addEventListener === "function") {
+      voiceChangeHandler = () => { void refreshVoices().catch(() => {}); };
+      synthesis.addEventListener("voiceschanged", voiceChangeHandler);
+    } else if ("onvoiceschanged" in synthesis) {
+      previousVoiceHandler = synthesis.onvoiceschanged;
+      voiceChangeHandler = event => {
+        try { if (typeof previousVoiceHandler === "function") previousVoiceHandler.call(synthesis, event); } catch (_) {}
+        void refreshVoices().catch(() => {});
+      };
+      synthesis.onvoiceschanged = voiceChangeHandler;
+    }
+  }
+  async function initialize() {
+    ensureActive();
+    if (!synthesis || !Utterance) {
+      return Object.freeze({ ready: false, status: getStatus(), inventory: await refreshVoices() });
+    }
+    const voices = await refreshVoices();
+    return Object.freeze({ ready: true, status: getStatus(), inventory: voices });
+  }
+  async function dispose() {
+    if (disposed) return;
+    if (pending) cancel("disposed");
+    if (synthesis && voiceChangeHandler) {
+      try {
+        if (typeof synthesis.removeEventListener === "function") synthesis.removeEventListener("voiceschanged", voiceChangeHandler);
+        else if (synthesis.onvoiceschanged === voiceChangeHandler) synthesis.onvoiceschanged = previousVoiceHandler || null;
+      } catch (_) {}
+    }
+    disposed = true;
+    listeners.clear();
+  }
+  return Object.freeze({
+    version: AVATAR_TTS_ENGINE_VERSION,
+    initialize, refreshVoices, getInventory, getStatus,
+    speak, playSample, pause, resume, cancel, on, dispose
+  });
+}
+
+export function selfTest() {
+  const localHindi = inspectAvatarTtsVoice({ name: "Hindi Female", lang: "hi-IN", localService: true, voiceURI: "local-hi" });
+  const localSanskrit = inspectAvatarTtsVoice({ name: "Sanskrit Local", lang: "sa_IN", localService: true, voiceURI: "local-sa" });
+  const remoteHindi = inspectAvatarTtsVoice({ name: "Hindi Online", lang: "hi-IN", localService: false, voiceURI: "remote-hi" });
+  const unknownHindi = inspectAvatarTtsVoice({ name: "Hindi Unknown", lang: "hi-IN", voiceURI: "unknown-hi" });
+  const englishLocal = inspectAvatarTtsVoice({ name: "English Local", lang: "en-US", localService: true, voiceURI: "local-en" });
+  const checks = [
+    { id: "local-hindi-selectable", passed: localHindi.selectable && localHindi.locality === "local" },
+    { id: "local-sanskrit-selectable", passed: localSanskrit.selectable && localSanskrit.language === "sa" },
+    { id: "remote-hindi-information-only", passed: !remoteHindi.selectable && remoteHindi.localityLabel.includes("ऑनलाइन") },
+    { id: "unknown-locality-information-only", passed: !unknownHindi.selectable && unknownHindi.locality === "unknown" },
+    { id: "unsupported-language-not-selectable", passed: !englishLocal.selectable },
+    { id: "female-is-only-a-name-hint", passed: localHindi.femaleHint.includes("सुनकर पुष्टि") },
+    { id: "voice-key-is-stable", passed: localHindi.key === "local-hi" },
+    { id: "sample-texts-available", passed: SAMPLE_TEXT.hi.length > 0 && SAMPLE_TEXT.sa.length > 0 }
+  ];
+  return Object.freeze({
+    status: checks.every(check => check.passed) ? "PASSED" : "FAILED",
+    total: checks.length, passed: checks.filter(check => check.passed).length,
+    failed: checks.filter(check => !check.passed).length,
+    checks: Object.freeze(checks.map(check => Object.freeze(check)))
+  });
+}
+
+export async function runIntegrationSelfTest() {
+  class TestUtterance {
+    constructor(text) { this.text = text; this.voice = null; this.rate = 1; this.pitch = 1; this.volume = 1; }
+  }
+  const voice = { name: "Hindi Local", lang: "hi-IN", localService: true, default: true, voiceURI: "test-hi" };
+  const calls = [];
+  const listeners = new Map();
+  const synthesis = {
+    speaking: false, paused: false,
+    getVoices: () => [voice],
+    addEventListener(type, callback) { listeners.set(type, callback); },
+    removeEventListener(type) { listeners.delete(type); },
+    speak(utterance) {
+      calls.push(utterance); this.speaking = true;
+      queueMicrotask(() => {
+        utterance.onstart && utterance.onstart({ charIndex: 0 });
+        utterance.onboundary && utterance.onboundary({ charIndex: 2, charLength: 1, name: "word", elapsedTime: 20 });
+        this.speaking = false;
+        utterance.onend && utterance.onend({ elapsedTime: 80 });
+      });
+    },
+    pause() { this.paused = true; },
+    resume() { this.paused = false; },
+    cancel() { this.speaking = false; this.paused = false; }
+  };
+  const host = { speechSynthesis: synthesis, SpeechSynthesisUtterance: TestUtterance, console: { error() {} } };
+  const engine = createAvatarTtsEngine({ target: host });
+  const events = [];
+  const off = engine.on("boundary", detail => events.push(detail.charIndex));
+  const initialized = await engine.initialize();
+  const selected = initialized.inventory.selectable[0];
+  const result = await engine.speak("नमस्ते", { voiceKey: selected.key });
+  off();
+  await engine.dispose();
+  const checks = [
+    { id: "mock-native-inventory-found", passed: initialized.inventory.selectable.length === 1 },
+    { id: "mock-speech-runs", passed: result.status === "ended" && calls.length === 1 },
+    { id: "character-boundary-forwarded", passed: events.length === 1 && events[0] === 2 },
+    { id: "voice-change-listener-cleaned", passed: listeners.size === 0 }
+  ];
+  return Object.freeze({
+    status: checks.every(check => check.passed) ? "PASSED" : "FAILED",
+    total: checks.length, passed: checks.filter(check => check.passed).length,
+    failed: checks.filter(check => !check.passed).length,
+    checks: Object.freeze(checks.map(check => Object.freeze(check)))
+  });
+}
