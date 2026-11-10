@@ -14,13 +14,15 @@
   const PAGE_MODULES = Object.freeze({
     "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
     "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
-    "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" }
+    "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" },
+    "video": { id: "video", file: "page-video.js", root: "view-video", view: "view-video" }
   });
 
   const views = Object.freeze({
     "index": "view-index",
     "nano-server": "view-nano-server",
-    "avatar": "view-avatar"
+    "avatar": "view-avatar",
+    "video": "view-video"
   });
 
   const state = {
