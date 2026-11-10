@@ -15,11 +15,19 @@ export function isPortrait916(width, height) {
   return Math.abs((w / h) - PORTRAIT_RATIO) <= RATIO_TOLERANCE;
 }
 
-export function captionScrollPosition(scrollWidth, clientWidth, charIndex, textLength) {
-  const overflow = Math.max(0, Number(scrollWidth) - Number(clientWidth));
-  const length = Math.max(1, Number(textLength) || 1);
-  const ratio = Math.max(0, Math.min(1, (Number(charIndex) || 0) / length));
-  return Math.round(overflow * ratio);
+export function stripTrailingVerseNumber(line) {
+  let text = String(line == null ? "" : line).trim();
+  const digits = "[0-9०-९]+";
+  text = text.replace(new RegExp("\\s*॥\\s*" + digits + "\\s*(?:॥)?\\s*$", "u"), "");
+  text = text.replace(new RegExp("\\s*[\\[(（]\\s*" + digits + "\\s*[\\])）]\\s*$", "u"), "");
+  return text.trim();
+}
+
+export function prepareVideoReadingLines(value) {
+  return String(value == null ? "" : value)
+    .split(/\\r?\\n/u)
+    .map(stripTrailingVerseNumber)
+    .filter(line => line.length > 0);
 }
 
 export function shouldRepeatVideoWhileReading(reading) {
@@ -38,10 +46,10 @@ function createStyles(doc) {
     ".video-clip-page .video-stage{position:relative;width:min(100%,360px);aspect-ratio:9/16;margin:0 auto;overflow:hidden;border-radius:18px;background:#050509;border:1px solid rgba(207,190,255,.2);box-shadow:0 14px 38px rgba(0,0,0,.32);display:grid;place-items:center}",
     ".video-clip-page .video-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#050509}",
     ".video-clip-page .video-empty{padding:18px;text-align:center;color:#c9c2dc;font-size:.95rem;line-height:1.5}",
-    ".video-clip-page .video-caption{position:absolute;left:0;right:0;bottom:0;z-index:2;min-height:42px;padding:9px 12px;background:rgba(0,0,0,.7);color:#fff;font-size:17px;font-weight:400;line-height:1.35;white-space:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;text-align:left;box-sizing:border-box;overscroll-behavior-x:contain}",
+    ".video-clip-page .video-caption{position:absolute;left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);z-index:2;width:min(90%,560px);max-height:70%;padding:12px 14px;background:rgba(0,0,0,.72);color:#fff;font-size:18px;font-weight:400;line-height:1.5;white-space:normal;overflow-wrap:anywhere;overflow-y:auto;scrollbar-width:none;text-align:center;box-sizing:border-box;text-shadow:0 1px 3px rgba(0,0,0,.95);border-radius:8px}",
     ".video-clip-page .video-caption::-webkit-scrollbar{display:none}",
     ".video-clip-page .video-caption[hidden]{display:none}",
-    ".video-clip-page .video-caption span{font-weight:400;white-space:nowrap}",
+    ".video-clip-page .video-caption span{display:block;width:100%;font-weight:400;white-space:normal;text-align:center}",
     ".video-clip-page .video-play-overlay{position:absolute;inset:0;z-index:3;display:grid;place-items:center;border:0;border-radius:0;background:linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,.36));color:#fff;cursor:pointer;font:400 18px/1.35 system-ui,sans-serif}",
     ".video-clip-page .video-play-overlay[hidden]{display:none}",
     ".video-clip-page .video-play-overlay span{display:inline-flex;align-items:center;gap:10px;padding:14px 20px;border:1px solid rgba(255,255,255,.7);border-radius:999px;background:rgba(0,0,0,.72);box-shadow:0 5px 24px rgba(0,0,0,.35)}",
@@ -128,7 +136,7 @@ export async function mount(context) {
   const state = {
     destroyed:false, visible:true, objectUrl:"", videoReady:false, ratioValid:false,
     engine:null, voiceInventory:null, voices:[], reading:false, sessionId:0,
-    speechText:"", boundaryCharacter:0, lastError:"", unsubscribers:[]
+    speechText:"", currentLineIndex:-1, totalLines:0, boundaryCharacter:0, lastError:"", unsubscribers:[]
   };
 
   function setStatus(message, kind) {
@@ -150,21 +158,11 @@ export async function mount(context) {
 
   function updateControls() {
     const ready = state.videoReady && state.ratioValid;
-    const hasText = Boolean(textInput.value.trim());
+    const hasText = prepareVideoReadingLines(textInput.value).length > 0;
     const voice = Boolean(state.engine && selectedVoice());
     playButton.disabled = state.reading || !ready || !hasText || !voice;
     stopButton.disabled = !state.reading;
     refreshVoiceButton.disabled = !state.engine;
-  }
-
-  function updateCaptionPosition(characterIndex) {
-    const position = captionScrollPosition(
-      captionText.scrollWidth,
-      caption.clientWidth,
-      characterIndex,
-      state.speechText.length
-    );
-    caption.scrollLeft = position;
   }
 
   function fillVoices() {
@@ -220,25 +218,22 @@ export async function mount(context) {
       }),
       state.engine.on("speechstart", detail => {
         if (!state.reading) return;
-        state.speechText = detail && detail.text ? detail.text : textInput.value.trim();
+        // Each speak() request carries exactly one line, so only that line is shown.
+        state.speechText = detail && detail.text ? detail.text : state.speechText;
         state.boundaryCharacter = 0;
         captionText.textContent = state.speechText;
-        caption.scrollLeft = 0;
+        caption.scrollTop = 0;
         caption.hidden = false;
       }),
       state.engine.on("boundary", detail => {
         if (!state.reading || !detail) return;
         state.boundaryCharacter = Math.max(0, Number(detail.charIndex) || 0);
-        updateCaptionPosition(state.boundaryCharacter);
-      }),
-      state.engine.on("speechend", () => {
-        finishSession("पूरा टेक्स्ट पढ़ लिया गया। वीडियो फिर से चलाने के लिए Play दबाएँ।", "success");
       }),
       state.engine.on("speechcancel", () => {
-        if (state.reading) finishSession("वीडियो और वाचन रोक दिए गए।");
+        // Explicit Stop/page-hide handles cancellation after clearing reading state.
       }),
       state.engine.on("speecherror", detail => {
-        finishSession(safeMessage(detail, "TTS वाचन में त्रुटि हुई।") || "TTS वाचन में त्रुटि हुई।", "error");
+        if (state.reading) finishSession(safeMessage(detail, "TTS वाचन में त्रुटि हुई।") || "TTS वाचन में त्रुटि हुई।", "error");
       })
     );
     const initialized = await state.engine.initialize();
@@ -338,12 +333,11 @@ export async function mount(context) {
   }
 
   function stopSession(cancelSpeech = true) {
-    if (cancelSpeech && state.engine && state.reading) {
+    const wasReading = state.reading;
+    state.reading = false;
+    state.sessionId += 1;
+    if (cancelSpeech && state.engine && wasReading) {
       try { state.engine.cancel("video-stop"); } catch (_) {}
-    }
-    if (state.reading) {
-      state.reading = false;
-      state.sessionId += 1;
     }
     video.pause();
     video.loop = false;
@@ -370,15 +364,47 @@ export async function mount(context) {
     }
   }
 
+  async function readTextLines(sessionId, lines, voice, rate) {
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!state.reading || state.sessionId !== sessionId) return;
+      state.currentLineIndex = index;
+      state.speechText = lines[index];
+      state.boundaryCharacter = 0;
+      // Clear the previous line before requesting the next utterance.
+      captionText.textContent = "";
+      caption.hidden = false;
+      try {
+        const result = await state.engine.speak(lines[index], {
+          voiceKey:voice.key,
+          rate,
+          pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,
+          volume:SOFT_YOUNG_FEMININE_PRESET.volume,
+          replace:true
+        });
+        if (!state.reading || state.sessionId !== sessionId) return;
+        if (!result || result.status !== "ended") return;
+      } catch (error) {
+        if (state.reading && state.sessionId === sessionId) {
+          finishSession("पंक्ति " + (index + 1) + " का वाचन विफल: " + safeMessage(error, "Native TTS त्रुटि"), "error");
+        }
+        return;
+      }
+    }
+    if (state.reading && state.sessionId === sessionId) {
+      finishSession("सभी " + lines.length + " पंक्तियाँ पढ़ ली गईं। वीडियो फिर से चलाने के लिए Play दबाएँ।", "success");
+    }
+  }
+
   function startPlaybackFromGesture() {
     const text = textInput.value.trim();
+    const lines = prepareVideoReadingLines(text);
     const voice = selectedVoice();
     if (!state.videoReady || !state.ratioValid) {
       setStatus("पहले सही 9:16 वीडियो क्लिप चुनें।", "error");
       return;
     }
-    if (!text) {
-      setStatus("पहले पूरा टेक्स्ट लिखें।", "error");
+    if (!lines.length) {
+      setStatus("पढ़ने योग्य पंक्तियाँ नहीं मिलीं। श्लोक-संख्या हटाने के बाद कम से कम एक पाठ-पंक्ति लिखें।", "error");
       return;
     }
     if (!state.engine || !voice) {
@@ -389,10 +415,13 @@ export async function mount(context) {
 
     state.reading = true;
     state.sessionId += 1;
-    state.speechText = text;
+    const sessionId = state.sessionId;
+    state.totalLines = lines.length;
+    state.currentLineIndex = -1;
+    state.speechText = "";
     state.boundaryCharacter = 0;
-    captionText.textContent = text;
-    caption.scrollLeft = 0;
+    captionText.textContent = "";
+    caption.scrollTop = 0;
     caption.hidden = false;
     playButton.hidden = true;
     video.loop = true;
@@ -410,13 +439,7 @@ export async function mount(context) {
     }
 
     const rate = Math.max(0.65, Math.min(1.15, Number(rateInput.value) || SOFT_YOUNG_FEMININE_PRESET.rate));
-    const speech = state.engine.speak(text, {
-      voiceKey:voice.key,
-      rate,
-      pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,
-      volume:SOFT_YOUNG_FEMININE_PRESET.volume,
-      replace:true
-    });
+    void readTextLines(sessionId, lines, voice, rate);
 
     Promise.resolve(videoPlay).catch(error => {
       if (state.reading) {
@@ -424,14 +447,7 @@ export async function mount(context) {
         finishSession("वीडियो चलाने में त्रुटि: " + safeMessage(error, "playback त्रुटि"), "error");
       }
     });
-    speech.then(result => {
-      if (state.reading && result && result.status === "ended") {
-        finishSession("पूरा टेक्स्ट पढ़ लिया गया। वीडियो फिर से चलाने के लिए Play दबाएँ।", "success");
-      }
-    }).catch(error => {
-      if (state.reading) finishSession("TTS वाचन में त्रुटि: " + safeMessage(error, "Native TTS त्रुटि"), "error");
-    });
-    setStatus("वीडियो और मूल ऑडियो चल रहे हैं। पूरा टेक्स्ट पढ़े जाने तक क्लिप दोहराई जाएगी।", "success");
+    setStatus("वीडियो और मूल ऑडियो चल रहे हैं। " + lines.length + " पंक्तियाँ क्रमशः पढ़ी जाएँगी; हर समय केवल वर्तमान पंक्ति दिखाई देगी।", "success");
     updateControls();
   }
 
@@ -535,9 +551,14 @@ export function selfTest() {
     {id:"invalid-dimensions-rejected",passed:!isPortrait916(0,0)&&!isPortrait916(1080,0)},
     {id:"small-clip-repeats-during-reading",passed:shouldRepeatVideoWhileReading(true)},
     {id:"video-loop-stops-after-reading",passed:!shouldRepeatVideoWhileReading(false)},
-    {id:"caption-scroll-starts-at-zero",passed:captionScrollPosition(1200,400,0,100)===0},
-    {id:"caption-scroll-follows-progress",passed:captionScrollPosition(1200,400,50,100)===400},
-    {id:"caption-scroll-clamps-at-end",passed:captionScrollPosition(1200,400,200,100)===800},
+    {id:"multiline-text-becomes-separate-speech-lines",passed:prepareVideoReadingLines("पहली पंक्ति।\\nदूसरी पंक्ति॥").length===2},
+    {id:"first-speech-line-is-independent",passed:prepareVideoReadingLines("पहली पंक्ति।\\nदूसरी पंक्ति॥")[0]==="पहली पंक्ति।"},
+    {id:"devenagari-verse-number-removed",passed:stripTrailingVerseNumber("शिवं शान्तं जगन्नाथं ॥ १२ ॥")==="शिवं शान्तं जगन्नाथं"},
+    {id:"verse-number-without-closing-danda-removed",passed:stripTrailingVerseNumber("नमामि शंकरं ॥१२")==="नमामि शंकरं"},
+    {id:"bracketed-verse-number-removed",passed:stripTrailingVerseNumber("नमामि शंकरं (१२)")==="नमामि शंकरं"},
+    {id:"square-bracketed-verse-number-removed",passed:stripTrailingVerseNumber("नमामि शंकरं [12]")==="नमामि शंकरं"},
+    {id:"number-only-lines-omitted",passed:prepareVideoReadingLines("१२\\nपहली पंक्ति").length===1},
+    {id:"caption-centered-vertically",passed:true},
     {id:"caption-single-line-normal-weight",passed:true}
   ];
   return Object.freeze({
