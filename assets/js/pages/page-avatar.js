@@ -866,7 +866,7 @@ export function selfTest() {
   const gazePoints=makeAnimatedPoints(synthetic,gazeState,900);
   const blinkState={speechActive:false,paused:false,mouthOpen:0,blink:1,gaze:{x:0,y:0},gazeMode:"center",rate:1};
   const blinkPoints=makeAnimatedPoints(synthetic,blinkState,900);
-  const mouthState={speechActive:true,paused:false,speechText:"आ",boundaryCharacter:0,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
+  const mouthState={speechActive:true,paused:false,speechText:"आ",boundaryCharacter:0,speechElapsedMs:250,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
   const mouthPoints=makeAnimatedPoints(synthetic,mouthState,250);
   const closedState={speechActive:true,paused:true,speechText:"आ",boundaryCharacter:0,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
   const closedPoints=makeAnimatedPoints(synthetic,closedState,250);
