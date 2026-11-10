@@ -189,8 +189,8 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   const opening=state.mouthOpen;
   const gap=Math.min(height*0.045,opening*height*0.035);
   if (gap>0.15) {
-    const upperIds=[13,82,81,80,191,78,95,88,178,87];
-    const lowerIds=[14,87,178,88,95,78,191,80,81,82];
+    const upperIds=[13,312,311,310,415,308,78,191,80,81,82];
+    const lowerIds=[14,317,402,318,324,308,78,95,88,178,87];
     for (const index of upperIds) {
       if (points[index]) points[index].y-=gap*0.46;
     }
