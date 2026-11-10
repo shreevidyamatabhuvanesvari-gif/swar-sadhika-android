@@ -1,0 +1,139 @@
+name: Swar-Sadhika JavaScript Regression Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swar-sadhika-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: JavaScript regression audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax-check every JavaScript file
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' file; do
+            echo "Checking ${file}"
+            node --experimental-default-type=module --check "${file}"
+            count=$((count + 1))
+          done < <(find assets/js -type f -name '*.js' -print0 | sort -z)
+          test "${count}" -gt 0
+          echo "Syntax check passed for ${count} JavaScript files."
+
+      - name: Run Sanskrit and TTS module self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-default-type=module --input-type=module <<'NODE'
+          import { selfTest as testVedicPronunciation } from "./assets/js/tts/vedic-sanskrit-pronunciation.js";
+          import { selfTest as testSanskritG2P } from "./assets/js/tts/sanskrit-g2p-engine.js";
+          import { selfTest as testPronunciationCompiler } from "./assets/js/tts/sanskrit-pronunciation-compiler.js";
+          import { selfTest as testTtsEngine } from "./assets/js/tts/tts-engine.js";
+
+          const suites = [
+            ["Vedic pronunciation", testVedicPronunciation],
+            ["Sanskrit G2P", testSanskritG2P],
+            ["Pronunciation compiler", testPronunciationCompiler],
+            ["TTS engine", testTtsEngine]
+          ];
+
+          let failed = false;
+          for (const [name, run] of suites) {
+            let result;
+            try {
+              result = run();
+            } catch (error) {
+              console.error(`FAIL ${name}: ${error?.stack || error}`);
+              failed = true;
+              continue;
+            }
+            const passed = result?.status === "PASSED" && result?.failed === 0;
+            console.log(`${passed ? "PASS" : "FAIL"} ${name}: ${result?.passed ?? 0}/${result?.total ?? 0}`);
+            if (!passed) {
+              failed = true;
+              for (const check of result?.checks || []) {
+                if (!check.passed) console.error(`  - ${check.id}`);
+              }
+            }
+          }
+          if (failed) process.exitCode = 1;
+          NODE
+
+      - name: Audit Sanskrit Display Studio HTML and JavaScript contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-default-type=module --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync, existsSync } from "node:fs";
+
+          const htmlPath = "sanskrit-display-studio.html";
+          const pagePath = "assets/js/pages/page-sanskrit-display-studio-part2.js";
+          const html = readFileSync(htmlPath, "utf8");
+          const page = readFileSync(pagePath, "utf8");
+
+          const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
+          const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+          assert.deepEqual(duplicateIds, [], "Studio HTML contains duplicate element IDs");
+
+          const moduleScripts = [...html.matchAll(/<script[^>]*type=["']module["'][^>]*src=["']([^"']+)["'][^>]*>/g)];
+          assert.equal(moduleScripts.length, 1, "Studio must load exactly one page module");
+          const moduleUrlPath = moduleScripts[0][1].split("?")[0];
+          const modulePath = moduleUrlPath.startsWith("./") ? moduleUrlPath.slice(2) : moduleUrlPath;
+          assert.equal(modulePath, pagePath, "Studio module script points to the expected page module");
+          assert.ok(existsSync(modulePath), `Studio module file is missing: ${modulePath}`);
+
+          const htmlIds = new Set(ids);
+          const dynamicIds = new Set([
+            "studio-voice-tools",
+            "studio-voice-refresh",
+            "studio-voice-test",
+            "studio-voice-status",
+            "studio-record-preview",
+            "studio-player-runtime-styles"
+          ]);
+          const references = [...page.matchAll(/byId\(["']([^"']+)["']\)/g)].map(match => match[1]);
+          const missingIds = [...new Set(references.filter(id => !htmlIds.has(id) && !dynamicIds.has(id)))];
+          assert.deepEqual(missingIds, [], "Page module references DOM IDs missing from Studio HTML");
+
+          const requiredBindings = [
+            ["avatar file binding", /studio-avatar-file["']\)\.addEventListener\("change", handleAvatarChange/],
+            ["video file binding", /studio-video-file["']\)\.addEventListener\("change", handleVideoChange/],
+            ["fullscreen binding", /studio-fullscreen-play["']\)\.addEventListener\("click", startFullscreenPlayback/],
+            ["preview binding", /studio-play-preview["']\)\.addEventListener\("click"/],
+            ["pause binding", /studio-pause["']\)\.addEventListener\("click", pausePlayback/],
+            ["resume binding", /studio-resume["']\)\.addEventListener\("click", resumePlayback/],
+            ["stop binding", /studio-stop["']\)\.addEventListener\("click"/],
+            ["text input binding", /studio-text["']\)\.addEventListener\("input", updateTextPreview/]
+          ];
+          for (const [label, pattern] of requiredBindings) {
+            assert.match(page, pattern, `Missing Studio event binding: ${label}`);
+          }
+
+          const playbackHelpers = [...page.matchAll(/^function\s+getPlaybackItemsFromLines\s*\(/gm)];
+          assert.equal(playbackHelpers.length, 1, "Playback helper must have exactly one declaration");
+          console.log("PASS Studio DOM IDs, page module path, and eight core event bindings.");
+          NODE
