@@ -114,14 +114,19 @@ function photoFit(imageWidth, imageHeight, targetWidth, targetHeight) {
   const scale = Math.max(targetWidth/imageWidth,targetHeight/imageHeight);
   const width = imageWidth*scale;
   const height = imageHeight*scale;
-  return { scale, x:(targetWidth-width)/2, y:(targetHeight-height)/2 };
+  return {
+    scale, x:(targetWidth-width)/2, y:(targetHeight-height)/2,
+    sourceWidth:imageWidth, sourceHeight:imageHeight
+  };
 }
 
 function mapLandmarks(landmarks, fit) {
   return landmarks.map(point => ({
-    x:finite(point.x)*fit.scale*1 + fit.x,
-    y:finite(point.y)*fit.scale*1 + fit.y,
-    z:finite(point.z)
+    // MediaPipe Face Landmarker returns normalized image coordinates (0..1).
+    // Convert them to source-image pixels before applying the exact cover-fit transform.
+    x:finite(point.x)*fit.sourceWidth*fit.scale + fit.x,
+    y:finite(point.y)*fit.sourceHeight*fit.scale + fit.y,
+    z:finite(point.z)*fit.sourceWidth*fit.scale
   }));
 }
 
@@ -184,7 +189,7 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   const mouthCenterX=(mouthLeft.x+mouthRight.x)/2;
   const mouthCenterY=(mouthTop.y+mouthBottom.y)/2;
   const mouthWidth=Math.max(1,Math.hypot(mouthRight.x-mouthLeft.x,mouthRight.y-mouthLeft.y));
-  const char = state.speechActive && !state.paused ? currentSpeechCharacter(state, elapsedMs) : "";
+  const char = state.speechActive && !state.paused ? currentSpeechCharacter(state, state.speechElapsedMs) : "";
   const targetOpen = state.speechActive && !state.paused ? characterMouthShape(char) : 0;
   state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,state.speechActive ? 0.58 : 0.22);
   const opening=state.mouthOpen;
@@ -385,7 +390,7 @@ export async function mount(context) {
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
     basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null, motionPulse:0,
     voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
-    boundaryCharacter:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
+    boundaryCharacter:0, speechElapsedMs:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
     gazeTarget:0, lastFrame:0, raf:0, lastStatus:"", unsubscribers:[]
   };
@@ -482,10 +487,11 @@ export async function mount(context) {
         state.speechActive=true;
         state.paused=false;
         state.boundaryCharacter=0;
+        state.speechElapsedMs=0;
         state.speechStartedAt=win.performance.now();
         updateButtons();
       }),
-      state.engine.on("speechend",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
+      state.engine.on("speechend",()=>{ state.speechActive=false; state.paused=false; state.speechElapsedMs=0; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speechcancel",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speecherror",detail=>{ state.speechActive=false; state.paused=false; setStatus(detail && detail.message || "वाचन त्रुटि।","error"); updateButtons(); }),
       state.engine.on("pause",()=>{ state.paused=true; updateButtons(); }),
@@ -625,24 +631,17 @@ export async function mount(context) {
     updateIdle(elapsedMs);
     const points=makeAnimatedPoints(state.basePoints,state,elapsedMs);
     drawFaceMesh(context2d,state.baseCanvas,state.basePoints,points,state.triangles,state);
-    const seconds=elapsedMs/1000;
-    const pulse=state.speechActive && !state.paused ? state.motionPulse : 0;
-    state.motionPulse*=0.90;
-    const bob=state.speechActive && !state.paused
-      ? Math.sin(seconds*5.4)*2.0+pulse*3.0+Math.sin(seconds*2.1)*0.9
-      : Math.sin(seconds*1.15)*2.2;
-    const tilt=state.speechActive && !state.paused
-      ? Math.sin(seconds*1.8)*0.24+pulse*0.16
-      : Math.sin(seconds*0.72)*0.20;
-    canvas.style.transform="translate3d(0,"+bob.toFixed(2)+"px,0) rotate("+tilt.toFixed(3)+"deg)";
+    // Keep the portrait canvas fixed. The face mesh itself carries the expression,
+    // gaze, blink and viseme movement; shaking the whole image is not avatar animation.
+    canvas.style.transform="";
   }
 
   function animationFrame(timestamp) {
     if (state.destroyed || !state.visible || !state.basePoints) return;
     if (timestamp-state.lastFrame>=FRAME_INTERVAL) {
       state.lastFrame=timestamp;
-      const elapsed=state.speechActive ? Math.max(0,win.performance.now()-state.speechStartedAt) : timestamp;
-      try { render(elapsed); }
+      state.speechElapsedMs=state.speechActive ? Math.max(0,win.performance.now()-state.speechStartedAt) : 0;
+      try { render(timestamp); }
       catch (error) {
         state.visible=false;
         stopAnimation();
@@ -674,6 +673,7 @@ export async function mount(context) {
     if (!voice || !voice.selectable) { setVoiceStatus("स्थानीय Hindi/Sanskrit आवाज़ चुनें।","error"); return; }
     state.speechText=text;
     state.boundaryCharacter=0;
+    state.speechElapsedMs=0;
     state.speechStartedAt=win.performance.now();
     state.rate=finite(rateInput.value,0.88);
     state.speechActive=true;
@@ -706,7 +706,7 @@ export async function mount(context) {
     if (!state.engine || !state.paused) return;
     const ok=await state.engine.resume();
     state.paused=!ok;
-    if (ok) state.speechStartedAt=win.performance.now();
+    if (ok) { state.speechStartedAt=win.performance.now(); state.speechElapsedMs=0; }
     updateButtons();
   }
 
@@ -719,6 +719,7 @@ export async function mount(context) {
 
   function resetPhoto() {
     void stopSpeech();
+    state.speechElapsedMs=0;
     stopAnimation();
     state.faceLayer=null;
     state.faceLayerContext=null;
@@ -835,6 +836,8 @@ export function selfTest() {
     {x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10},{x:5,y:5}
   ];
   const triangles=triangulate(square);
+  const testFit=photoFit(1000,1000,450,800);
+  const mappedLandmark=mapLandmarks([{x:0.5,y:0.5,z:0}],testFit)[0];
   const affine=affineFromTriangles(
     [{x:0,y:0},{x:10,y:0},{x:0,y:10}],
     [{x:2,y:3},{x:22,y:3},{x:2,y:33}]
@@ -870,6 +873,8 @@ export function selfTest() {
   const maxPointDelta=(left,right)=>Math.max(...left.map((point,index)=>Math.hypot(point.x-right[index].x,point.y-right[index].y)));
   const mouthGap=(points)=>Math.abs(points[14].y-points[13].y);
   const checks=[
+    {id:"normalized-landmarks-map-to-photo-pixels",passed:Math.abs(mappedLandmark.x-225)<1e-6 && Math.abs(mappedLandmark.y-400)<1e-6},
+    {id:"landmark-fit-retains-source-image-dimensions",passed:testFit.sourceWidth===1000 && testFit.sourceHeight===1000},
     {id:"delaunay-mesh-builds",passed:triangles.length>=4},
     {id:"affine-photo-warp",passed:Boolean(mapped && Math.abs(mapped.x-10)<1e-6 && Math.abs(mapped.y-18)<1e-6)},
     {id:"mouth-viseme-vowels",passed:characterMouthShape("आ")>characterMouthShape("इ") && characterMouthShape("ओ")>0},
@@ -880,7 +885,8 @@ export function selfTest() {
     {id:"blink-closes-eye-landmarks",passed:Math.abs(blinkPoints[159].y-synthetic[159].y)>2 && Math.abs(blinkPoints[145].y-synthetic[145].y)>1},
     {id:"speech-opens-photo-mouth",passed:mouthGap(mouthPoints)>mouthGap(synthetic)+3 && mouthState.mouthOpen>0},
     {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && Math.abs(Math.hypot(closedPoints[14].x-closedPoints[13].x,closedPoints[14].y-closedPoints[13].y)-Math.hypot(synthetic[14].x-synthetic[13].x,synthetic[14].y-synthetic[13].y))<1e-6},
-    {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1},0).length===478},
+    {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1,speechElapsedMs:0},0).length===478},
+    {id:"portrait-canvas-does-not-use-global-shake",passed:s.includes('canvas.style.transform=""')},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
     {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"}
   ];
