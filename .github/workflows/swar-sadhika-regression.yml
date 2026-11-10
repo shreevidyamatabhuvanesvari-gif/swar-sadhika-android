@@ -12,10 +12,7 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: swar-sadhika-regression-${{ github.ref }}
-  cancel-in-progress: true
-
+# Deliberately no concurrency cancellation: every single-file commit must receive its own test run.
 jobs:
   regression:
     name: JavaScript regression audit
