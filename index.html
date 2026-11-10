@@ -24,6 +24,7 @@
       <a class="studio-link" href="./sanskrit-display-studio.html">दृश्य स्टूडियो</a>
       <button type="button" data-route="nano-server">नैनो सर्वर</button>
       <button type="button" data-route="avatar">अवतार</button>
+      <button type="button" data-route="video">वीडियो क्लिप</button>
       <button type="button" data-route="nano-brain">नैनो ब्रेन</button>
       <button type="button" data-route="diagnostics">फाइल जाँच</button>
     </nav>
@@ -64,6 +65,11 @@
     <section id="view-nano-server" class="view" hidden aria-labelledby="server-title">
       <div class="intro"><h1 id="server-title">नैनो सर्वर</h1><p>ऐप के अपने निजी सर्वर की लाइव स्थिति के लिए आरक्षित पृष्ठ।</p></div>
       <div class="panel"><div class="status warn">अभी निजी Nano Server का endpoint या server process इस Repository में मौजूद नहीं है। इसलिए कोई काल्पनिक LIVE स्थिति नहीं दिखाई जा रही है।</div><div class="grid"><div class="tile"><strong>सर्वर कनेक्शन</strong><span class="pending">कॉन्फ़िगरेशन लंबित</span></div><div class="tile"><strong>लाइव हेल्थ चेक</strong><span class="pending">Health endpoint लंबित</span></div><div class="tile"><strong>डेटा स्रोत</strong><span class="subtle">स्थानीय ब्राउज़र; सर्वर से कनेक्शन अभी सक्रिय नहीं</span></div></div><p class="note">भविष्य में Nano Server मॉड्यूल और उसके health-check endpoint को Registry में जोड़कर इसी पृष्ठ पर वास्तविक status, uptime और सीमित runtime जानकारी दिखाई जा सकेगी।</p></div>
+    </section>
+
+    <section id="view-video" class="view" hidden aria-labelledby="video-clip-title">
+      <div class="intro"><h1 id="video-clip-title">वीडियो क्लिप प्रस्तुति</h1><p>9:16 वीडियो के साथ संपूर्ण टेक्स्ट का वाचन और एक-पंक्ति कैप्शन।</p></div>
+      <div id="video-clip-root"></div>
     </section>
 
     <section id="view-avatar" class="view" hidden aria-labelledby="avatar-title">
