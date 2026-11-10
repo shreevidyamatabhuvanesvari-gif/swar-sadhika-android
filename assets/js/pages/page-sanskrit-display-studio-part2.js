@@ -871,30 +871,57 @@ async function beginPlayback(options = {}) {
 }
 
 async function startFullscreenPlayback() {
-  if (state.speaking) return;
+  if (state.speaking) {
+    setStatus("वाचन पहले से चल रहा है। वर्तमान वाचन समाप्त होने के बाद Full Screen शुरू करें।", "info");
+    return;
+  }
 
-  const playbackPromise = beginPlayback().catch(error => {
-    setStatus(error && error.message ? error.message : "वाचन शुरू नहीं हो सका।", "error");
-  });
+  let fullscreenRequest = null;
+  let fullscreenError = null;
 
+  /*
+   * Call requestFullscreen directly inside the tap handler before TTS
+   * preparation or speech synthesis begins. No await occurs before both
+   * browser actions have been invoked.
+   */
   try {
     if (typeof stage.requestFullscreen !== "function") {
       throw new Error("इस ब्राउज़र में Fullscreen API उपलब्ध नहीं है।");
     }
-    const request = stage.requestFullscreen();
-    if (request && typeof request.then === "function") await request;
-    if (!document.fullscreenElement) throw new Error("ब्राउज़र ने Fullscreen सक्रिय नहीं किया।");
+    fullscreenRequest = stage.requestFullscreen();
   } catch (error) {
+    fullscreenError = error;
+  }
+
+  const playbackPromise = beginPlayback().catch(error => {
+    setStatus(error && error.message ? error.message : "वाचन शुरू नहीं हो सका।", "error");
+    return null;
+  });
+
+  if (fullscreenRequest) {
+    try {
+      if (typeof fullscreenRequest.then === "function") await fullscreenRequest;
+      if (!document.fullscreenElement) {
+        throw new Error("ब्राउज़र ने Fullscreen सक्रिय नहीं किया।");
+      }
+    } catch (error) {
+      fullscreenError = error;
+    }
+  }
+
+  if (fullscreenError || !document.fullscreenElement) {
     document.body.classList.add("studio-expanded");
     byId("studio-exit-fullscreen").hidden = false;
     byId("studio-main-index-full").hidden = false;
-    setStatus("ब्राउज़र Full Screen API उपलब्ध/स्वीकृत नहीं हुई; वैकल्पिक Full Screen दृश्य सक्रिय है। " +
-      (error && error.message ? error.message : ""), "warn");
+    setStatus(
+      "ब्राउज़र Full Screen API उपलब्ध/स्वीकृत नहीं हुई; वैकल्पिक Full Screen दृश्य सक्रिय किया गया। " +
+      (fullscreenError && fullscreenError.message ? fullscreenError.message : ""),
+      "warn"
+    );
   }
 
   await playbackPromise;
 }
-
 function ensureRecordingPreview() {
   let preview = byId("studio-record-preview");
   if (preview) return preview;
@@ -1279,7 +1306,15 @@ export function selfTest() {
     { id: "all-visible-player-buttons-available", passed:
       ["studio-fullscreen-play", "studio-play-preview", "studio-record-download",
         "studio-pause", "studio-resume", "studio-stop"].every(id =>
-          byId(id) && byId(id).disabled === false) }
+          byId(id) && byId(id).disabled === false) },
+    { id: "fullscreen-request-precedes-speech-on-user-tap", passed: (() => {
+      const handler = startFullscreenPlayback.toString();
+      const fullscreenIndex = handler.indexOf("stage.requestFullscreen()");
+      const playbackIndex = handler.indexOf("const playbackPromise = beginPlayback()");
+      const awaitingIndex = handler.indexOf("await fullscreenRequest");
+      return fullscreenIndex >= 0 && playbackIndex > fullscreenIndex &&
+        awaitingIndex > playbackIndex && handler.includes("studio-expanded");
+    })() }
   ];
   return {
     passed: checks.every(item => item.passed),
