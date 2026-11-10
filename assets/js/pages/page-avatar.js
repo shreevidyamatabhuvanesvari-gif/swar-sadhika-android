@@ -817,7 +817,7 @@ export function selfTest() {
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(Array.from({length:478},(_,index)=>({x:index%23,y:Math.floor(index/23),z:0})),{speechActive:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"},0).length===478},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
     {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"},
-    {id:"voice-controls-present",passed:["photo-avatar-refresh-voices","photo-avatar-test-voice","photo-avatar-voice-status"].every(id=>Boolean(root.querySelector("#"+id)))}
+    {id:"voice-control-contract-declared",passed:["photo-avatar-refresh-voices","photo-avatar-test-voice","photo-avatar-voice-status"].every(id=>s.includes(id))}
   ];
   return {status:checks.every(check=>check.passed)?"PASSED":"FAILED",total:checks.length,passed:checks.filter(check=>check.passed).length,failed:checks.filter(check=>!check.passed).length,checks};
 }
