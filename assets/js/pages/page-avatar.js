@@ -2,7 +2,7 @@
  * Browser-local face landmarks, conservative photo-mesh deformation and Native TTS.
  * A single photograph supports subtle 2.5D motion only; this is not full 3D reconstruction.
  */
-import { createAvatarTtsEngine } from "../tts/avatar-tts-engine.js";
+import { createAvatarTtsEngine, SOFT_YOUNG_FEMININE_PRESET } from "../tts/avatar-tts-engine.js";
 
 const MEDIAPIPE_VERSION = "0.10.21";
 const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@" + MEDIAPIPE_VERSION;
@@ -352,6 +352,7 @@ export async function mount(context) {
     '   <label class="avatar-field">स्थानीय Hindi/Sanskrit आवाज़<select id="photo-avatar-voice"><option value="">आवाज़ सूची पढ़ी जा रही है…</option></select></label>',
     '   <div class="avatar-actions"><button id="photo-avatar-refresh-voices" class="btn" type="button">↻ आवाज़ सूची ताज़ा करें</button><button id="photo-avatar-test-voice" class="btn" type="button" disabled>♪ आवाज़ का नमूना सुनें</button></div>',
     '   <div id="photo-avatar-voice-status" class="avatar-status" role="status" aria-live="polite">Android की वास्तविक आवाज़ सूची जाँची जा रही है…</div>',
+    '   <div class="avatar-note">स्वर-प्रीसेट: कोमल युवा स्त्री-शैली · विराम-चिह्नों पर स्थानीय कृत्रिम श्वास-ध्वनि। वास्तविक आयु या प्राकृतिक रिकॉर्ड की हुई साँस का दावा नहीं।</div>',
     '   <div class="avatar-tuning">',
     '    <label class="avatar-field">वाचन गति <span id="photo-avatar-rate-value">0.88×</span><input id="photo-avatar-rate" type="range" min="0.65" max="1.15" step="0.05" value="0.88"></label>',
     '    <label class="avatar-field">दृष्टि <select id="photo-avatar-gaze"><option value="auto">स्वाभाविक स्वतः</option><option value="left">बाईं ओर</option><option value="center">सामने</option><option value="right">दाईं ओर</option></select></label>',
@@ -389,7 +390,7 @@ export async function mount(context) {
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
     basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null, motionPulse:0,
-    voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
+    voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0, breathAvailable:null,
     boundaryCharacter:0, speechElapsedMs:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
     gazeTarget:0, lastFrame:0, raf:0, lastStatus:"", unsubscribers:[]
@@ -494,6 +495,8 @@ export async function mount(context) {
       state.engine.on("speechend",()=>{ state.speechActive=false; state.paused=false; state.speechElapsedMs=0; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speechcancel",()=>{ state.speechActive=false; state.paused=false; state.mouthOpen=0; updateButtons(); }),
       state.engine.on("speecherror",detail=>{ state.speechActive=false; state.paused=false; setStatus(detail && detail.message || "वाचन त्रुटि।","error"); updateButtons(); }),
+      state.engine.on("breathunavailable",()=>{ state.breathAvailable=false; setVoiceStatus("इस browser में कृत्रिम श्वास-ध्वनि उपलब्ध नहीं है; Native TTS वाचन जारी रहेगा।","error"); }),
+      state.engine.on("breathstart",detail=>{ state.breathAvailable=true; setVoiceStatus((detail && detail.phase==="inhale" ? "हल्की श्वास अंदर लेने की ध्वनि…" : "हल्की श्वास छोड़ने की ध्वनि…"),"success"); }),
       state.engine.on("pause",()=>{ state.paused=true; updateButtons(); }),
       state.engine.on("resume",()=>{ state.paused=false; state.speechStartedAt=win.performance.now(); updateButtons(); })
     );
@@ -524,8 +527,8 @@ export async function mount(context) {
       return;
     }
     try {
-      const result=await state.engine.playSample(selected.key,{rate:finite(rateInput.value,0.88),pitch:1,volume:1});
-      if (result.status==="ended") setVoiceStatus("आवाज़ का नमूना पूरा हुआ। स्वर की गुणवत्ता सुनकर स्वयं पुष्टि करें।","success");
+      const result=await state.engine.playSample(selected.key,{...SOFT_YOUNG_FEMININE_PRESET,rate:finite(rateInput.value,SOFT_YOUNG_FEMININE_PRESET.rate)});
+      if (result.status==="ended") setVoiceStatus("नमूना पूरा हुआ: कोमल युवा स्त्री-शैली और विरामों पर कृत्रिम श्वास-ध्वनि। स्वर की गुणवत्ता सुनकर पुष्टि करें।","success");
     } catch (error) {
       setVoiceStatus("आवाज़ का नमूना नहीं चल सका: "+(error && error.message || "Native TTS त्रुटि"),"error");
     }
@@ -681,7 +684,7 @@ export async function mount(context) {
     updateButtons();
     try {
       const result=await state.engine.speak(text,{
-        voiceKey:voice.key,rate:state.rate,pitch:1,volume:1,replace:true
+        voiceKey:voice.key,rate:state.rate,pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,volume:SOFT_YOUNG_FEMININE_PRESET.volume,breathLevel:SOFT_YOUNG_FEMININE_PRESET.breathLevel,replace:true
       });
       if (result && result.status==="cancelled") state.speechActive=false;
     } catch (error) {
@@ -887,7 +890,8 @@ export function selfTest() {
     {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && Math.abs(Math.hypot(closedPoints[14].x-closedPoints[13].x,closedPoints[14].y-closedPoints[13].y)-Math.hypot(synthetic[14].x-synthetic[13].x,synthetic[14].y-synthetic[13].y))<1e-6},
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1,speechElapsedMs:0},0).length===478},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
-    {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"}
+    {id:"dedicated-model-free-avatar-tts-imported",passed:typeof createAvatarTtsEngine==="function"},
+    {id:"soft-feminine-preset-imported",passed:SOFT_YOUNG_FEMININE_PRESET.pitch>1 && SOFT_YOUNG_FEMININE_PRESET.rate<1}
   ];
   return {status:checks.every(check=>check.passed)?"PASSED":"FAILED",total:checks.length,passed:checks.filter(check=>check.passed).length,failed:checks.filter(check=>!check.passed).length,checks};
 }
