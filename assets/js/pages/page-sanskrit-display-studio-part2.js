@@ -753,11 +753,55 @@ function getLines() {
     .filter(line => line.trim().length > 0);
 }
 
+function isStandaloneVerseNumber(line) {
+  return /^(?:॥|।|\|\|)\s*[०-९0-9]+\s*(?:॥|।|\|\|)?$/u.test(String(line || "").trim());
+}
+
+function stripVerseNumberForSpeech(line) {
+  return String(line || "")
+    .replace(/(?:\s*(?:॥|।|\|\|)\s*[०-९0-9]+\s*(?:॥|।|\|\|)?)+\s*$/u, "")
+    .trim();
+}
+
+function getPlaybackItems() {
+  return getPlaybackItemsFromLines(getLines());
+}
+
+function getPlaybackItemsFromLines(lines) {
+  const items = [];
+  for (const displayLine of lines) {
+    if (isStandaloneVerseNumber(displayLine)) {
+      if (items.length) items[items.length - 1].displayLine += " " + displayLine.trim();
+      continue;
+    }
+    items.push({
+      displayLine,
+      speechLine: stripVerseNumberForSpeech(displayLine)
+    });
+  }
+  return items.filter(item => item.speechLine.length > 0);
+}
+
+function getPlaybackItemsFromLines(lines) {
+  const items = [];
+  for (const displayLine of lines) {
+    if (isStandaloneVerseNumber(displayLine)) {
+      if (items.length) items[items.length - 1].displayLine += " " + displayLine.trim();
+      continue;
+    }
+    items.push({
+      displayLine,
+      speechLine: stripVerseNumberForSpeech(displayLine)
+    });
+  }
+  return items.filter(item => item.speechLine.length > 0);
+}
+
 async function beginPlayback(options = {}) {
   if (!state.engineReady) throw new Error("Native TTS Engine अभी तैयार नहीं है।");
   if (state.speaking) return;
-  const lines = getLines();
-  if (!lines.length) throw new Error("पहले टेक्स्ट बॉक्स में पाठ लिखें।");
+  const items = getPlaybackItems();
+  if (!items.length) throw new Error("वाचन योग्य पाठ उपलब्ध नहीं है। श्लोक संख्या के अतिरिक्त संस्कृत पाठ लिखें।");
   if (byId("studio-text").value.length > MAX_TEXT_LENGTH) {
     throw new Error("पाठ अधिकतम " + MAX_TEXT_LENGTH + " अक्षरों तक सीमित है।");
   }
@@ -781,27 +825,29 @@ async function beginPlayback(options = {}) {
     }
     startCanvasLoop();
   }
-  setStatus("स्थानीय Voice से " + lines.length + " पंक्तियों का वाचन शुरू हो रहा है।");
+  setStatus("स्थानीय Voice से " + items.length + " पंक्तियों का वाचन शुरू हो रहा है। श्लोक संख्या स्क्रीन पर रहेगी, पढ़ी नहीं जाएगी।");
   try {
-    for (let index = 0; index < lines.length; index += 1) {
+    for (let index = 0; index < items.length; index += 1) {
       if (generation !== state.generation || state.destroyed) break;
       while (state.paused && generation === state.generation) {
         await new Promise(resolve => window.setTimeout(resolve, 120));
       }
       if (generation !== state.generation || state.destroyed) break;
-      const line = lines[index];
+      const item = items[index];
+      const line = item.displayLine;
+      const speechLine = item.speechLine;
       state.currentLine = line;
       state.revealedCount = 0;
       state.boundarySeen = false;
       const lang = voice.lang || "hi-IN";
-      state.currentPrepared = state.engine.prepareSpeech(line, {
+      state.currentPrepared = state.engine.prepareSpeech(speechLine, {
         backendType: "native",
         voice
       });
       drawStage();
-      setStatus("पंक्ति " + (index + 1) + " / " + lines.length + " · " + voice.name + " · " + lang);
-      startCharacterFallback(line);
-      const result = await state.engine.speak(line, {
+      setStatus("पंक्ति " + (index + 1) + " / " + items.length + " · " + voice.name + " · " + lang);
+      startCharacterFallback(speechLine);
+      const result = await state.engine.speak(speechLine, {
         voice,
         lang,
         rate: Number(byId("studio-rate").value) || 1,
@@ -1218,6 +1264,13 @@ export function selfTest() {
       normalizeSpeechLineBreaks("ज्वल-\nद्धनञ्जय") === "ज्वलद्धनञ्जय" &&
       normalizeSpeechLineBreaks("प्रभा-\nवलम्बि") === "प्रभावलम्बि" &&
       normalizeSpeechLineBreaks("सामान्य\nपंक्ति") === "सामान्य\nपंक्ति" },
+    { id: "verse-number-stays-visible-but-is-not-spoken", passed:
+      stripVerseNumberForSpeech("हर हर महादेव॥१॥") === "हर हर महादेव" &&
+      stripVerseNumberForSpeech("हर हर महादेव ॥ १२ ॥") === "हर हर महादेव" &&
+      stripVerseNumberForSpeech("हर हर महादेव॥15॥") === "हर हर महादेव" &&
+      stripVerseNumberForSpeech("हर हर महादेव") === "हर हर महादेव" &&
+      isStandaloneVerseNumber("॥१॥") &&
+      getPlaybackItemsFromLines(["महादेव॥१॥", "॥२॥"]).length === 1 },
     { id: "looping-video", passed: video.loop === true },
     { id: "shape-aware-wrapping", passed: typeof wrapShapedText === "function" &&
       wrapShapedText("क्षि ज्ञ त्र्य", CANVAS_WIDTH, "700 44px sans-serif").join(" ") === "क्षि ज्ञ त्र्य" },
