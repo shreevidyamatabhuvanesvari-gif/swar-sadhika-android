@@ -108,6 +108,16 @@ function copyInventory(voices) {
   });
 }
 
+export function punctuationPauseMs(mark) {
+  const value = String(mark || "");
+  if (value === "॥") return 780;
+  if (value === "…") return 700;
+  if (value === "।" || value === "." || value === "!" || value === "?") return 560;
+  if (value === ";") return 380;
+  if (value === "," || value === "，") return 240;
+  return 0;
+  }
+
 export function createAvatarTtsEngine(options = {}) {
   const host = options.target || (typeof window !== "undefined" ? window : null);
   const synthesis = host && host.speechSynthesis;
@@ -184,15 +194,7 @@ export function createAvatarTtsEngine(options = {}) {
     if (!found) throw new Error("चुनी हुई आवाज़ स्थानीय Hindi/Sanskrit आवाज़ों में उपलब्ध नहीं है। आवाज़ सूची ताज़ा करें।");
     return found.voice;
   }
-  export function punctuationPauseMs(mark) {
-    const value = String(mark || "");
-    if (value === "॥") return 780;
-    if (value === "…") return 700;
-    if (value === "।" || value === "." || value === "!" || value === "?") return 560;
-    if (value === ";") return 380;
-    if (value === "," || value === "，") return 240;
-    return 0;
-  }
+
 
   function waitForPunctuationPause(record, part) {
     const duration = punctuationPauseMs(part && part.punctuation);
