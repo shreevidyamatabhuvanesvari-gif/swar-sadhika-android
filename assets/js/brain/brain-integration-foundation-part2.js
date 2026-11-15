@@ -9,9 +9,10 @@
 import { createBrainStoragePart2 } from "./brain-storage-part2.js";
 import { createCapabilityGatePart2, cloneSafeJsonPart2 } from "./brain-security-part2.js";
 
-export const BRAIN_INTEGRATION_VERSION_PART2 = "1.1.0";
+export const BRAIN_INTEGRATION_VERSION_PART2 = "1.2.0";
 
-const ROUTES = new Set(["index", "nano-brain", "nano-server", "avatar", "video"]);
+// Keep this allowlist synchronized with the actual Main App PAGE_MODULES keys.
+const ROUTES = new Set(["index", "jump-text", "nano-brain", "nano-server", "avatar", "video"]);
 const BRAIN_EVENT_PATTERN = /^brain:[a-z0-9][a-z0-9:_-]{0,78}$/i;
 const REQUIRED_STORAGE_METHODS = Object.freeze([
   "getRecord",
@@ -609,6 +610,13 @@ export async function selfTest() {
     try { facade.navigate("javascript:alert(1)"); }
     catch (error) { routeDenied = error.code === "ROUTE_NOT_ALLOWED"; }
     check("route-allowlist-blocks-untrusted-route", routeDenied);
+
+    let ttsRouteWorked = false;
+    try {
+      const navigation = await facade.navigate("jump-text");
+      ttsRouteWorked = Boolean(navigation && navigation.route === "jump-text");
+    } catch (_) {}
+    check("main-app-tts-jump-text-route-available", ttsRouteWorked);
 
     let namespaceDenied = false;
     try { facade.emit("user:arbitrary", {}); }
