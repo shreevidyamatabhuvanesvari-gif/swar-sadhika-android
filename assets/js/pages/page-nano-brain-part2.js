@@ -7,6 +7,7 @@
  */
 
 import { createBrainIntegrationPart2 } from "../brain/brain-integration-foundation-part2.js";
+import { createBrainCorePart2 } from "../brain/brain-core-part2.js";
 import { createOpfsAssetStorePart2 } from "../brain/brain-storage-part2.js";
 
 export const NANO_BRAIN_PAGE_VERSION_PART2 = "1.1.0";
@@ -94,6 +95,10 @@ export async function mount(context) {
     app: context.app,
     host,
     allowVolatileFallback: false
+  });
+  const brainCore = createBrainCorePart2({
+    integration,
+    host
   });
 
   let disposed = false;
@@ -291,6 +296,14 @@ export async function mount(context) {
     );
 
     addStatusTile(documentRef, foundationGrid, "Integration Version", diagnostics.version);
+    const coreStatus = brainCore.getStatus();
+    addStatusTile(
+      documentRef,
+      foundationGrid,
+      "Central Brain Core",
+      coreStatus.state === "ready" ? "READY" : coreStatus.state.toUpperCase(),
+      "Version " + coreStatus.version + " · Local Modules: " + coreStatus.moduleCount
+    );
     addStatusTile(documentRef, foundationGrid, "Storage Backend", backendLabel(storage));
     addStatusTile(documentRef, foundationGrid, "Storage Durability", durabilityLabel(storage));
     addStatusTile(documentRef, foundationGrid, "Browser Persistence Permission", persistenceLabel(storage));
@@ -382,7 +395,7 @@ export async function mount(context) {
     setStatus(foundationStatus, "स्थानीय IndexedDB और Security Foundation प्रारंभ हो रहा है…", true);
 
     try {
-      await integration.initialize();
+      await brainCore.initialize();
       if (disposed) return;
       initialized = true;
       await refreshDiagnostics();
@@ -557,6 +570,8 @@ export async function mount(context) {
     async onHide() {
       if (disposed || !pageVisible) return;
       pageVisible = false;
+      // Stop local Core tasks before revoking the page's temporary permissions.
+      try { brainCore.cancelAllTasks("brain-page-hidden"); } catch (_) {}
       // A running user-requested probe must finish its own cleanup before
       // its session permissions are revoked.
       if (memoryProbePromise) {
@@ -576,7 +591,7 @@ export async function mount(context) {
       listeners.splice(0).forEach(remove => {
         try { remove(); } catch (_) {}
       });
-      await integration.dispose();
+      try { await brainCore.dispose(); } finally { await integration.dispose(); }
     },
 
     getDiagnostics() {
