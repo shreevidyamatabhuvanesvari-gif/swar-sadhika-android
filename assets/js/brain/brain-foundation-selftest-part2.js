@@ -1,6 +1,6 @@
 /* Swar-Sadhika Nano Brain — Foundation Regression Suite Part 2.
- * Aggregates the real self-tests exported by the Security, Storage,
- * Integration and Nano Brain Page modules.
+ * Aggregates the real self-tests exported by Security, Storage, Integration,
+ * Central Core, Memory Engine and the Nano Brain Page modules.
  *
  * This file does not replace those tests, mock their results, or claim
  * Android-device / Strict-Offline certification. A suite fails if its
@@ -15,7 +15,7 @@ import { selfTest as runBrainCoreSelfTest } from "./brain-core-part2.js";
 import { selfTest as runBrainMemorySelfTest } from "./brain-memory-engine-part2.js";
 import { selfTest as runNanoBrainPageSelfTest } from "../pages/page-nano-brain-part2.js";
 
-export const BRAIN_FOUNDATION_SELFTEST_VERSION_PART2 = "1.1.0";
+export const BRAIN_FOUNDATION_SELFTEST_VERSION_PART2 = "1.2.0";
 
 const SUITES = Object.freeze([
   Object.freeze({
