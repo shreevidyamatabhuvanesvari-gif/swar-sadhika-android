@@ -12,6 +12,7 @@ export const BRAIN_MEMORY_VERSION_PART2 = "1.0.0";
 
 const READER_MODULE_ID = "memory.reader";
 const WRITER_MODULE_ID = "memory.writer";
+const MAINTAINER_MODULE_ID = "memory.maintainer";
 const MAX_RECORDS = 500;
 const MAX_RESULT_ITEMS = 100;
 const MAX_CONTENT_CHARS = 32768;
@@ -209,6 +210,7 @@ export function createBrainMemoryEnginePart2(options = {}) {
   const activeTasks = new Map();
   let readerRegistered = false;
   let writerRegistered = false;
+  let maintainerRegistered = false;
 
   function assertReady() {
     if (state === "disposed" || state === "disposing") {
@@ -261,11 +263,11 @@ export function createBrainMemoryEnginePart2(options = {}) {
     return run(READER_MODULE_ID, operation, input);
   }
 
-  async function writeOperation(operation, input, approval) {
+  async function writeOperation(operation, input, approval, moduleId = WRITER_MODULE_ID) {
     if (!approval || typeof approval.id !== "string") {
       fail("Memory Write के लिए issueWriteApproval() का ताज़ा Token आवश्यक है।", "WRITE_APPROVAL_REQUIRED");
     }
-    return run(WRITER_MODULE_ID, operation, {
+    return run(moduleId, operation, {
       ...input,
       approvalId: approval.id
     });
@@ -354,50 +356,66 @@ export function createBrainMemoryEnginePart2(options = {}) {
           return record;
         }
 
-        if (input.operation === "revise" || input.operation === "archive") {
-          const previous = await memory.getRecord(input.recordId);
-          if (!previous) fail("संशोधित करने योग्य Memory Record नहीं मिला।", "MEMORY_RECORD_NOT_FOUND");
-          if (previous.status !== "active") fail("केवल सक्रिय Memory Record का नया संस्करण बनाया जा सकता है।", "MEMORY_RECORD_NOT_ACTIVE");
-
-          const all = await memory.listRecords({ limit: MAX_RECORDS });
-          const superseded = all.some(record => record.supersedes === previous.id);
-          if (superseded) fail("यह Memory Record पहले ही supersede हो चुका है।", "STALE_MEMORY_VERSION");
-
-          const normalized = input.operation === "archive"
-            ? {
-                category: previous.category,
-                title: previous.title,
-                content: previous.content,
-                tags: previous.tags,
-                source: previous.source,
-                confidence: previous.confidence,
-                importance: previous.importance,
-                privacy: previous.privacy
-              }
-            : normalizeMemoryInput(input.patch, previous);
-
-          const now = Date.now();
-          const next = {
-            id: makeId("memory", host, ++sequence),
-            logicalId: previous.logicalId,
-            ...normalized,
-            status: input.operation === "archive" ? "archived" : "active",
-            version: previous.version + 1,
-            supersedes: previous.id,
-            createdAt: previous.createdAt,
-            updatedAt: now,
-            provenance: input.operation === "archive"
-              ? "user-approved-archive"
-              : "user-approved-revision"
-          };
-          await memory.putRecord(next);
-          return next;
-        }
-
-        fail("अज्ञात Memory Write Operation है।", "UNKNOWN_MEMORY_OPERATION");
+        fail("Memory Writer में केवल नया Memory Record जोड़ने की अनुमति है।", "UNKNOWN_MEMORY_OPERATION");
       }
     });
     writerRegistered = true;
+
+    core.registerModule({
+      id: MAINTAINER_MODULE_ID,
+      title: "User-Approved Versioned Memory Maintainer",
+      version: BRAIN_MEMORY_VERSION_PART2,
+      risk: "high",
+      capabilities: ["memory.read", "memory.write"],
+      execute: async ({ memory, input, signal }) => {
+        if (signal.aborted) fail("Memory Maintenance Task रद्द किया गया।", "TASK_ABORTED");
+        if (!memory) fail("Core ने Capability-checked Memory Facade नहीं दिया।", "MEMORY_FACADE_REQUIRED");
+        consumeWriteApproval(input.approvalId);
+        if (input.operation !== "revise" && input.operation !== "archive") {
+          fail("अज्ञात Memory Maintenance Operation है।", "UNKNOWN_MEMORY_OPERATION");
+        }
+
+        const previous = await memory.getRecord(input.recordId);
+        if (!previous) fail("संशोधित करने योग्य Memory Record नहीं मिला।", "MEMORY_RECORD_NOT_FOUND");
+        if (previous.status !== "active") fail("केवल सक्रिय Memory Record का नया संस्करण बनाया जा सकता है।", "MEMORY_RECORD_NOT_ACTIVE");
+
+        const all = await memory.listRecords({ limit: MAX_RECORDS });
+        if (all.some(record => record.supersedes === previous.id)) {
+          fail("यह Memory Record पहले ही supersede हो चुका है।", "STALE_MEMORY_VERSION");
+        }
+
+        const normalized = input.operation === "archive"
+          ? {
+              category: previous.category,
+              title: previous.title,
+              content: previous.content,
+              tags: previous.tags,
+              source: previous.source,
+              confidence: previous.confidence,
+              importance: previous.importance,
+              privacy: previous.privacy
+            }
+          : normalizeMemoryInput(input.patch, previous);
+
+        const now = Date.now();
+        const next = {
+          id: makeId("memory", host, ++sequence),
+          logicalId: previous.logicalId,
+          ...normalized,
+          status: input.operation === "archive" ? "archived" : "active",
+          version: previous.version + 1,
+          supersedes: previous.id,
+          createdAt: previous.createdAt,
+          updatedAt: now,
+          provenance: input.operation === "archive"
+            ? "user-approved-archive"
+            : "user-approved-revision"
+        };
+        await memory.putRecord(next);
+        return next;
+      }
+    });
+    maintainerRegistered = true;
   }
 
   async function initialize() {
@@ -417,6 +435,10 @@ export function createBrainMemoryEnginePart2(options = {}) {
         state = "ready";
         return diagnostics();
       } catch (error) {
+        if (maintainerRegistered) {
+          try { core.unregisterModule(MAINTAINER_MODULE_ID); } catch (_) {}
+          maintainerRegistered = false;
+        }
         if (writerRegistered) {
           try { core.unregisterModule(WRITER_MODULE_ID); } catch (_) {}
           writerRegistered = false;
@@ -450,12 +472,12 @@ export function createBrainMemoryEnginePart2(options = {}) {
 
   async function revise(recordId, patch, approval) {
     assertSafeBrainIdPart2(recordId, "Memory Record ID");
-    return writeOperation("revise", { recordId, patch }, approval);
+    return writeOperation("revise", { recordId, patch }, approval, MAINTAINER_MODULE_ID);
   }
 
   async function archive(recordId, approval) {
     assertSafeBrainIdPart2(recordId, "Memory Record ID");
-    return writeOperation("archive", { recordId }, approval);
+    return writeOperation("archive", { recordId }, approval, MAINTAINER_MODULE_ID);
   }
 
   async function get(recordId) {
@@ -505,7 +527,8 @@ export function createBrainMemoryEnginePart2(options = {}) {
       maxResultItems: MAX_RESULT_ITEMS,
       registeredModules: Object.freeze({
         reader: readerRegistered,
-        writer: writerRegistered
+        writer: writerRegistered,
+        maintainer: maintainerRegistered
       }),
       activeTaskCount: activeTasks.size,
       coreState: coreStatus.state
@@ -524,6 +547,10 @@ export function createBrainMemoryEnginePart2(options = {}) {
       }
       if (pending.length) {
         await Promise.allSettled(pending.map(([, promise]) => promise));
+      }
+      if (maintainerRegistered) {
+        core.unregisterModule(MAINTAINER_MODULE_ID);
+        maintainerRegistered = false;
       }
       if (writerRegistered) {
         core.unregisterModule(WRITER_MODULE_ID);
@@ -640,7 +667,8 @@ export async function selfTest() {
     await engine.initialize();
     check("registers-reader-and-writer-through-core",
       engine.diagnostics().registeredModules.reader &&
-      engine.diagnostics().registeredModules.writer);
+      engine.diagnostics().registeredModules.writer &&
+      engine.diagnostics().registeredModules.maintainer);
 
     let writePermissionDenied = false;
     try {
