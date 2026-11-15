@@ -179,15 +179,15 @@ jobs:
           assert.ok(existsSync(pagePath), "Nano Brain Page Module must exist");
           assert.match(
             app,
-            /"nano-brain":\\s*\\{\\s*id:\\s*"nano-brain",\\s*file:\\s*"page-nano-brain-part2\\.js"/,
+            /"nano-brain":\s*\{\s*id:\s*"nano-brain",\s*file:\s*"page-nano-brain-part2\.js"/,
             "Main Page Loader must declare the Nano Brain Part 2 route"
           );
-          assert.match(app, /await import\\(url\\.href\\)/, "Main Page Loader must lazy-import page modules");
+          assert.match(app, /await import\(url\.href\)/, "Main Page Loader must lazy-import page modules");
           assert.match(html, /data-route=["']nano-brain["']/, "Index navigation must expose the Nano Brain route");
           assert.match(html, /id=["']view-nano-brain["']/, "Index must contain the Brain view mount point");
           assert.match(
             html,
-            /<script[^>]*src=["']\\.\\/assets\\/js\\/app\\.js["']/i,
+            /<script[^>]*src=["']\.\/assets\/js\/app\.js["']/i,
             "Index must continue loading the existing app.js entry point"
           );
           assert.doesNotMatch(
