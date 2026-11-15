@@ -76,19 +76,35 @@ async function openIndexedDb(host, name) {
   }
   return new Promise((resolve, reject) => {
     let request;
+    let settled = false;
+    const rejectOnce = error => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     try { request = indexedDB.open(name, DB_VERSION); }
-    catch (error) { reject(new BrainStorageErrorPart2("IndexedDB खुल नहीं सका।", "INDEXEDDB_OPEN_FAILED", error)); return; }
+    catch (error) { rejectOnce(new BrainStorageErrorPart2("IndexedDB खुल नहीं सका।", "INDEXEDDB_OPEN_FAILED", error)); return; }
     request.onupgradeneeded = () => {
-      const db = request.result;
-      for (const store of Object.values(STORES)) {
-        if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: store === "metadata" ? "key" : "id" });
+      try {
+        const db = request.result;
+        for (const store of Object.values(STORES)) {
+          if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: store === "metadata" ? "key" : "id" });
+        }
+      } catch (error) {
+        try { request.transaction.abort(); } catch (_) {}
+        rejectOnce(new BrainStorageErrorPart2("IndexedDB schema upgrade विफल हुआ।", "INDEXEDDB_UPGRADE_FAILED", error));
       }
     };
-    request.onerror = () => reject(new BrainStorageErrorPart2("IndexedDB खुलना विफल हुआ।", "INDEXEDDB_OPEN_FAILED", request.error));
-    request.onblocked = () => reject(new BrainStorageErrorPart2("IndexedDB upgrade किसी खुले पुराने connection के कारण रुका है।", "INDEXEDDB_BLOCKED"));
+    request.onerror = () => rejectOnce(new BrainStorageErrorPart2("IndexedDB खुलना विफल हुआ।", "INDEXEDDB_OPEN_FAILED", request.error));
+    request.onblocked = () => rejectOnce(new BrainStorageErrorPart2("IndexedDB upgrade किसी खुले पुराने connection के कारण रुका है।", "INDEXEDDB_BLOCKED"));
     request.onsuccess = () => {
       const db = request.result;
       db.onversionchange = () => db.close();
+      if (settled) {
+        db.close();
+        return;
+      }
+      settled = true;
       resolve(db);
     };
   });

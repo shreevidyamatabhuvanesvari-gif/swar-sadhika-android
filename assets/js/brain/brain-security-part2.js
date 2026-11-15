@@ -16,6 +16,7 @@ const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const MAX_JSON_DEPTH = 24;
 const MAX_JSON_NODES = 12000;
 const MAX_JSON_STRING_LENGTH = 262144;
+const MAX_JSON_TOTAL_CHARS = 1048576;
 const MANIFEST_SCHEMA = "swar-sadhika.brain.skill-registry";
 
 export class BrainSecurityErrorPart2 extends Error {
@@ -39,6 +40,7 @@ export function assertSafeBrainIdPart2(value, label = "ID") {
 
 export function cloneSafeJsonPart2(value) {
   let nodes = 0;
+  let totalChars = 0;
   function visit(input, depth) {
     nodes += 1;
     if (nodes > MAX_JSON_NODES) fail("डेटा में अनुमत सीमा से अधिक तत्व हैं।", "JSON_NODE_LIMIT");
@@ -46,13 +48,32 @@ export function cloneSafeJsonPart2(value) {
     if (input === null || typeof input === "boolean") return input;
     if (typeof input === "string") {
       if (input.length > MAX_JSON_STRING_LENGTH) fail("पाठ का आकार अनुमत सीमा से अधिक है।", "JSON_STRING_LIMIT");
+      totalChars += input.length;
+      if (totalChars > MAX_JSON_TOTAL_CHARS) fail("कुल पाठ-आकार अनुमत सीमा से अधिक है।", "JSON_TOTAL_SIZE_LIMIT");
       return input;
     }
     if (typeof input === "number") {
       if (!Number.isFinite(input)) fail("डेटा में अमान्य संख्या है।", "INVALID_JSON_NUMBER");
       return input;
     }
-    if (Array.isArray(input)) return input.map(item => visit(item, depth + 1));
+    if (Array.isArray(input)) {
+      if (Object.getPrototypeOf(input) !== Array.prototype) fail("अपरिचित Array prototype अस्वीकृत है।", "NON_PLAIN_ARRAY");
+      if (Object.getOwnPropertySymbols(input).length) fail("Symbol keys JSON डेटा में स्वीकार्य नहीं हैं।", "SYMBOL_KEY_REJECTED");
+      const descriptors = Object.getOwnPropertyDescriptors(input);
+      const keys = Object.keys(descriptors).filter(key => key !== "length");
+      if (keys.length !== input.length || keys.some(key => !/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= input.length)) {
+        fail("Sparse Array या अतिरिक्त properties अस्वीकृत हैं।", "INVALID_ARRAY_SHAPE");
+      }
+      const output = [];
+      for (let index = 0; index < input.length; index += 1) {
+        const descriptor = descriptors[String(index)];
+        if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, "value") || descriptor.get || descriptor.set) {
+          fail("Array में accessor या sparse element स्वीकार्य नहीं है।", "ARRAY_ACCESSOR_REJECTED");
+        }
+        output.push(visit(descriptor.value, depth + 1));
+      }
+      return output;
+    }
     if (typeof input !== "object") fail("केवल JSON-संगत डेटा स्वीकार्य है।", "NON_JSON_VALUE");
     const prototype = Object.getPrototypeOf(input);
     if (prototype !== Object.prototype && prototype !== null) {
@@ -64,8 +85,8 @@ export function cloneSafeJsonPart2(value) {
     for (const key of Object.keys(descriptors)) {
       if (FORBIDDEN_KEYS.has(key)) fail("संदिग्ध object key अस्वीकृत है।", "UNSAFE_OBJECT_KEY");
       const descriptor = descriptors[key];
-      if (!Object.hasOwn(descriptor, "value") || descriptor.get || descriptor.set) {
-        fail("JSON डेटा में getter/setter स्वीकार्य नहीं हैं।", "ACCESSOR_REJECTED");
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value") || descriptor.get || descriptor.set) {
+        fail("केवल enumerable data properties स्वीकार्य हैं।", "ACCESSOR_REJECTED");
       }
       output[key] = visit(descriptor.value, depth + 1);
     }
@@ -114,7 +135,11 @@ export function validateSkillManifestPart2(input) {
 }
 
 export function createCapabilityGatePart2(options = {}) {
-  const allowed = new Set(options.allowedCapabilities || CAPABILITIES);
+  const requestedAllowed = options.allowedCapabilities || CAPABILITIES;
+  const allowed = new Set(requestedAllowed);
+  if ([...allowed].some(item => !CAPABILITIES.has(item))) {
+    fail("Capability Gate में अज्ञात अनुमति सूचीबद्ध है।", "UNKNOWN_ALLOWED_CAPABILITY");
+  }
   const grants = new Map();
   const windowRef = options.windowRef || globalThis.window;
   const EventConstructor = options.EventConstructor || globalThis.Event;
@@ -191,6 +216,15 @@ export function selfTest() {
     check("unsafe-id-rejected", !isSafeBrainIdPart2("../escape"));
     const clean = cloneSafeJsonPart2({ answer: 42, nested: [true, "ok"] });
     check("json-data-cloned", clean.answer === 42 && clean.nested.length === 2);
+    let arrayGetterRejected = false;
+    const unsafeArray = [];
+    Object.defineProperty(unsafeArray, "0", { enumerable: true, get() { throw new Error("array getter executed"); } });
+    unsafeArray.length = 1;
+    try { cloneSafeJsonPart2(unsafeArray); } catch (error) { arrayGetterRejected = error.code === "ARRAY_ACCESSOR_REJECTED"; }
+    check("array-accessor-rejected-without-execution", arrayGetterRejected);
+    let sparseArrayRejected = false;
+    try { cloneSafeJsonPart2(new Array(2)); } catch (error) { sparseArrayRejected = error.code === "INVALID_ARRAY_SHAPE"; }
+    check("sparse-array-rejected", sparseArrayRejected);
     let rejected = false;
     try { cloneSafeJsonPart2(JSON.parse('{"__proto__":{"polluted":true}}')); } catch (error) { rejected = error.code === "UNSAFE_OBJECT_KEY"; }
     check("prototype-pollution-key-rejected", rejected);

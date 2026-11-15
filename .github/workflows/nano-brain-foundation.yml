@@ -33,6 +33,31 @@ jobs:
             while IFS= read -r -d '' file; do
               node --experimental-default-type=module --check "$file"
             done
+      - name: Install Chrome for real IndexedDB browser tests
+        uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Test IndexedDB persistence across browser restarts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory . > "$RUNNER_TEMP/brain-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          profile="$RUNNER_TEMP/brain-chrome-profile"
+          chrome="${{ steps.chrome.outputs.chrome-path }}"
+          "$chrome" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --user-data-dir="$profile" --dump-dom "http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html?phase=write" > "$RUNNER_TEMP/brain-write.html"
+          grep -q 'data-result="PASSED"' "$RUNNER_TEMP/brain-write.html"
+          "$chrome" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --user-data-dir="$profile" --dump-dom "http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html?phase=read" > "$RUNNER_TEMP/brain-read.html"
+          grep -q 'data-result="PASSED"' "$RUNNER_TEMP/brain-read.html"
+          grep 'RESULT PASSED' "$RUNNER_TEMP/brain-write.html" "$RUNNER_TEMP/brain-read.html"
       - name: Run Nano Brain foundation self-tests
         shell: bash
         run: |

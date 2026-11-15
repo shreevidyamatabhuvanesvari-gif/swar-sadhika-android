@@ -84,23 +84,46 @@ export function createBrainIntegrationPart2(options = {}) {
   let storage = null;
   let gate = null;
   let disposed = false;
+  let disposePromise = null;
 
   function initialize() {
     if (disposed) throw new BrainIntegrationErrorPart2("Brain Integration बंद हो चुका है।", "INTEGRATION_DISPOSED");
     if (!initializationPromise) {
-      initializationPromise = (async () => {
-        storage = await storageFactory({ host, allowVolatileFallback: options.allowVolatileFallback !== false });
-        gate = createCapabilityGatePart2();
-        const storageDiagnostics = await storage.diagnostics();
-        facade.emit("brain:foundation-ready", {
-          version: BRAIN_INTEGRATION_VERSION_PART2,
-          storageBackend: storageDiagnostics.backend,
-          persistent: storageDiagnostics.persistent
-        });
-        return Object.freeze({ version: BRAIN_INTEGRATION_VERSION_PART2,
-          storage: storageDiagnostics, security: gate.diagnostics(), modelRuntime: "not-installed" });
-      })().catch(error => {
-        initializationPromise = null;
+      const task = (async () => {
+        let pendingStorage = null;
+        let pendingGate = null;
+        try {
+          pendingStorage = await storageFactory({ host, allowVolatileFallback: options.allowVolatileFallback !== false });
+          if (disposed) {
+            await pendingStorage.dispose();
+            throw new BrainIntegrationErrorPart2("Initialization के दौरान Integration बंद हुआ।", "INTEGRATION_DISPOSED");
+          }
+          pendingGate = createCapabilityGatePart2();
+          const storageDiagnostics = await pendingStorage.diagnostics();
+          if (disposed) {
+            pendingGate.dispose();
+            await pendingStorage.dispose();
+            throw new BrainIntegrationErrorPart2("Initialization के दौरान Integration बंद हुआ।", "INTEGRATION_DISPOSED");
+          }
+          storage = pendingStorage;
+          gate = pendingGate;
+          facade.emit("brain:foundation-ready", {
+            version: BRAIN_INTEGRATION_VERSION_PART2,
+            storageBackend: storageDiagnostics.backend,
+            persistent: storageDiagnostics.persistent
+          });
+          return Object.freeze({ version: BRAIN_INTEGRATION_VERSION_PART2,
+            storage: storageDiagnostics, security: gate.diagnostics(), modelRuntime: "not-installed" });
+        } catch (error) {
+          if (pendingGate && pendingGate !== gate) pendingGate.dispose();
+          if (pendingStorage && pendingStorage !== storage) {
+            try { await pendingStorage.dispose(); } catch (_) {}
+          }
+          throw error;
+        }
+      })();
+      initializationPromise = task.catch(error => {
+        if (!disposed) initializationPromise = null;
         throw new BrainIntegrationErrorPart2("Brain Foundation initialization विफल हुआ।", "FOUNDATION_INIT_FAILED", error);
       });
     }
@@ -118,7 +141,7 @@ export function createBrainIntegrationPart2(options = {}) {
   }
 
   async function diagnostics() {
-    if (!initializationPromise || !storage || !gate) return Object.freeze({
+    if (disposed || !initializationPromise || !storage || !gate) return Object.freeze({
       version: BRAIN_INTEGRATION_VERSION_PART2, initialized: false, disposed, modelRuntime: "not-installed"
     });
     const storageInfo = await storage.diagnostics();
@@ -126,13 +149,19 @@ export function createBrainIntegrationPart2(options = {}) {
       storage: storageInfo, security: gate.diagnostics(), modelRuntime: "not-installed" });
   }
 
-  async function dispose() {
-    if (disposed) return;
+  function dispose() {
+    if (disposePromise) return disposePromise;
     disposed = true;
-    if (gate) gate.dispose();
-    if (storage) await storage.dispose();
-    storage = null;
-    gate = null;
+    disposePromise = (async () => {
+      if (gate) gate.dispose();
+      if (initializationPromise) {
+        try { await initializationPromise; } catch (_) {}
+      }
+      if (storage) await storage.dispose();
+      storage = null;
+      gate = null;
+    })();
+    return disposePromise;
   }
 
   return Object.freeze({ facade, initialize, getStorage, getCapabilityGate, diagnostics, dispose });
@@ -160,6 +189,22 @@ export async function selfTest() {
     await integration.dispose();
     await integration.dispose();
     check("dispose-is-idempotent", true);
+    let resolvePendingStorage;
+    let pendingDisposed = 0;
+    const pendingStoragePromise = new Promise(resolve => { resolvePendingStorage = resolve; });
+    const pendingIntegration = createBrainIntegrationPart2({
+      app: fakeApp, host: {},
+      storageFactory: async () => pendingStoragePromise
+    });
+    const pendingInit = pendingIntegration.initialize().catch(error => error);
+    await Promise.resolve();
+    const pendingDispose = pendingIntegration.dispose();
+    resolvePendingStorage({ async diagnostics() { return { backend: "memory", persistent: false }; }, async dispose() { pendingDisposed += 1; } });
+    await Promise.all([pendingInit, pendingDispose]);
+    check("dispose-during-initialization-closes-pending-storage", pendingDisposed === 1);
+    check("disposed-integration-cannot-reinitialize", (() => {
+      try { pendingIntegration.initialize(); return false; } catch (error) { return error.code === "INTEGRATION_DISPOSED"; }
+    })());
     const order = [];
     const life = createSerializedLifecyclePart2({ mount() { order.push("mount"); }, onShow() { order.push("show"); }, onHide() { order.push("hide"); }, unmount() { order.push("unmount"); } });
     await life.mount();

@@ -46,3 +46,14 @@ The legacy generic Registry loader remains separate from the Brain Skill Manifes
 - Service Worker installation and strict offline certification.
 
 These require separate audited implementation and real Android Chrome tests.
+
+
+## Browser-level IndexedDB persistence test
+
+`brain-browser-test-part2.html` uses the browser's native IndexedDB implementation and requires a secure context (localhost is suitable for CI).
+
+The Foundation workflow launches Chrome twice with the same isolated browser profile:
+1. `phase=write` creates a separate test database, writes a record, metadata and an event, then closes the connection.
+2. `phase=read` starts a new browser process with the same profile and verifies that all three values survived, then cleans up the record.
+
+This verifies real Chromium IndexedDB persistence across browser-process restarts. It is not a physical Android Chrome certification. Android device testing must still verify the actual installed Chrome version, storage quota/eviction behavior, app cold start, and offline behavior.
