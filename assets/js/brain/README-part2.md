@@ -106,7 +106,7 @@ getMemory() से मिलने वाला Memory façade raw IndexedDB con
 
 ### Page lifecycle
 
-Main Page Loader page module का एक ही mounted instance cache करता है। Page route दोबारा खुलने पर onShow चल सकता है; दूसरे page पर जाने पर onHide; App pagehide पर unmount cleanup किया जाता है। Brain Page अपने listeners हटाकर Integration.dispose() बुलाता है।
+Main Page Loader page module का एक ही mounted instance cache करता है। Page route दोबारा खुलने पर onShow चल सकता है; दूसरे page पर जाने पर onHide; App pagehide पर unmount cleanup किया जाता है। Brain Page hide होने पर Core tasks रोकता है, Memory Engine के सक्रिय tasks का cleanup पूरा होने की प्रतीक्षा करता है और फिर session permissions वापस लेता है। Unmount पर Memory Engine, Central Core और अंत में Integration/Storage dispose होते हैं।
 
 ---
 
@@ -285,6 +285,8 @@ Android device verification में कम-से-कम:
 | Brain Page lazy loading | Integrated |
 | index.html extra Brain Script Tag | नहीं जोड़ा गया |
 | Brain Foundation Security/Storage | Foundation implemented; CI-tested |
+| Central Brain Core | Main App Brain Page में initialized; CI self-tests और Chromium source contract |
+| Local Memory Engine | Core में reader/writer/maintainer Skills registered; explicit permissions और user-approved versioned records |
 | Main App event façade | Brain-scoped events उपलब्ध |
 | TTS route through Brain façade | अभी allowlist gap; jump-text जोड़ना बाकी |
 | Sanskrit/Nano Server engine adapter | अभी नहीं |
@@ -292,7 +294,7 @@ Android device verification में कम-से-कम:
 | Avatar/Body Language/Lip-Sync adapter | अभी नहीं |
 | Video/Media Learning adapter | अभी नहीं |
 | Symbolic Reasoning/Task Planner | अभी नहीं |
-| Long-term Knowledge/Learning intelligence | अभी नहीं |
+| Semantic Knowledge/Learning intelligence और automatic learning | अभी नहीं |
 | Neural Model Runtime | अभी नहीं |
 | Physical Android Chrome certification | अभी नहीं |
 | Strict Offline certification | अभी नहीं |
