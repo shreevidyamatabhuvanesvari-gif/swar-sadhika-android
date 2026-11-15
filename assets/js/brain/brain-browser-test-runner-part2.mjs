@@ -269,7 +269,10 @@ async function closeChromeProcess(instance) {
 async function collectPhaseResult(page, phase, state) {
   await page.waitForFunction(() => {
     const summary = document.querySelector("#summary");
-    return Boolean(summary && /^(PASSED|FAILED) — /.test(summary.textContent.trim()));
+    return Boolean(
+      document.documentElement.dataset.auditComplete === "true" &&
+      summary && /^(PASSED|FAILED) — /.test(summary.textContent.trim())
+    );
   }, null, { timeout: TEST_TIMEOUT_MS });
 
   const result = await page.evaluate(() => {
