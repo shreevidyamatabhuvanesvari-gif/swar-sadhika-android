@@ -1,10 +1,11 @@
 name: Nano Brain Foundation Verification
 
 on:
+  # Feature-branch changes are tested by pull_request, avoiding duplicate
+  # push + pull_request runs (and duplicate failure notifications) per commit.
   push:
     branches:
       - main
-      - feat/nano-brain-foundation-part2
   pull_request:
     branches:
       - main
