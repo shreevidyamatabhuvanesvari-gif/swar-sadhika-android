@@ -444,8 +444,9 @@ export async function mount(context) {
 
     try {
       const memory = integration.getMemory();
-      recordId = "brain-page-probe-" + Date.now().toString(36);
-      const marker = "local-foundation-probe-" + Date.now().toString(36);
+      const probeId = Date.now().toString(36);
+      recordId = "brain-page-probe-" + probeId;
+      const marker = "local-foundation-probe-" + probeId;
 
       await memory.putRecord({
         id: recordId,
@@ -458,9 +459,10 @@ export async function mount(context) {
       probePassed = Boolean(result && result.id === recordId && result.marker === marker);
       if (!probePassed) throw new Error("लिखा गया परीक्षण रिकॉर्ड सही रूप में वापस नहीं मिला।");
 
-      await memory.deleteRecord(recordId);
+      const deletedRecordId = recordId;
+      await memory.deleteRecord(deletedRecordId);
       recordId = "";
-      const afterDelete = await memory.getRecord("brain-page-probe-" + marker.split("-").pop());
+      const afterDelete = await memory.getRecord(deletedRecordId);
       if (afterDelete !== null) {
         throw new Error("परीक्षण रिकॉर्ड हटाने के बाद भी उपलब्ध है।");
       }
