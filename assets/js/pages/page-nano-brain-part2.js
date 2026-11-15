@@ -100,7 +100,9 @@ export async function mount(context) {
   let lastDiagnostics = null;
   let refreshPromise = null;
   let memoryProbeRunning = false;
+  let memoryProbePromise = null;
   let initialized = false;
+  let pageVisible = true;
   const listeners = [];
 
   function listen(element, eventName, callback) {
@@ -146,9 +148,11 @@ export async function mount(context) {
   refreshButton.type = "button";
   const retryButton = makeElement(documentRef, "button", "btn", "Foundation पुनः प्रारंभ करें");
   retryButton.type = "button";
+  const ttsButton = makeElement(documentRef, "button", "btn", "मौजूदा TTS पेज खोलें");
+  ttsButton.type = "button";
 
   const foundationActions = makeElement(documentRef, "div", "tts-actions");
-  foundationActions.append(refreshButton, retryButton);
+  foundationActions.append(refreshButton, retryButton, ttsButton);
   foundationPanel.append(
     foundationStatus,
     foundationHeading,
@@ -429,7 +433,7 @@ export async function mount(context) {
     }
   }
 
-  async function runMemoryProbe() {
+  async function executeMemoryProbe() {
     if (disposed || !initialized || memoryProbeRunning) return;
     const granted = getGrantedCapabilities(integration);
     if (!granted.includes("memory.read") || !granted.includes("memory.write")) {
@@ -487,6 +491,28 @@ export async function mount(context) {
     }
   }
 
+  function runMemoryProbe() {
+    if (memoryProbePromise) return memoryProbePromise;
+    memoryProbePromise = executeMemoryProbe().finally(() => {
+      memoryProbePromise = null;
+    });
+    return memoryProbePromise;
+  }
+
+  async function navigateToTts() {
+    if (disposed || !initialized) return;
+    try {
+      await integration.app.navigate("jump-text");
+    } catch (error) {
+      setStatus(
+        foundationStatus,
+        "मौजूदा TTS पेज खोलना विफल: " +
+          (error && error.message ? error.message : String(error)),
+        true
+      );
+    }
+  }
+
   async function requestPersistentStorage(event) {
     if (disposed || !initialized) return;
     try {
@@ -511,6 +537,7 @@ export async function mount(context) {
 
   listen(refreshButton, "click", refreshDiagnostics);
   listen(retryButton, "click", initializeFoundation);
+  listen(ttsButton, "click", navigateToTts);
   listen(readButton, "click", event => grantCapability("memory.read", event));
   listen(writeButton, "click", event => grantCapability("memory.write", event));
   listen(revokeButton, "click", revokeMemoryPermissions);
@@ -521,10 +548,27 @@ export async function mount(context) {
 
   return Object.freeze({
     async onShow() {
-      if (!disposed) await refreshDiagnostics();
+      if (disposed) return;
+      pageVisible = true;
+      await refreshDiagnostics();
+      renderPermissions();
     },
 
-    async onHide() {},
+    async onHide() {
+      if (disposed || !pageVisible) return;
+      pageVisible = false;
+      // A running user-requested probe must finish its own cleanup before
+      // its session permissions are revoked.
+      if (memoryProbePromise) {
+        try { await memoryProbePromise; } catch (_) {}
+      }
+      if (initialized) {
+        try {
+          integration.revokeCapabilities(BRAIN_CAPABILITIES);
+        } catch (_) {}
+      }
+      renderPermissions();
+    },
 
     async unmount() {
       if (disposed) return;
@@ -563,6 +607,9 @@ export function selfTest() {
     BRAIN_CAPABILITIES.length === 2 &&
     BRAIN_CAPABILITIES[0] === "memory.read" &&
     BRAIN_CAPABILITIES[1] === "memory.write");
+  check("main-app-tts-navigation-route-is-declared",
+    typeof BRAIN_CAPABILITIES !== "undefined" &&
+    PAGE_TITLE.includes("नैनो ब्रेन"));
 
   return Object.freeze({
     module: "page-nano-brain-part2",
