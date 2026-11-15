@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.4  
+**संस्करण:** 1.0.5  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -429,6 +429,59 @@ Central Brain Integration क्रमांक 13 — `assets/js/brain/brain-co
 ### 15.5 समय-सीमा के बारे में सत्यता
 
 किसी निश्चित कैलेंडर तारीख़ या अवधि का अनुमान बिना implementation और device-test evidence के नहीं दिया जाएगा। प्रगति फाइल-क्रम और acceptance gates से मापी जाएगी। लेकिन integration का प्रारंभिक milestone निश्चित है: Foundation bridge की आवश्यक जाँच/सुधार के बाद क्रमांक 13 पर Central Brain Core को Main App से जोड़ना शुरू करना अनिवार्य है; इसे क्रमांक 22 के बाद तक टालना इस Charter का उल्लंघन होगा।
+
+---
+
+## 16. Brain की पूरी क्षमता सुरक्षित रखना — NO POWER-REDUCTION LOCKED
+
+यह अनुभाग उपयोगकर्ता के निर्देश को सर्वोच्च Capability Preservation नियम के रूप में दर्ज करता है: App या Brain की वास्तविक और निर्धारित क्षमता को कमजोर करने वाला परिवर्तन स्वीकार्य नहीं है।
+
+### 16.1 सभी 12 Capability प्रकार सुरक्षित रहेंगे
+
+Security Foundation में घोषित ये सभी बारह capability types Brain Architecture के भविष्य के लिए सुरक्षित रहेंगे:
+
+1. `memory.read`
+2. `memory.write`
+3. `knowledge.read`
+4. `knowledge.propose`
+5. `tts.speak`
+6. `audio.analyze`
+7. `microphone.read`
+8. `media.read`
+9. `filesystem.read`
+10. `filesystem.write`
+11. `model.inference`
+12. `avatar.control`
+
+इनमें से किसी capability को केवल सुविधा, सरलता या अस्थायी सुरक्षा के नाम पर हटाना, निष्क्रिय करना या भविष्य के Brain की Architecture से बाहर करना बिना स्पष्ट उपयोगकर्ता स्वीकृति के निषिद्ध है।
+
+### 16.2 Permission और Intelligence में अंतर
+
+- Capability catalogue Brain को उपलब्ध संभावित कार्यों और संसाधनों के प्रकार बताता है।
+- वास्तविक शक्ति संबंधित Engine, Adapter, Model, Data और Integration से आती है।
+- केवल permission नाम घोषित कर देने से सुविधा implemented या active नहीं हो जाती।
+- सभी 12 capabilities का catalogue और उनका भविष्य में उपयोग करने योग्य Architecture सुरक्षित रखना अनिवार्य है।
+
+### 16.3 सुरक्षित Permission उपयोग — शक्ति कम किए बिना
+
+1. किसी module को हर कार्य के लिए सभी 12 permissions स्वतः देने की आवश्यकता नहीं है; वह अपने वास्तविक कार्य के समय आवश्यक permission माँगेगा।
+2. यह task-specific permission request, 12-capability catalogue हटाना या Brain की समग्र क्षमता कम करना नहीं है।
+3. जब भविष्य का कोई module `model.inference`, `microphone.read`, `filesystem.write`, `tts.speak` या `avatar.control` उपयोग करने के लिए तैयार हो, तो संबंधित capability उसके सत्यापित module contract में उपलब्ध होनी चाहिए।
+4. Permission माँगना वास्तविक user gesture, स्पष्ट कारण और आवश्यक user approval के साथ होगा। बिना अनुमति restricted data या action का उपयोग नहीं होगा।
+5. Per-module permission scope का उद्देश्य अनावश्यक access रोकना है; यह Brain Core को भविष्य की घोषित क्षमताओं को orchestrate करने से रोकने का बहाना नहीं बनेगा।
+6. किसी सुरक्षा परिवर्तन से यदि कोई निर्धारित App task, Engine integration या future capability वास्तव में अनुपयोगी/अप्राप्य हो जाती है, तो उस परिवर्तन को capability regression मानकर स्वीकार नहीं किया जाएगा।
+
+### 16.4 Power-preservation review
+
+किसी भी Security, Runtime, Model, Adapter या Integration परिवर्तन से पहले यह जाँचना अनिवार्य है:
+
+- क्या सभी 12 capability names और उनके intended use सुरक्षित हैं?
+- क्या भविष्य का module आवश्यक permission के लिए वैध रूप से request कर सकता है?
+- क्या Brain Core उस module को नियंत्रित और समन्वित कर सकेगा?
+- क्या कोई मौजूदा App Engine, data path या planned feature अनजाने में बंद हो रहा है?
+- क्या permission user-controlled रहते हुए वास्तविक कार्य पूरा किया जा सकता है?
+
+यदि किसी उत्तर से क्षमता घटने का पता चले, तो design को बदला जाएगा; क्षमता हटाकर समस्या हल नहीं की जाएगी। किसी भी unavoidable functional trade-off के लिए पहले उपयोगकर्ता की स्पष्ट स्वीकृति आवश्यक है।
 
 ---
 
