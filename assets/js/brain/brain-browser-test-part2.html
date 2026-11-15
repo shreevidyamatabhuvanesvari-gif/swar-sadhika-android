@@ -426,7 +426,7 @@
       if (!/import\s*\{[^}]*validateSkillManifestPart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(core) ||
           !/integration\.requestCapabilities\(capabilities, trustedEvent\)/.test(core) ||
           !/integration\.getMemory\(\)/.test(core) ||
-          /import\s*\{[^}]*brain-security-part2/.test(core) === false) {
+          !/from\s*["']\.\/brain-security-part2\.js["']/.test(core)) {
         throw new Error("Central Brain Core का Security/Permission/Memory contract अधूरा है।");
       }
 
