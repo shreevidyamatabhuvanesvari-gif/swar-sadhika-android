@@ -186,7 +186,10 @@ function scoreRecord(record, query, tokens) {
 
 function activeVersions(records) {
   const superseded = new Set(
-    records.map(record => record && record.supersedes).filter(value => typeof value === "string")
+    records
+      .filter(record => record && record.schema === MEMORY_RECORD_SCHEMA)
+      .map(record => record.supersedes)
+      .filter(value => typeof value === "string")
   );
   return records.filter(record =>
     record &&
@@ -399,7 +402,9 @@ export function createBrainMemoryEnginePart2(options = {}) {
         if (previous.status !== "active") fail("केवल सक्रिय Memory Record का नया संस्करण बनाया जा सकता है।", "MEMORY_RECORD_NOT_ACTIVE");
 
         const all = await memory.listRecords({ limit: MAX_RECORDS });
-        if (all.some(record => record.supersedes === previous.id)) {
+        if (all.some(record =>
+          record.schema === MEMORY_RECORD_SCHEMA && record.supersedes === previous.id
+        )) {
           fail("यह Memory Record पहले ही supersede हो चुका है।", "STALE_MEMORY_VERSION");
         }
 
@@ -736,9 +741,19 @@ export async function selfTest() {
     catch (error) { fakeGestureRejected = error.code === "USER_GESTURE_REQUIRED"; }
     check("forged-write-gesture-rejected", fakeGestureRejected);
 
+    fakeCore.records.set("unrelated-active-record", {
+      id: "unrelated-active-record",
+      logicalId: "unrelated-active-record",
+      title: "Unrelated application record",
+      status: "active",
+      version: 1,
+      updatedAt: Date.now()
+    });
     engine.requestPermissions(new MemoryTestEventPart2("click"), { read: true, write: false });
     const readOnlyList = await engine.list();
-    check("read-only-grant-allows-reading", readOnlyList.records.length === 0);
+    check("read-only-grant-allows-reading-and-ignores-unrelated-records",
+      readOnlyList.records.length === 0 &&
+      (await engine.get("unrelated-active-record")) === null);
 
     let readOnlyWriteRejected = false;
     try {
@@ -833,7 +848,7 @@ export async function selfTest() {
 
     const backup = await engine.exportBackup();
     check("backup-export-delegates-to-core-memory-facade",
-      backup && backup.format === "test-backup" && backup.records.length === 3);
+      backup && backup.format === "test-backup" && backup.records.length === 4);
 
     let invalidQueryRejected = false;
     try { await engine.search(" "); }
