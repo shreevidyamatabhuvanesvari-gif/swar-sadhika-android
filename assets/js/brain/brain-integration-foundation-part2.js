@@ -95,14 +95,11 @@ export function createBrainIntegrationPart2(options = {}) {
         try {
           pendingStorage = await storageFactory({ host, allowVolatileFallback: options.allowVolatileFallback !== false });
           if (disposed) {
-            await pendingStorage.dispose();
             throw new BrainIntegrationErrorPart2("Initialization के दौरान Integration बंद हुआ।", "INTEGRATION_DISPOSED");
           }
           pendingGate = createCapabilityGatePart2();
           const storageDiagnostics = await pendingStorage.diagnostics();
           if (disposed) {
-            pendingGate.dispose();
-            await pendingStorage.dispose();
             throw new BrainIntegrationErrorPart2("Initialization के दौरान Integration बंद हुआ।", "INTEGRATION_DISPOSED");
           }
           storage = pendingStorage;
@@ -115,8 +112,12 @@ export function createBrainIntegrationPart2(options = {}) {
           return Object.freeze({ version: BRAIN_INTEGRATION_VERSION_PART2,
             storage: storageDiagnostics, security: gate.diagnostics(), modelRuntime: "not-installed" });
         } catch (error) {
-          if (pendingGate && pendingGate !== gate) pendingGate.dispose();
-          if (pendingStorage && pendingStorage !== storage) {
+          if (pendingGate) {
+            pendingGate.dispose();
+            if (gate === pendingGate) gate = null;
+          }
+          if (pendingStorage) {
+            if (storage === pendingStorage) storage = null;
             try { await pendingStorage.dispose(); } catch (_) {}
           }
           throw error;

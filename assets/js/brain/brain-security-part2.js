@@ -61,7 +61,7 @@ export function cloneSafeJsonPart2(value) {
       if (Object.getOwnPropertySymbols(input).length) fail("Symbol keys JSON डेटा में स्वीकार्य नहीं हैं।", "SYMBOL_KEY_REJECTED");
       const descriptors = Object.getOwnPropertyDescriptors(input);
       const keys = Object.keys(descriptors).filter(key => key !== "length");
-      if (keys.length !== input.length || keys.some(key => !/^(0|[1-9]\\d*)$/.test(key) || Number(key) >= input.length)) {
+      if (keys.length !== input.length || keys.some(key => !Number.isSafeInteger(Number(key)) || String(Number(key)) !== key || Number(key) >= input.length)) {
         fail("Sparse Array या अतिरिक्त properties अस्वीकृत हैं।", "INVALID_ARRAY_SHAPE");
       }
       const output = [];
