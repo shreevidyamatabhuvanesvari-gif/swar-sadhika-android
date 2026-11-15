@@ -361,6 +361,7 @@
         ["Main App Page Loader", "../app.js"],
         ["Nano Brain Page", "../pages/page-nano-brain-part2.js"],
         ["Brain Central Core", "./brain-core-part2.js"],
+        ["Brain Memory Engine", "./brain-memory-engine-part2.js"],
         ["Brain Integration Foundation", "./brain-integration-foundation-part2.js"],
         ["Brain Security Foundation", "./brain-security-part2.js"],
         ["Brain Storage Foundation", "./brain-storage-part2.js"]
@@ -387,6 +388,7 @@
       const app = sources["Main App Page Loader"];
       const page = sources["Nano Brain Page"];
       const core = sources["Brain Central Core"];
+      const memoryEngine = sources["Brain Memory Engine"];
       const integration = sources["Brain Integration Foundation"];
       const security = sources["Brain Security Foundation"];
       const storage = sources["Brain Storage Foundation"];
@@ -429,6 +431,15 @@
           !/from\s*["']\.\/brain-security-part2\.js["']/.test(core)) {
         throw new Error("Central Brain Core का Security/Permission/Memory contract अधूरा है।");
       }
+      if (!/import\s*\{[^}]*cloneSafeJsonPart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(memoryEngine) ||
+          !/core\.registerModule\(/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory\.read"\]/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory\.write"\]/.test(memoryEngine) ||
+          !/issueWriteApproval\(/.test(memoryEngine) ||
+          !/supersedes/.test(memoryEngine) ||
+          !/core\.runTask\(/.test(memoryEngine)) {
+        throw new Error("Central Brain Memory Engine का Core/Security/Permission/Versioned-Record contract अधूरा है।");
+      }
 
       if (!/import\s*\{[^}]*createBrainStoragePart2[^}]*\}\s*from\s*["']\.\/brain-storage-part2\.js["']/.test(integration) ||
           !/import\s*\{[^}]*createCapabilityGatePart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(integration)) {
@@ -442,6 +453,8 @@
         origin: location.origin,
         filesRead: localFiles.map(item => item[0]),
         centralCore: "brain-core-part2.js",
+        memoryEngine: "brain-memory-engine-part2.js",
+        memoryEngineUsesCoreAndCapabilityFacade: true,
         coreInitializedByBrainPage: true,
         appEntryPoint: scriptSources[0],
         brainRoute: "nano-brain",
@@ -449,7 +462,7 @@
         extraBrainScriptTag: false,
         sourceChecks: "passed"
       };
-      return "Main App Navigation, unchanged app.js entry point, Page Loader route, Brain Page → Central Core → Integration → Security/Storage chain और cleanup contract का same-origin source audit सफल।";
+      return "Main App Navigation, unchanged app.js entry point, Page Loader route, Brain Page → Central Core → Memory Engine → Integration → Security/Storage chain और cleanup contract का same-origin source audit सफल।";
     }
 
     async function testOptionalOpfs() {
