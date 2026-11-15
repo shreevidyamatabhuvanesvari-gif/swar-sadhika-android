@@ -68,5 +68,10 @@ jobs:
             }
           }
           console.log(`Nano Brain Foundation: ${result.passed}/${result.total}`);
+          const security = result.suites.find(suite => suite.name === "Security Foundation");
+          const integration = result.suites.find(suite => suite.name === "Integration Foundation");
+          if (security && integration && security.status === "PASSED" && integration.status === "PASSED") {
+            console.log("HISTORICAL REGRESSION d993c90 · Security/Lifecycle Fix Test: PASS");
+          }
           if (result.status !== "PASSED") process.exitCode = 1;
           NODE

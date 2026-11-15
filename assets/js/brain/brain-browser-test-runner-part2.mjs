@@ -58,21 +58,29 @@ async function runAppRouteSmoke() {
     const origin = new URL(baseUrl).origin;
     await page.goto(origin + "/index.html", { waitUntil: "load" });
     await page.waitForFunction(() => window.__swarSadhikaReady === true, null, { timeout: 20000 });
-    const routeResult = await page.evaluate(async () => {
-      const button = document.querySelector('button[data-route="nano-brain"]');
-      await window.SwarSadhikaApp.navigate("nano-brain");
-      return { buttonEnabled: Boolean(button && !button.disabled) };
-    });
-    if (!routeResult.buttonEnabled) {
+    const routeButton = page.locator('button[data-route="nano-brain"]');
+    if (!(await routeButton.isEnabled())) {
       throw new Error("Nano Brain route button is disabled in the existing Page Loader.");
     }
+    await routeButton.click();
     await page.waitForFunction(() => {
       const view = document.getElementById("view-nano-brain");
       const status = view && view.querySelector(".panel .status");
       return Boolean(view && !view.hidden && status && status.textContent.includes("Foundation"));
     }, null, { timeout: 20000 });
+    const diagnostics = await page.locator("#view-nano-brain .panel").innerText();
+    if (!diagnostics.includes("Storage Backend") || !diagnostics.includes("indexeddb") ||
+        !diagnostics.includes("स्थायी Storage") || !diagnostics.includes("उपलब्ध")) {
+      throw new Error("Nano Brain diagnostics did not report the real persistent IndexedDB backend: " + diagnostics);
+    }
+    await page.getByRole("button", { name: "स्थिति पुनः जाँचें" }).click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector("#view-nano-brain .panel .status");
+      return Boolean(status && status.textContent.includes("स्थायी IndexedDB Storage उपलब्ध"));
+    }, null, { timeout: 20000 });
     if (pageErrors.length) throw new Error("App page errors: " + pageErrors.join(" | "));
-    console.log("APP ROUTE SMOKE: PASSED — Nano Brain Page Loader mounted and visible.");
+    console.log("HISTORICAL REGRESSION 474d9c8 · Browser Diagnostics Test: PASS");
+    console.log("HISTORICAL REGRESSION 4876148 · Navigation Smoke Test: PASS");
   } finally {
     await context.close();
   }
@@ -81,6 +89,8 @@ async function runAppRouteSmoke() {
 try {
   await runPhase("write");
   await runPhase("read");
+  console.log("HISTORICAL REGRESSION 5e16a03 · Browser Persistence Test: PASS");
+  console.log("HISTORICAL REGRESSION a2f2cfd · Async Browser Test: PASS");
   console.log("CHROMIUM INDEXEDDB PERSISTENCE: PASSED");
   await runAppRouteSmoke();
 } finally {
