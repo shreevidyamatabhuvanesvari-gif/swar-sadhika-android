@@ -18,7 +18,7 @@ const MAX_JSON_NODES = 12000;
 const MAX_JSON_STRING_LENGTH = 262144;
 const MAX_JSON_TOTAL_CHARS = 1048576;
 const MANIFEST_SCHEMA = "swar-sadhika.brain.skill-registry";
-const PUBLIC_MEDIAWIKI_HOST = /^(?:[a-z0-9-]+\\.)+(?:wikipedia|wikimedia|wiktionary|wikisource|wikibooks|wikiquote|wikiversity|wikivoyage|wikinews|wikidata)\\.org$/i;
+const PUBLIC_MEDIAWIKI_HOST = /^(?:[a-z0-9-]+\.)+(?:wikipedia|wikimedia|wiktionary|wikisource|wikibooks|wikiquote|wikiversity|wikivoyage|wikinews|wikidata)\.org$/i;
 const PUBLIC_MEDIAWIKI_PATHS = new Set(["/w/api.php", "/w/rest.php/v1", "/api/rest_v1"]);
 
 export class BrainSecurityErrorPart2 extends Error {
@@ -505,7 +505,7 @@ export function selfTest() {
       grantedAll.length === 12 && allCapabilitiesWork && approvedPrompt === 1);
     fullGate.dispose();
 
-  } catch (_) { check("security-self-test-unexpected-error", false); }
+  } catch (error) { checks.push({ id: "security-self-test-unexpected-error", passed: false, message: error && error.message ? error.message : String(error) }); }
   return Object.freeze({ module: "brain-security-part2", status: checks.every(item => item.passed) ? "PASSED" : "FAILED",
     total: checks.length, passed: checks.filter(item => item.passed).length,
     failed: checks.filter(item => !item.passed).length, checks: Object.freeze(checks) });
