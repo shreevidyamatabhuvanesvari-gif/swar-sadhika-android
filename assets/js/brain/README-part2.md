@@ -31,9 +31,11 @@ Nano Brain को अलग HTML entry page या अलग Script Tag के �
 Main App navigation
 → Main App Page Loader
 → page-nano-brain-part2.js mount(context)
+→ brain-core-part2.js
+→ brain-memory-engine-part2.js
 → brain-integration-foundation-part2.js
 → brain-security-part2.js + brain-storage-part2.js
-→ Brain Foundation diagnostics और capability-checked local Memory access
+→ Capability-checked local Memory operations
 
 ### 1.3 Main App से साझा interface
 
@@ -63,7 +65,8 @@ Brain App façade के वर्तमान route allowlist में index, 
 | brain-security-part2.js | Safe JSON boundary, safe IDs, data-only Skill Manifest, capability grants और SHA-256 verification helpers | Browser Event/crypto interfaces जहाँ उपलब्ध हों |
 | brain-storage-part2.js | IndexedDB structured storage, backup/import, metadata/events, storage diagnostics और optional OPFS adapter | IndexedDB; optional navigator.storage / OPFS |
 | brain-integration-foundation-part2.js | Main App facade, single-flight initialization, lifecycle-safe integration और capability-checked Memory facade | Security + Storage |
-| brain-foundation-selftest-part2.js | Foundation modules के self-tests को क्रम से चलाना और परिणाम aggregate करना | Security, Storage, Integration और Page self-tests |
+| brain-memory-engine-part2.js | Core-registered reader/writer/maintainer Skills, user-approved append-only versioned memory, bounded search, history, archive और backup export | Central Core + Integration Memory facade + Security |
+| brain-foundation-selftest-part2.js | Foundation modules के self-tests को क्रम से चलाना और परिणाम aggregate करना | Security, Storage, Integration, Core, Memory Engine और Page self-tests |
 | page-nano-brain-part2.js | Main App के Brain View में Foundation Console, वास्तविक diagnostics, permission actions और Memory probe | Main Page Loader context, Integration + Storage |
 | brain-browser-test-part2.html | Browser native IndexedDB के write/read, metadata, event और route smoke tests | Browser secure context |
 | brain-browser-test-runner-part2.mjs | Playwright/Chromium के माध्यम से browser test phases चलाना और सत्यापित करना | CI में स्थापित Playwright और Chromium |
@@ -107,7 +110,46 @@ Main Page Loader page module का एक ही mounted instance cache कर�
 
 ---
 
-## 4. Security और Permissions
+## 4. Central Brain Memory Engine
+
+**फ़ाइल:** `assets/js/brain/brain-memory-engine-part2.js`
+
+Memory Engine Main App Page में Central Core के Initialize होने के बाद तीन local built-in Skills register करता है:
+
+| Skill | Permission | कार्य |
+|---|---|---|
+| memory.reader | memory.read | Record retrieval, bounded list/search, version history और backup export |
+| memory.writer | memory.write | नया user-approved Memory Record जोड़ना |
+| memory.maintainer | memory.read + memory.write | पुराने Record का नया version बनाना या उसे archive करना |
+
+मुख्य API:
+
+- `initialize()` — Core में तीनों Skills register करता है।
+- `requestPermissions(event, { read, write })` — वास्तविक trusted user gesture पर session permissions माँगता है।
+- `issueWriteApproval(event)` — प्रत्येक write/revision/archive के लिए एक बार उपयोग होने वाला 60-second approval token बनाता है।
+- `remember(input, approval)` — नया local record बनाता है।
+- `revise(recordId, patch, approval)` — पुराने record को overwrite किए बिना नया version जोड़ता है।
+- `archive(recordId, approval)` — नया archived version बनाता है; hard delete API उपलब्ध नहीं है।
+- `get(recordId)`, `list(options)`, `search(query, options)`, `history(logicalId)` — read operations।
+- `exportBackup()` — Integration Memory facade के checksummed backup export को उपयोग करता है।
+- `cancelActiveTasks(reason)` और `dispose()` — चल रहे tasks को रोककर पूरा cleanup करते हैं।
+
+### Memory integrity rules
+
+- Read, write और read+write maintenance अलग-अलग Core Skills हैं; permission को आपस में बढ़ाया नहीं जाता।
+- हर write से पहले एक fresh trusted user gesture आवश्यक है। Approval token एक बार इस्तेमाल होता है, 60 seconds में expire होता है और अप्रयुक्त tokens की संख्या 16 तक सीमित है।
+- नया record unique ID के साथ append होता है। Revision पुराने record को बदलती या मिटाती नहीं; `supersedes` link और बढ़ता version number history सुरक्षित रखते हैं।
+- Stale version को दोबारा revise/archive करना अस्वीकृत है।
+- Archive भी एक नया version है; destructive hard delete API expose नहीं की गई है।
+- Search अधिकतम 500 stored records scan करता है और अधिकतम 100 results देता है। Diagnostics में window limit स्पष्ट है; यह अभी full-database pagination/search नहीं है।
+- JSON-only content, 32 KiB per-record content, bounded tags/title/source और credential-जैसे field names की rejection लागू है।
+- Memory Engine local record experience/provenance को दर्ज करता है; यह स्वयं model training, semantic neural recall या automatic truth verification नहीं करता।
+
+Main Brain Page Core के बाद Memory Engine initialize करता है, Console में उसकी स्थिति दिखाता है और Page hide/unmount पर active task cleanup, Engine disposal, Core disposal तथा Integration disposal इसी क्रम में करता है।
+
+---
+
+## 5. Security और Permissions
 
 - Capabilities default-deny हैं।
 - Page mount पर Memory permissions स्वतः grant नहीं की जातीं।
@@ -123,7 +165,7 @@ Main Page Loader page module का एक ही mounted instance cache कर�
 
 ---
 
-## 5. Local Storage Contract
+## 6. Local Storage Contract
 
 **Database name:** swar-sadhika-brain-part2  
 **IndexedDB version:** 2
@@ -159,7 +201,7 @@ Storage API checksummed export/import प्रदान करता है। 
 
 ---
 
-## 6. Network, Offline और Model Policy
+## 7. Network, Offline और Model Policy
 
 इस Foundation के app runtime में कोई external AI API, remote inference endpoint या अलग server call नहीं है। Brain Foundation के लिए downloaded executable JavaScript या remote Skill execution लागू नहीं है।
 
@@ -176,7 +218,7 @@ Strict Offline certification अभी प्राप्त नहीं है
 
 ---
 
-## 7. Foundation Console का वर्तमान व्यवहार
+## 8. Foundation Console का वर्तमान व्यवहार
 
 page-nano-brain-part2.js वास्तविक Main Page Loader context माँगता है। यह:
 
@@ -191,7 +233,7 @@ Page स्वयं पूरा Brain नहीं है। इसमें r
 
 ---
 
-## 8. Tests और Verification
+## 9. Tests और Verification
 
 ### Dedicated Nano Brain Foundation workflow
 
@@ -235,7 +277,7 @@ Android device verification में कम-से-कम:
 
 ---
 
-## 9. वर्तमान Integration Status — सत्यापित सीमाएँ
+## 10. वर्तमान Integration Status — सत्यापित सीमाएँ
 
 | क्षेत्र | वर्तमान स्थिति |
 |---|---|
@@ -259,7 +301,7 @@ Android device verification में कम-से-कम:
 
 ---
 
-## 10. आगे के निर्माण के नियम
+## 11. आगे के निर्माण के नियम
 
 1. NANO_BRAIN_CHARTER_LOCKED.md में दर्ज 22-file क्रम का पालन करें।
 2. एक समय में एक ही Brain file update/add और एक स्वतंत्र Commit करें।
@@ -274,7 +316,7 @@ Android device verification में कम-से-कम:
 
 ---
 
-## 11. निष्कर्ष
+## 12. निष्कर्ष
 
 वर्तमान Foundation का वास्तविक कार्य Main App के Page Loader से Brain Page को खोलना, सुरक्षित App facade प्रदान करना, local structured Storage initialize करना, capability-checked Memory operations देना और diagnostics/test results उपलब्ध कराना है।
 
