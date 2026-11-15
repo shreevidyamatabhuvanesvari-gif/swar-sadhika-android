@@ -418,6 +418,10 @@
 
       if (!/import\s*\{\s*createBrainIntegrationPart2\s*\}\s*from\s*["']\.\.\/brain\/brain-integration-foundation-part2\.js["']/.test(page) ||
           !/import\s*\{\s*createBrainCorePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-core-part2\.js["']/.test(page) ||
+          !/import\s*\{\s*createBrainMemoryEnginePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-memory-engine-part2\.js["']/.test(page) ||
+          !/createBrainMemoryEnginePart2\(\s*\{\s*core:\s*brainCore/.test(page) ||
+          !/await memoryEngine\.initialize\(\)/.test(page) ||
+          !/memoryEngine\.dispose\(\)/.test(page) ||
           !/import\s*\{\s*createOpfsAssetStorePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-storage-part2\.js["']/.test(page) ||
           !/createBrainIntegrationPart2\(\s*\{\s*app:\s*context\.app/.test(page) ||
           !/createBrainCorePart2\(\s*\{\s*integration,\s*host\s*\}/.test(page) ||
@@ -435,6 +439,7 @@
           !/core\.registerModule\(/.test(memoryEngine) ||
           !/capabilities:\s*\["memory\.read"\]/.test(memoryEngine) ||
           !/capabilities:\s*\["memory\.write"\]/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory.read",\s*"memory.write"\]/.test(memoryEngine) ||
           !/issueWriteApproval\(/.test(memoryEngine) ||
           !/supersedes/.test(memoryEngine) ||
           !/core\.runTask\(/.test(memoryEngine)) {
