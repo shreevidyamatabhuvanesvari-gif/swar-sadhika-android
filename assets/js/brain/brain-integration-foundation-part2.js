@@ -624,12 +624,13 @@ export async function selfTest() {
     let factoryCalls = 0;
     let factoryOptions = null;
     const fakeStorage = createFakeStoragePart2();
+    class TestEvent {
+      constructor(type) { this.type = type; this.isTrusted = true; }
+    }
     const integration = createBrainIntegrationPart2({
       app: fakeApp,
       host: {
-        Event: class TestEvent {
-          constructor(type) { this.type = type; this.isTrusted = true; }
-        },
+        Event: TestEvent,
         window: { confirm: () => true }
       },
       allowVolatileFallback: false,
@@ -673,13 +674,8 @@ export async function selfTest() {
     check("denied-operations-did-not-reach-storage",
       fakeStorage.calls.reads === 0 && fakeStorage.calls.writes === 0);
 
-    const TestEvent = integration.securityDiagnostics ? null : null;
-    const event = new (class {
-      constructor() { this.type = "click"; this.isTrusted = true; }
-    })();
-    // The test host's Event constructor is used by the gate; construct the
-    // trusted test event through that exact constructor.
-    const gateEvent = new (integration.__testEventConstructor || Object.getPrototypeOf(event).constructor)("click");
+    // Use an instance of the exact Event constructor supplied to the gate.
+    const gateEvent = new TestEvent("click");
     const granted = integration.requestCapabilities(["memory.read", "memory.write"], gateEvent);
     check("trusted-user-confirmation-grants-session-capabilities",
       granted.length === 2 && integration.securityDiagnostics().grantedCapabilities.length === 2);
