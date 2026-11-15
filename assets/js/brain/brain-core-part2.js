@@ -21,7 +21,6 @@ import {
 export const BRAIN_CORE_VERSION_PART2 = "1.0.0";
 
 const MANIFEST_SCHEMA = "swar-sadhika.brain.skill-registry";
-const MODULE_VERSION_PATTERN = /^\\d+\\.\\d+\\.\\d+(?:[-+][a-z0-9.-]+)?$/i;
 const MAX_TASK_ID_LENGTH = 96;
 
 export class BrainCoreErrorPart2 extends Error {
@@ -576,7 +575,7 @@ export async function selfTest() {
       execute: async () => ({ executable() {} })
     });
     try { await core.runTask("selftest.unsafe-output"); }
-    catch (error) { unsafeOutputRejected = error.code === "UNSAFE_JSON_VALUE" || error.code === "INVALID_JSON_VALUE"; }
+    catch (error) { unsafeOutputRejected = error.code === "NON_JSON_VALUE"; }
     check("non-json-module-output-rejected", unsafeOutputRejected);
 
     const cancellable = core.registerModule({
