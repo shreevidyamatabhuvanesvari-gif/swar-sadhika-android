@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Swar-Sadhika Nano Brain — Browser Storage Audit</title>
   <style>
     :root{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;color-scheme:light dark}
@@ -355,6 +355,89 @@
       return "Native IndexedDB की पुष्टि; durable permission और quota के वास्तविक browser values अलग दर्ज।";
     }
 
+    async function verifyMainAppIntegrationContract() {
+      const localFiles = [
+        ["index.html", "../../../index.html"],
+        ["Main App Page Loader", "../app.js"],
+        ["Nano Brain Page", "../pages/page-nano-brain-part2.js"],
+        ["Brain Integration Foundation", "./brain-integration-foundation-part2.js"],
+        ["Brain Security Foundation", "./brain-security-part2.js"],
+        ["Brain Storage Foundation", "./brain-storage-part2.js"]
+      ];
+
+      const sources = {};
+      for (const [label, relativePath] of localFiles) {
+        const url = new URL(relativePath, location.href);
+        if (url.origin !== location.origin) {
+          throw new Error(label + " का source URL same-origin सीमा से बाहर है।");
+        }
+        const response = await fetch(url.href, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          throw new Error(label + " source HTTP " + response.status + " के साथ उपलब्ध नहीं है।");
+        }
+        sources[label] = await response.text();
+      }
+
+      const index = sources["index.html"];
+      const app = sources["Main App Page Loader"];
+      const page = sources["Nano Brain Page"];
+      const integration = sources["Brain Integration Foundation"];
+      const security = sources["Brain Security Foundation"];
+      const storage = sources["Brain Storage Foundation"];
+
+      if (!/data-route=["']nano-brain["']/.test(index)) {
+        throw new Error("Main App Navigation में nano-brain route अनुपस्थित है।");
+      }
+      if (!/id=["']view-nano-brain["']/.test(index)) {
+        throw new Error("Main App में view-nano-brain mount container अनुपस्थित है।");
+      }
+
+      const scriptSources = [...index.matchAll(/<script\\b[^>]*\\bsrc=["']([^"']+)["'][^>]*>/gi)]
+        .map(match => match[1]);
+      if (scriptSources.length !== 1 || scriptSources[0] !== "./assets/js/app.js") {
+        throw new Error("index.html में केवल मौजूदा app.js entry point होना चाहिए; अतिरिक्त entry point मिला।");
+      }
+      if (/<script\\b[^>]*page-nano-brain-part2/i.test(index)) {
+        throw new Error("Brain Page का अतिरिक्त Script Tag index.html में पाया गया।");
+      }
+
+      if (!/"nano-brain":\\s*\\{\\s*id:\\s*"nano-brain",\\s*file:\\s*"page-nano-brain-part2\\.js",\\s*root:\\s*"view-nano-brain",\\s*view:\\s*"view-nano-brain"\\s*\\}/.test(app)) {
+        throw new Error("Main App PAGE_MODULES में Brain route contract अपेक्षित रूप में नहीं मिला।");
+      }
+      if (!/await import\\(url\\.href\\)/.test(app)) {
+        throw new Error("Main App Page Loader का Dynamic Import contract नहीं मिला।");
+      }
+
+      if (!/import\\s*\\{\\s*createBrainIntegrationPart2\\s*\\}\\s*from\\s*["']\\.\\.\\/brain\\/brain-integration-foundation-part2\\.js["']/.test(page) ||
+          !/import\\s*\\{\\s*createOpfsAssetStorePart2\\s*\\}\\s*from\\s*["']\\.\\.\\/brain\\/brain-storage-part2\\.js["']/.test(page) ||
+          !/createBrainIntegrationPart2\\(\\s*\\{\\s*app:\\s*context\\.app/.test(page)) {
+        throw new Error("Nano Brain Page का वास्तविक Integration/Storage import chain अधूरा है।");
+      }
+
+      if (!/import\\s*\\{[^}]*createBrainStoragePart2[^}]*\\}\\s*from\\s*["']\\.\\/brain-storage-part2\\.js["']/.test(integration) ||
+          !/import\\s*\\{[^}]*createCapabilityGatePart2[^}]*\\}\\s*from\\s*["']\\.\\/brain-security-part2\\.js["']/.test(integration)) {
+        throw new Error("Brain Integration Foundation के Security/Storage dependencies अनुपस्थित हैं।");
+      }
+      if (!/import\\s*\\{[^}]*cloneSafeJsonPart2[^}]*\\}\\s*from\\s*["']\\.\\/brain-security-part2\\.js["']/.test(storage)) {
+        throw new Error("Brain Storage Foundation का Security JSON-boundary dependency अनुपस्थित है।");
+      }
+
+      diagnostics.mainAppIntegration = {
+        origin: location.origin,
+        filesRead: localFiles.map(item => item[0]),
+        appEntryPoint: scriptSources[0],
+        brainRoute: "nano-brain",
+        dynamicPageModule: "page-nano-brain-part2.js",
+        extraBrainScriptTag: false,
+        sourceChecks: "passed"
+      };
+      return "Main App Navigation, unchanged app.js entry point, Page Loader route, Brain Page, Integration, Security और Storage imports का same-origin source contract सफल।";
+    }
+
     async function testOptionalOpfs() {
       const opfs = createOpfsAssetStorePart2({ navigatorRef: navigator });
       if (!opfs.supported) {
@@ -444,10 +527,13 @@
         await runCheck("checksummed-backup-tamper-rejection", () => verifyBackupIntegrity(storage));
         await runCheck("storage-quota-and-persistence-diagnostics", () => inspectDiagnostics(storage));
       } finally {
-        if (storage) await storage.dispose();
+        if (storage) {
+          await storage.dispose();
+          storage = null;
+          addCheck("storage-connection-closed-after-write", true, "सफलतापूर्वक खोला गया Storage API Connection dispose किया गया।");
+          render();
+        }
       }
-      addCheck("storage-connection-closed-after-write", true, "Storage API का IndexedDB Connection dispose किया गया।");
-      render();
     }
 
     async function runReadPhase(name) {
@@ -465,12 +551,16 @@
           }
           return "Database नए Page Load में Native IndexedDB से दोबारा खुला।";
         });
-        if (!storage) return;
-        await runCheck("coldstart-record-metadata-event-recovered", () => verifyAuditData(storage, "Reopen"));
-        await runCheck("legacy-v1-data-still-present-after-reopen", () => verifyMigration(storage, name));
-        await runCheck("reopened-storage-diagnostics", () => inspectDiagnostics(storage));
+        if (storage) {
+          await runCheck("coldstart-record-metadata-event-recovered", () => verifyAuditData(storage, "Reopen"));
+          await runCheck("legacy-v1-data-still-present-after-reopen", () => verifyMigration(storage, name));
+          await runCheck("reopened-storage-diagnostics", () => inspectDiagnostics(storage));
+        }
       } finally {
-        if (storage) await storage.dispose();
+        if (storage) {
+          await storage.dispose();
+          storage = null;
+        }
       }
       await runCheck("test-database-cleanup", async () => {
         await deleteTestDatabase(name);
@@ -503,6 +593,8 @@
           }
           return "Secure Context, IndexedDB और Web Crypto APIs उपलब्ध हैं।";
         });
+
+        await runCheck("main-app-brain-integration-contract", verifyMainAppIntegrationContract);
 
         if (phase === "invalid") {
           addCheck("phase-parameter-validation", false, "अमान्य phase; all, write या read चुनें।");
