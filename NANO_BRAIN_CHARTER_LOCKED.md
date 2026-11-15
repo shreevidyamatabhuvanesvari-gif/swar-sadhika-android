@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.0  
+**संस्करण:** 1.0.1  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -245,6 +245,65 @@ Brain की सफलता का कोई काल्पनिक प्र
 - Strict Offline certification
 
 इस Charter में वर्णित अंतिम क्षमताएँ **परियोजना के लक्ष्य और स्वीकृति मानक** हैं; इन्हें वर्तमान में पूर्ण या सक्रिय होने का दावा नहीं किया जाता।
+
+## 13. 22-फाइल क्रमिक निर्माण एवं Integration सूची — LOCKED
+
+नीचे दिया गया क्रम उपयोगकर्ता के Master Build & Integration Plan का सटीक file-level क्रम है। इस क्रम को बिना स्पष्ट अनुमति बदला, छोटा या पुनर्व्यवस्थित नहीं किया जाएगा। किसी फाइल का Feature Branch में पहले से मौजूद होना उसकी स्वतंत्र जाँच, स्वीकृति या production readiness का प्रमाण नहीं है।
+
+### A. मौजूदा फाइलें — UPDATE
+
+| क्रम | सटीक फाइल पथ | अनिवार्य कार्य |
+|---:|---|---|
+| 1 | `assets/js/app.js` | Nano Brain route, Navigation और सुरक्षित Lazy Loading को मौजूदा Main App Page Loader/Lifecycle से जोड़ना; Loader या Registry को अनावश्यक रूप से बदलना नहीं। |
+| 2 | `.github/workflows/swar-sadhika-regression.yml` | Brain Integration सहित पूरे App के Regression Tests चलाना; TTS, Sanskrit, Avatar, Video और पुराने Modules के परीक्षण सुरक्षित रखना। |
+
+### B. Foundation — नई फाइलें ADD
+
+| क्रम | सटीक फाइल पथ | अनिवार्य कार्य |
+|---:|---|---|
+| 3 | `.github/workflows/nano-brain-foundation.yml` | Brain Foundation के Syntax, Self-Test, Browser/Chromium और Integration checks। |
+| 4 | `NANO_BRAIN_CHARTER_LOCKED.md` | Brain का सर्वोच्च उद्देश्य, Architecture, सीमाएँ, 22-फाइल क्रम, सत्यापन नियम और Acceptance Criteria। |
+| 5 | `assets/js/brain/README-part2.md` | Foundation का उपयोग, interface, data contracts, सीमाएँ और परीक्षण निर्देश। |
+| 6 | `assets/js/brain/brain-browser-test-part2.html` | वास्तविक browser APIs के माध्यम से Storage और Browser behavior का परीक्षण। |
+| 7 | `assets/js/brain/brain-browser-test-runner-part2.mjs` | स्वचालित Chromium test orchestration और परिणाम सत्यापन। |
+| 8 | `assets/js/brain/brain-foundation-selftest-part2.js` | Brain Foundation के सभी उपलब्ध Self-Tests का aggregate परिणाम। |
+| 9 | `assets/js/brain/brain-integration-foundation-part2.js` | सुरक्षित App Facade, Initialization और Lifecycle Integration। |
+| 10 | `assets/js/brain/brain-security-part2.js` | Input/schema validation, Capability Gate, सुरक्षित identifiers और integrity helpers। |
+| 11 | `assets/js/brain/brain-storage-part2.js` | स्थानीय structured storage, metadata, events, migration और उपलब्ध asset storage interfaces। |
+| 12 | `assets/js/pages/page-nano-brain-part2.js` | मौजूदा Page Loader में लोड होने वाला Nano Brain Foundation Page। |
+
+### C. शक्तिशाली Brain — भविष्य के नए मॉड्यूल ADD
+
+| क्रम | सटीक फाइल पथ | अनिवार्य कार्य |
+|---:|---|---|
+| 13 | `assets/js/brain/brain-core-part2.js` | Central Brain Orchestrator; सभी Brain Modules का समन्वय। |
+| 14 | `assets/js/brain/brain-memory-engine-part2.js` | Working, Episodic, Semantic, Procedural और स्वीकृत User Preference Memory। |
+| 15 | `assets/js/brain/brain-knowledge-engine-part2.js` | Sanskrit, श्लोक, मंत्र, स्तोत्र, वैदिक ऋचा, व्याकरण और उच्चारण ज्ञान; स्रोत एवं प्रमाण प्रबंधन। |
+| 16 | `assets/js/brain/brain-reasoning-engine-part2.js` | Symbolic Reasoning, Context Understanding, Logical Analysis और निर्णय सत्यापन। |
+| 17 | `assets/js/brain/brain-learning-engine-part2.js` | स्वीकृत उदाहरणों और Feedback से नियंत्रित स्थानीय Learning, परीक्षण, Versioning और Rollback। |
+| 18 | `assets/js/brain/brain-task-planner-part2.js` | कार्य विभाजन, निर्भरता, प्राथमिकता, क्रम और परिणाम मूल्यांकन। |
+| 19 | `assets/js/brain/brain-media-learning-adapter-part2.js` | उपयोगकर्ता द्वारा उपलब्ध कराए गए Audio/Video और अनुमत Media से Learning Integration। |
+| 20 | `assets/js/brain/brain-speech-singing-adapter-part2.js` | मौजूदा TTS और भविष्य के स्थानीय Singing Voice Synthesis का पृथक interface-based Integration। |
+| 21 | `assets/js/brain/brain-avatar-adapter-part2.js` | Avatar, Body Language, Facial Expression, Phoneme Synchronization और Lip-Sync Integration। |
+| 22 | `assets/js/brain/brain-model-runtime-part2.js` | स्थानीय AI Model Loading, Integrity Verification, Device Resource Management और Inference Runtime। |
+
+### 13.1 क्रम और स्थिति के अनिवार्य नियम
+
+1. इस सूची के क्रमांक स्थिर हैं और भविष्य की file tracking में यही क्रम उपयोग होगा।
+2. क्रमांक 13–22 भविष्य के प्रस्तावित मॉड्यूल हैं; वे इस Charter के कारण स्वतः निर्मित या सक्रिय नहीं माने जाएँगे।
+3. प्रत्येक फाइल का अपना अलग Commit होना चाहिए। एक Commit में कई Brain फाइलों का नया निर्माण या संशोधन नहीं किया जाएगा।
+4. पहले से Feature Branch में मौजूद फाइल को दोबारा बनाकर duplicate नहीं किया जाएगा। उसका वास्तविक content, interface और परीक्षण audit होगा; आवश्यक सुधार उसी एक फाइल के अलग Commit में होगा।
+5. प्रत्येक फाइल के लिए dependency/interface review, syntax check, संबंधित Self-Test और आवश्यक Integration/Browser/Android परीक्षण पूरे किए जाएँगे।
+6. Foundation tests पास होना Symbolic Reasoning, Neural Model, Singing Generation या पूर्ण Brain readiness का प्रमाण नहीं है।
+7. Android Chrome पर वास्तविक device testing और Strict Offline certification अलग Acceptance Gates रहेंगे।
+8. `index.html` तथा उसके Script Tags अपरिवर्तित रहेंगे। Brain को मौजूदा Page Loader के घोषित और सुरक्षित integration path से जोड़ना होगा।
+9. कोई भी बाहरी AI API, remote inference या अलग अनिवार्य server इस निर्माण क्रम में स्वीकार्य नहीं है।
+
+### 13.2 इस Charter Revision का अर्थ
+
+संस्करण 1.0.1 में केवल इस क्रमिक 22-फाइल सूची और उसके tracking नियमों को स्पष्ट किया गया है। इससे किसी मॉड्यूल की वर्तमान उपलब्धता, गुणवत्ता, Android certification या अंतिम Brain क्षमता के बारे में अतिरिक्त दावा नहीं किया जाता। संस्करण 1.0.0 का Git इतिहास सुरक्षित रहेगा।
+
+---
 
 ---
 
