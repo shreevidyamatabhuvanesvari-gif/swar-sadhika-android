@@ -422,6 +422,7 @@
           !/createBrainMemoryEnginePart2\(\s*\{\s*core:\s*brainCore/.test(page) ||
           !/await memoryEngine\.initialize\(\)/.test(page) ||
           !/memoryEngine\.dispose\(\)/.test(page) ||
+          !/memoryEngine\.cancelActiveTasks\(/.test(page) ||
           !/import\s*\{\s*createOpfsAssetStorePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-storage-part2\.js["']/.test(page) ||
           !/createBrainIntegrationPart2\(\s*\{\s*app:\s*context\.app/.test(page) ||
           !/createBrainCorePart2\(\s*\{\s*integration,\s*host\s*\}/.test(page) ||
