@@ -56,4 +56,4 @@ The Foundation workflow launches Chrome twice with the same isolated browser pro
 1. `phase=write` creates a separate test database, writes a record, metadata and an event, then closes the connection.
 2. `phase=read` starts a new browser process with the same profile and verifies that all three values survived, then cleans up the record.
 
-This verifies real Chromium IndexedDB persistence across browser-process restarts. It is not a physical Android Chrome certification. Android device testing must still verify the actual installed Chrome version, storage quota/eviction behavior, app cold start, and offline behavior.
+The same runner also loads the real app shell at a mobile-sized viewport and verifies that the Nano Brain navigation route mounts the Part 2 page through the existing Page Loader. This verifies real Chromium IndexedDB persistence across browser-process restarts and a browser-level app route smoke test. It is not a physical Android Chrome certification. Android device testing must still verify the actual installed Chrome version, storage quota/eviction behavior, app cold start, and offline behavior.

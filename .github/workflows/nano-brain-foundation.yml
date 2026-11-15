@@ -52,7 +52,7 @@ jobs:
             sleep 1
           done
           chrome="${{ steps.chrome.outputs.chrome-path }}"
-          npm install --no-save --no-package-lock playwright
+          npm install --no-save --no-package-lock playwright@1.55.0
           CHROME_PATH="$chrome" BRAIN_TEST_URL="http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html" node --experimental-default-type=module assets/js/brain/brain-browser-test-runner-part2.mjs
       - name: Run Nano Brain foundation self-tests
         shell: bash

@@ -39,10 +39,50 @@ async function runPhase(phase) {
   }
 }
 
+async function runAppRouteSmoke() {
+  const context = await chromium.launchPersistentContext(profile, {
+    executablePath,
+    headless: true,
+    viewport: { width: 412, height: 915 },
+    deviceScaleFactor: 1,
+    args: ["--no-sandbox", "--disable-dev-shm-usage"]
+  });
+  try {
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      window.__swarSadhikaReady = false;
+      window.addEventListener("swar-sadhika:ready", () => { window.__swarSadhikaReady = true; }, { once: true });
+    });
+    const origin = new URL(baseUrl).origin;
+    await page.goto(origin + "/index.html", { waitUntil: "load" });
+    await page.waitForFunction(() => window.__swarSadhikaReady === true, null, { timeout: 20000 });
+    const routeResult = await page.evaluate(async () => {
+      const button = document.querySelector('button[data-route="nano-brain"]');
+      const navigated = await window.SwarSadhikaApp.navigate("nano-brain");
+      return { navigated, buttonEnabled: Boolean(button && !button.disabled) };
+    });
+    if (!routeResult.navigated || !routeResult.buttonEnabled) {
+      throw new Error("Nano Brain route button or Page Loader navigation is unavailable.");
+    }
+    await page.waitForFunction(() => {
+      const view = document.getElementById("view-nano-brain");
+      const status = view && view.querySelector(".panel .status");
+      return Boolean(view && !view.hidden && status && status.textContent.includes("Foundation"));
+    }, null, { timeout: 20000 });
+    if (pageErrors.length) throw new Error("App page errors: " + pageErrors.join(" | "));
+    console.log("APP ROUTE SMOKE: PASSED — Nano Brain Page Loader mounted and visible.");
+  } finally {
+    await context.close();
+  }
+}
+
 try {
   await runPhase("write");
   await runPhase("read");
   console.log("CHROMIUM INDEXEDDB PERSISTENCE: PASSED");
+  await runAppRouteSmoke();
 } finally {
   await rm(profile, { recursive: true, force: true });
 }
