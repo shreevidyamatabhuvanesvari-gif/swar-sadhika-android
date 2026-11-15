@@ -341,21 +341,24 @@ function createIndexedDbBackend(db) {
         prepared[storeName] = bundle[storeName].map(item => normalizeRecord(item, storeName));
       }
       return transact(db, Object.values(STORES), "readwrite", (stores, transaction, set) => {
-        for (const storeName of Object.values(STORES)) {
-          for (const item of prepared[storeName]) {
-            const request = stores[storeName].add(item);
-            request.onerror = event => {
-              // Prevent the default request error from being hidden; abort all
-              // three stores so backup restoration remains all-or-nothing.
-              try { transaction.abort(); } catch (_) {}
-            };
-          }
-        }
-        transaction.oncomplete = () => set(Object.freeze({
+        // Set the result through the transaction wrapper. The wrapper owns
+        // oncomplete/onabort handlers; replacing them here would lose the
+        // restore summary and could make callers receive undefined.
+        set(Object.freeze({
           records: prepared.records.length,
           metadata: prepared.metadata.length,
           events: prepared.events.length
         }));
+        for (const storeName of Object.values(STORES)) {
+          for (const item of prepared[storeName]) {
+            const request = stores[storeName].add(item);
+            request.onerror = () => {
+              // Abort every store on any duplicate or write error so restore
+              // remains all-or-nothing.
+              try { transaction.abort(); } catch (_) {}
+            };
+          }
+        }
       });
     },
     async close() {
@@ -577,7 +580,10 @@ export async function createBrainStoragePart2(options = {}) {
   async function exportBackup() {
     assertActive();
     const records = await backend.list(STORES.records, MAX_LIST_LIMIT);
-    const metadata = await backend.list(STORES.metadata, MAX_LIST_LIMIT);
+    // schemaVersion is a database-managed migration marker, not user metadata.
+    // Excluding it allows a backup to restore into a freshly initialized DB.
+    const metadata = (await backend.list(STORES.metadata, MAX_LIST_LIMIT))
+      .filter(item => item.key !== "schemaVersion");
     const events = await backend.list(STORES.events, MAX_LIST_LIMIT);
     if ([records, metadata, events].some(list => list.length >= MAX_LIST_LIMIT)) {
       fail("Backup के लिए डेटा निर्धारित सीमा से अधिक है; सीमित Export को पूर्ण Backup नहीं माना जाएगा।", "BACKUP_ITEM_LIMIT");
@@ -635,7 +641,9 @@ export async function createBrainStoragePart2(options = {}) {
       if (!Array.isArray(items) || items.length > MAX_BACKUP_ITEMS_PER_STORE) {
         fail("Backup store अमान्य या निर्धारित सीमा से बड़ा है: " + storeName, "INVALID_BACKUP_STORE");
       }
-      bundle[storeName] = items.map(item => normalizeRecord(item, storeName));
+      bundle[storeName] = items
+        .filter(item => !(storeName === STORES.metadata && item && item.key === "schemaVersion"))
+        .map(item => normalizeRecord(item, storeName));
     }
 
     // Import is additive and atomic. Existing keys cause rejection; no record
@@ -873,6 +881,23 @@ export async function selfTest() {
       await native.putRecord({ id: "native-roundtrip", value: "browser-storage" });
       const nativeRecord = await native.getRecord("native-roundtrip");
       check("native-indexeddb-write-read", Boolean(nativeRecord && nativeRecord.value === "browser-storage"));
+
+      const nativeBackup = await native.exportBackup();
+      const restoreDbName = dbName + "-restore";
+      const nativeRestored = await createBrainStoragePart2({
+        host: globalThis,
+        dbName: restoreDbName,
+        allowVolatileFallback: false
+      });
+      const nativeImportResult = await nativeRestored.importBackup(nativeBackup);
+      const nativeRestoredRecord = await nativeRestored.getRecord("native-roundtrip");
+      check("native-indexeddb-backup-restore-roundtrip",
+        nativeImportResult.records === 1 &&
+        nativeRestoredRecord && nativeRestoredRecord.value === "browser-storage");
+      check("native-indexeddb-backup-excludes-database-schema-marker",
+        nativeImportResult.metadata === 0);
+      await nativeRestored.dispose();
+      await deleteDatabase(globalThis.indexedDB, restoreDbName);
       await native.dispose();
 
       const reopened = await createBrainStoragePart2({
