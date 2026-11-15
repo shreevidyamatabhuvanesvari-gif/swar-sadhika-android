@@ -12,6 +12,7 @@ import { selfTest as runSecuritySelfTest } from "./brain-security-part2.js";
 import { selfTest as runStorageSelfTest } from "./brain-storage-part2.js";
 import { selfTest as runIntegrationSelfTest } from "./brain-integration-foundation-part2.js";
 import { selfTest as runBrainCoreSelfTest } from "./brain-core-part2.js";
+import { selfTest as runBrainMemorySelfTest } from "./brain-memory-engine-part2.js";
 import { selfTest as runNanoBrainPageSelfTest } from "../pages/page-nano-brain-part2.js";
 
 export const BRAIN_FOUNDATION_SELFTEST_VERSION_PART2 = "1.1.0";
@@ -36,6 +37,11 @@ const SUITES = Object.freeze([
     id: "brain-core",
     name: "Central Brain Core",
     run: runBrainCoreSelfTest
+  }),
+  Object.freeze({
+    id: "brain-memory",
+    name: "Central Brain Memory Engine",
+    run: runBrainMemorySelfTest
   }),
   Object.freeze({
     id: "nano-brain-page",
