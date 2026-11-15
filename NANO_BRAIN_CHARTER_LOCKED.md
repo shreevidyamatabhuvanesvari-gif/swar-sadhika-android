@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.1  
+**संस्करण:** 1.0.2  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -302,6 +302,66 @@ Brain की सफलता का कोई काल्पनिक प्र
 ### 13.2 इस Charter Revision का अर्थ
 
 संस्करण 1.0.1 में केवल इस क्रमिक 22-फाइल सूची और उसके tracking नियमों को स्पष्ट किया गया है। इससे किसी मॉड्यूल की वर्तमान उपलब्धता, गुणवत्ता, Android certification या अंतिम Brain क्षमता के बारे में अतिरिक्त दावा नहीं किया जाता। संस्करण 1.0.0 का Git इतिहास सुरक्षित रहेगा।
+
+---
+
+## 14. शून्य-अनुमान, Local-only निर्माण और Main App Integration Quality Gate — LOCKED
+
+यह अनुभाग उपयोगकर्ता के स्पष्ट निर्देश को बाध्यकारी Engineering Rule बनाता है: Repository में उपलब्ध अधिकृत कार्य-क्षमता का उपयोग करके शक्तिशाली Nano Brain को बिना किसी बाहरी AI सेवा पर निर्भर हुए विकसित करना और उसे Swar-Sadhika Main App में वास्तविक रूप से जोड़ना है। केवल अलग-अलग फाइलें जोड़ना, बिना Integration के modules छोड़ना, या परीक्षण के बिना कार्य पूर्ण बताना स्वीकार्य नहीं है।
+
+### 14.1 Local-only Runtime — अनिवार्य
+
+1. Brain के सामान्य संचालन, reasoning, memory, learning और आवश्यक domain inference के लिए कोई बाहरी AI API, cloud inference provider, paid AI service या अलग अनिवार्य remote backend नहीं होगा।
+2. जहाँ Neural Model आवश्यक हो, वहाँ model assets स्थानीय डिवाइस पर स्थापित और सत्यापित होंगे तथा inference स्थानीय रूप से चलेगा।
+3. GitHub Repository, GitHub Actions, package installation और development/test tooling परियोजना के निर्माण और सत्यापन के साधन हैं; उन्हें App Runtime की AI dependency नहीं माना जाएगा।
+4. किसी model, library या browser capability की offline उपलब्धता device पर वास्तविक installation, integrity verification और network-disabled test के बिना घोषित नहीं होगी।
+5. कोई fallback चुपचाप remote service की ओर नहीं जाएगा। Local model या capability अनुपलब्ध होने पर स्पष्ट status और सुरक्षित fallback दिया जाएगा।
+
+### 14.2 Main App Integration — अनिवार्य
+
+1. Nano Brain का एक ही स्वीकृत Main App entry path होगा: मौजूदा `index.html` → `assets/js/app.js` Page Loader → Brain Page → Brain Core/Module Integration।
+2. `index.html` तथा उसके Script Tags अपरिवर्तित रहेंगे; Brain के लिए नया Script Tag या parallel app entry point नहीं जोड़ा जाएगा।
+3. Main App Navigation में Brain route और mount container, Page Loader में सुरक्षित Lazy Loading, तथा Brain Page के वास्तविक lifecycle hooks का Integration आवश्यक है।
+4. प्रत्येक Brain module को घोषित central Brain interfaces/Orchestrator से जुड़ना होगा। किसी module को केवल Repository में उपस्थित होने से Integrated नहीं माना जाएगा।
+5. मौजूदा Sanskrit, Nano Server, TTS, Singing, Avatar, Video और Media engines से जुड़ने से पहले उनके वास्तविक exports, inputs, outputs, lifecycle और side effects का source audit होगा। Adapter केवल सत्यापित interface के अनुरूप बनेगा।
+6. Existing engines को अनावश्यक रूप से duplicate, replace या rewrite नहीं किया जाएगा। Engine replacement के लिए अलग compatibility, regression, rollback और user approval आवश्यक है।
+7. हर module की Integration स्थिति को इन अलग अवस्थाओं में दर्ज करें: `PROPOSED`, `IMPLEMENTED`, `INTEGRATED`, `CI-TESTED`, `ANDROID-VERIFIED`, `OFFLINE-CERTIFIED`। एक अवस्था दूसरी अवस्था का स्वतः प्रमाण नहीं है।
+
+### 14.3 One-file Engineering Gate — अनिवार्य
+
+प्रत्येक क्रमांकित फाइल के लिए निम्न क्रम पूरा किए बिना अगली फाइल पर कार्य शुरू नहीं होगा:
+
+1. Feature Branch पर target file, current commit, file existence और संबंधित source dependencies जाँचना।
+2. उसी फाइल के वास्तविक contract, imports/exports, data flow और Main App integration point का audit करना।
+3. केवल निर्धारित एक फाइल में आवश्यक परिवर्तन करना; unrelated files को न छूना।
+4. उस एक फाइल का स्वतंत्र Git Commit और diff/content SHA सत्यापित करना।
+5. आवश्यक syntax, module self-test, integration contract और browser/Chromium checks चलाना।
+6. Workflow result के साथ failed, skipped और environment-dependent assertions अलग-अलग दर्ज करना।
+7. किसी failure पर root cause ठीक करना और संबंधित परीक्षण पुनः सफल कराना; failure को हटाना, छिपाना या PASS में बदलना निषिद्ध है।
+8. पूर्ण परिणाम, सीमाएँ और अगले क्रमांक की फाइल का पथ तथा उद्देश्य उपयोगकर्ता को उसी उत्तर में बताना।
+
+### 14.4 Zero-known-defect और सत्यता नियम
+
+1. किसी ज्ञात असफल या अपूर्ण आवश्यक जाँच को लंबित छोड़कर अगली implementation file पर आगे नहीं बढ़ेंगे।
+2. कोई test assertion, security gate या regression check केवल workflow green दिखाने के लिए कमजोर या निष्क्रिय नहीं किया जाएगा।
+3. कोई fake, mock, placeholder या अनुमानित output वास्तविक AI inference, durable storage, Android behavior या engine integration के रूप में प्रदर्शित नहीं होगा।
+4. हर रिपोर्ट में यह स्पष्ट होगा कि कौन-सा परीक्षण वास्तव में चला, कौन-सा PASS/FAIL/SKIPPED रहा, और कौन-सी जाँच अभी हुई ही नहीं।
+5. Absolute zero-defect guarantee तकनीकी रूप से सत्यापित नहीं की जा सकती। इस Charter का व्यावहारिक quality target है: कोई ज्ञात defect अनसुलझा छोड़कर आगे न बढ़ना, सभी आवश्यक स्वचालित परीक्षण सफल करना, और शेष जोखिम/सीमाएँ स्पष्ट रखना।
+6. Repository write access या CI green होना सम्पूर्ण app correctness, physical Android compatibility या production readiness का प्रमाण नहीं है।
+
+### 14.5 इस लॉक का Acceptance Evidence
+
+किसी Brain increment को स्वीकार करने के लिए आवश्यक evidence में शामिल होगा:
+
+- exact branch, file path, commit SHA और audited diff;
+- dependency/interface और Main App integration evidence;
+- आवश्यक self-tests और पूरे App के regression results;
+- वास्तविक Browser/Chromium results, जहाँ लागू हों;
+- physical Android Chrome test record, जब device-specific behavior का दावा हो;
+- network-disabled test record, जब Offline capability का दावा हो;
+- प्रत्येक skipped assertion और unresolved limitation की स्पष्ट सूची।
+
+इस अनुभाग का उद्देश्य केवल त्रुटियाँ कम करना नहीं, बल्कि निर्माण-प्रक्रिया को सत्यापन-आधारित, traceable और Main App-केंद्रित बनाना है।
 
 ---
 
