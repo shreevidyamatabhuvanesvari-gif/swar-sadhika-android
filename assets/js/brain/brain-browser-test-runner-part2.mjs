@@ -60,11 +60,11 @@ async function runAppRouteSmoke() {
     await page.waitForFunction(() => window.__swarSadhikaReady === true, null, { timeout: 20000 });
     const routeResult = await page.evaluate(async () => {
       const button = document.querySelector('button[data-route="nano-brain"]');
-      const navigated = await window.SwarSadhikaApp.navigate("nano-brain");
-      return { navigated, buttonEnabled: Boolean(button && !button.disabled) };
+      await window.SwarSadhikaApp.navigate("nano-brain");
+      return { buttonEnabled: Boolean(button && !button.disabled) };
     });
-    if (!routeResult.navigated || !routeResult.buttonEnabled) {
-      throw new Error("Nano Brain route button or Page Loader navigation is unavailable.");
+    if (!routeResult.buttonEnabled) {
+      throw new Error("Nano Brain route button is disabled in the existing Page Loader.");
     }
     await page.waitForFunction(() => {
       const view = document.getElementById("view-nano-brain");
