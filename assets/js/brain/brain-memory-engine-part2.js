@@ -110,12 +110,16 @@ function normalizeMemoryInput(input, base = null) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     fail("Memory Input साधारण Object होना चाहिए।", "INVALID_MEMORY_INPUT");
   }
+  const safeInput = cloneSafeJsonPart2(input);
+  if (!safeInput || typeof safeInput !== "object" || Array.isArray(safeInput)) {
+    fail("Memory Input साधारण JSON Object होना चाहिए।", "INVALID_MEMORY_INPUT");
+  }
   const allowed = new Set(["category", "title", "content", "tags", "source", "confidence", "importance", "privacy"]);
-  if (Object.keys(input).some(key => !allowed.has(key))) {
+  if (Object.keys(safeInput).some(key => !allowed.has(key))) {
     fail("Memory Input में अज्ञात property मिली।", "UNKNOWN_MEMORY_PROPERTY");
   }
 
-  const merged = { ...(base || {}), ...input };
+  const merged = { ...(base || {}), ...safeInput };
   const category = merged.category;
   if (typeof category !== "string" || !CATEGORIES.has(category)) {
     fail("Memory Category स्वीकृत सूची में होनी चाहिए।", "INVALID_MEMORY_CATEGORY");
@@ -230,8 +234,16 @@ export function createBrainMemoryEnginePart2(options = {}) {
         !["click", "pointerup", "keydown"].includes(event.type)) {
       fail("Memory Write के लिए वास्तविक User Gesture आवश्यक है।", "USER_GESTURE_REQUIRED");
     }
+    const now = Date.now();
+    for (const [approvalId, createdAt] of approvals) {
+      if (now - createdAt > APPROVAL_TTL_MS) approvals.delete(approvalId);
+    }
+    if (approvals.size >= 16) {
+      fail("एक समय में अधिकतम 16 अप्रयुक्त Memory Write Approvals रखे जा सकते हैं।",
+        "WRITE_APPROVAL_LIMIT");
+    }
     const id = makeId("memory-approval", host, ++sequence);
-    approvals.set(id, Date.now());
+    approvals.set(id, now);
     return Object.freeze({ id, purpose: "single-memory-write", expiresInMs: APPROVAL_TTL_MS });
   }
 
@@ -459,9 +471,18 @@ export function createBrainMemoryEnginePart2(options = {}) {
 
   function requestPermissions(event, options = {}) {
     assertReady();
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      fail("Permission विकल्प साधारण Object होने चाहिए।", "INVALID_PERMISSION_OPTIONS");
+    }
+    const safeOptions = cloneSafeJsonPart2(options);
+    if (Object.keys(safeOptions).some(key => key !== "read" && key !== "write") ||
+        (safeOptions.read !== undefined && typeof safeOptions.read !== "boolean") ||
+        (safeOptions.write !== undefined && typeof safeOptions.write !== "boolean")) {
+      fail("Permission विकल्पों में केवल boolean read/write स्वीकार्य हैं।", "INVALID_PERMISSION_OPTIONS");
+    }
     const requested = [];
-    if (options.read !== false) requested.push("memory.read");
-    if (options.write === true) requested.push("memory.write");
+    if (safeOptions.read !== false) requested.push("memory.read");
+    if (safeOptions.write === true) requested.push("memory.write");
     if (!requested.length) fail("कम-से-कम एक Memory Permission चुनना आवश्यक है।", "EMPTY_PERMISSION_REQUEST");
     return core.requestCapabilities(requested, event);
   }
@@ -486,7 +507,12 @@ export function createBrainMemoryEnginePart2(options = {}) {
   }
 
   async function list(options = {}) {
-    const limit = options.limit === undefined ? MAX_RESULT_ITEMS : options.limit;
+    if (!options || typeof options !== "object" || Array.isArray(options) ||
+        Object.keys(cloneSafeJsonPart2(options)).some(key => key !== "limit")) {
+      fail("Memory List विकल्पों में केवल limit स्वीकार्य है।", "INVALID_MEMORY_OPTIONS");
+    }
+    const safeOptions = cloneSafeJsonPart2(options);
+    const limit = safeOptions.limit === undefined ? MAX_RESULT_ITEMS : safeOptions.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RESULT_ITEMS) {
       fail("Memory List limit 1 से 100 के बीच होना चाहिए।", "INVALID_MEMORY_LIMIT");
     }
@@ -495,7 +521,12 @@ export function createBrainMemoryEnginePart2(options = {}) {
 
   async function search(query, options = {}) {
     const normalized = normalizeQuery(query);
-    const limit = options.limit === undefined ? MAX_RESULT_ITEMS : options.limit;
+    if (!options || typeof options !== "object" || Array.isArray(options) ||
+        Object.keys(cloneSafeJsonPart2(options)).some(key => key !== "limit")) {
+      fail("Memory Search विकल्पों में केवल limit स्वीकार्य है।", "INVALID_MEMORY_OPTIONS");
+    }
+    const safeOptions = cloneSafeJsonPart2(options);
+    const limit = safeOptions.limit === undefined ? MAX_RESULT_ITEMS : safeOptions.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RESULT_ITEMS) {
       fail("Memory Search limit 1 से 100 के बीच होना चाहिए।", "INVALID_MEMORY_LIMIT");
     }
