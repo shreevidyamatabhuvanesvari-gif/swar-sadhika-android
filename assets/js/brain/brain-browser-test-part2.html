@@ -482,6 +482,7 @@
       if (running) return;
       running = true;
       runButton.disabled = true;
+      document.documentElement.dataset.auditComplete = "false";
       checks.length = 0;
       skipped.length = 0;
       Object.keys(diagnostics).forEach(key => delete diagnostics[key]);
@@ -531,6 +532,7 @@
       } finally {
         running = false;
         runButton.disabled = false;
+        document.documentElement.dataset.auditComplete = "true";
         render();
       }
     }
