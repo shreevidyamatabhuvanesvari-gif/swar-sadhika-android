@@ -17,15 +17,67 @@ jobs:
   regression:
     name: JavaScript regression audit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Check out repository
+      - name: Check out repository with history for file-lock audit
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      # LOCKED FAILURE FILE:
+      # page-avatar.js previously failed its self-test because an assertion
+      # referenced an undefined variable (s). The current checked-in version
+      # must stay unchanged until a separately reviewed unlock/fix is approved.
+      # Its self-test below is still mandatory on every run.
+      - name: Enforce locked failed-file protection
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PUSH_BEFORE_SHA: ${{ github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          locked_files=(
+            "assets/js/pages/page-avatar.js"
+          )
+
+          if [[ ! -f "assets/js/pages/page-avatar.js" ]]; then
+            echo "::error::LOCKED file is missing: assets/js/pages/page-avatar.js"
+            exit 1
+          fi
+
+          base_sha=""
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            base_sha="$PUSH_BEFORE_SHA"
+          fi
+
+          if [[ -n "$base_sha" && "$base_sha" =~ ^0+$ ]]; then
+            base_sha=""
+          fi
+
+          if [[ -n "$base_sha" ]]; then
+            if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+              echo "::error::Unable to verify base commit for locked-file audit: $base_sha"
+              exit 1
+            fi
+            changed_files="$(git diff --name-only "${base_sha}...$GITHUB_SHA")"
+            for locked_file in "${locked_files[@]}"; do
+              if printf '%s\n' "$changed_files" | grep -Fxq "$locked_file"; then
+                echo "::error::LOCKED FILE MODIFIED: $locked_file"
+                echo "::error::This file previously failed its Avatar page self-test. Keep it locked until a separately reviewed fix and explicit unlock."
+                exit 1
+              fi
+            done
+          fi
+
+          echo "LOCKED FILE PROTECTION PASSED:"
+          printf ' - %s (modification blocked; self-test required)\n' "${locked_files[@]}"
 
       - name: Syntax-check every JavaScript file
         shell: bash
@@ -39,6 +91,11 @@ jobs:
           done < <(find assets/js -type f -name '*.js' -print0 | sort -z)
           test "${count}" -gt 0
           echo "Syntax check passed for ${count} JavaScript files."
+
+          if [[ -f "assets/js/brain/brain-browser-test-runner-part2.mjs" ]]; then
+            echo "Checking assets/js/brain/brain-browser-test-runner-part2.mjs"
+            node --check "assets/js/brain/brain-browser-test-runner-part2.mjs"
+          fi
 
       - name: Run Sanskrit and TTS module self-tests
         shell: bash
@@ -58,14 +115,14 @@ jobs:
             ["Pronunciation compiler", testPronunciationCompiler],
             ["TTS engine", testTtsEngine],
             ["Avatar TTS engine", testAvatarTtsEngine],
-            ["Avatar page", testAvatarPage]
+            ["LOCKED Avatar page", testAvatarPage]
           ];
 
           let failed = false;
           for (const [name, run] of suites) {
             let result;
             try {
-              result = run();
+              result = await run();
             } catch (error) {
               console.error(`FAIL ${name}: ${error?.stack || error}`);
               failed = true;
@@ -80,6 +137,7 @@ jobs:
               }
             }
           }
+
           try {
             const result = await testAvatarTtsIntegration();
             const passed = result?.status === "PASSED" && result?.failed === 0;
@@ -94,7 +152,34 @@ jobs:
             console.error(`FAIL Avatar TTS integration: ${error?.stack || error}`);
             failed = true;
           }
+
           if (failed) process.exitCode = 1;
+          NODE
+
+      - name: Run Nano Brain foundation self-tests when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_file="assets/js/brain/brain-foundation-selftest-part2.js"
+          if [[ ! -f "$test_file" ]]; then
+            echo "Nano Brain Foundation is not present on this ref; skipping its suite."
+            exit 0
+          fi
+
+          node --experimental-default-type=module --input-type=module <<'NODE'
+          import { selfTest } from "./assets/js/brain/brain-foundation-selftest-part2.js";
+
+          const result = await selfTest();
+          for (const suite of result.suites || []) {
+            console.log(`${suite.status} ${suite.name}: ${suite.passed}/${suite.total}`);
+            for (const check of suite.checks || []) {
+              if (!check.passed) console.error(`  - FAIL ${check.id}`);
+            }
+          }
+          console.log(`Nano Brain Foundation: ${result.passed}/${result.total}`);
+          if (result.status !== "PASSED" || result.failed !== 0) {
+            throw new Error("Nano Brain Foundation self-tests failed.");
+          }
           NODE
 
       - name: Audit Sanskrit Display Studio HTML and JavaScript contract
