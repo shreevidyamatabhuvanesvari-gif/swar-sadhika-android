@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.5  
+**संस्करण:** 1.0.6  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -482,6 +482,25 @@ Security Foundation में घोषित ये सभी बारह capa
 - क्या permission user-controlled रहते हुए वास्तविक कार्य पूरा किया जा सकता है?
 
 यदि किसी उत्तर से क्षमता घटने का पता चले, तो design को बदला जाएगा; क्षमता हटाकर समस्या हल नहीं की जाएगी। किसी भी unavoidable functional trade-off के लिए पहले उपयोगकर्ता की स्पष्ट स्वीकृति आवश्यक है।
+
+---
+
+## 17. Dependency-First Commit and Verified-Repair Workflow — LOCKED
+
+यह नियम Brain Foundation की सभी वर्तमान और भविष्य की फाइलों, उनके integration और GitHub Actions पर लागू होगा।
+
+1. किसी नई फाइल या परिवर्तन से पहले Repository की वर्तमान branch, exact file path, latest commit, imports/exports और dependent modules की जाँच अनिवार्य है।
+2. फाइलों को dependency order में बनाया और commit किया जाएगा: पहले आवश्यक आधार/contract, फिर उस पर निर्भर implementation, फिर adapter/page और अंत में aggregate/browser integration।
+3. प्रत्येक dependency stage की फाइल GitHub पर commit करने के बाद उसके exact commit SHA पर संबंधित Self-Test, syntax check और आवश्यक Regression/Browser tests चलाए जाएँगे।
+4. जब तक किसी stage के अनिवार्य tests सफल न हों, उस पर निर्भर अगली फाइल का implementation/commit शुरू नहीं किया जाएगा। Failure होने पर पहले उसी failure का job log पढ़कर कारण पहचाना जाएगा।
+5. GitHub Actions में लाल, cancelled या skipped result को “फाइलें हट गईं” या “सफल” नहीं माना जाएगा। Repository contents और exact workflow logs देखकर स्थिति बताई जाएगी।
+6. किसी failed run के पुराने commit को नए commit का प्रमाण नहीं माना जाएगा। परीक्षण हमेशा उस exact commit SHA पर होना चाहिए जिसमें सुधार मौजूद है।
+7. प्रत्येक फाइल के लिए केवल आवश्यक परिवर्तन होंगे। पहले से सही और हाल ही में commit की गई फाइल को बिना प्रमाणित आवश्यकता दोबारा नहीं बदला जाएगा।
+8. यदि एक file fix दूसरे modules को प्रभावित करता है, तो संबंधित regression tests भी चलेंगे। मौजूदा TTS, Sanskrit, Avatar, Video, Module Loader, Registry और App lifecycle सुरक्षित रहेंगे।
+9. उपयोगकर्ता को हर commit के बाद exact file path, commit SHA, बदला हुआ व्यवहार, वास्तविक test status और अगली dependency बताई जाएगी।
+10. कोई भी फाइल “complete”, “ready” या “integrated” तभी कही जाएगी जब उसके निर्धारित tests और वास्तविक integration checks पास हों। केवल commit होना कार्यक्षमता का प्रमाण नहीं है।
+11. उपयोगकर्ता की स्वीकृति के बिना Main App की मौजूदा कार्यक्षमता, 12 capability catalogue, स्थानीय डेटा या निर्धारित Brain उद्देश्य कम करने वाला परिवर्तन नहीं किया जाएगा।
+12. index.html और उसके Script Tags अपरिवर्तित रहेंगे, जब तक उपयोगकर्ता अलग से स्पष्ट अनुमति न दे।
 
 ---
 
