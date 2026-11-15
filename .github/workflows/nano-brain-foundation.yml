@@ -65,11 +65,13 @@ jobs:
           node --input-type=module <<'NODE'
           import { selfTest as securityTest } from "./assets/js/brain/brain-security-part2.js";
           import { selfTest as integrationTest } from "./assets/js/brain/brain-integration-foundation-part2.js";
+          import { selfTest as coreTest } from "./assets/js/brain/brain-core-part2.js";
           import { selfTest as pageTest } from "./assets/js/pages/page-nano-brain-part2.js";
 
           const suites = [
             ["Security Foundation", securityTest],
             ["Integration Foundation", integrationTest],
+            ["Central Brain Core", coreTest],
             ["Nano Brain Page", pageTest]
           ];
           let total = 0;
