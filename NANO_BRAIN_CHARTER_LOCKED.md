@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.3  
+**संस्करण:** 1.0.4  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -372,6 +372,63 @@ Brain की सफलता का कोई काल्पनिक प्र
 - प्रत्येक skipped assertion और unresolved limitation की स्पष्ट सूची।
 
 इस अनुभाग का उद्देश्य केवल त्रुटियाँ कम करना नहीं, बल्कि निर्माण-प्रक्रिया को सत्यापन-आधारित, traceable और Main App-केंद्रित बनाना है।
+
+---
+
+## 15. Main App Integration कब और किस चरण में होगा — LOCKED
+
+यह अनुभाग उपयोगकर्ता के सीधे प्रश्न “निर्माणाधीन Brain को मूल Main App से कब जोड़ेंगे?” का बाध्यकारी उत्तर और निष्पादन-क्रम निर्धारित करता है।
+
+### 15.1 वर्तमान स्थिति — Foundation का आंशिक Integration पहले से मौजूद
+
+निम्न कनेक्शन Feature Branch पर मौजूद source के अनुसार लागू है:
+
+`index.html` Navigation/View
+→ `assets/js/app.js` PAGE_MODULES और सुरक्षित Lazy Page Loader
+→ `page-nano-brain-part2.js` mount(context)
+→ `brain-integration-foundation-part2.js`
+→ `brain-security-part2.js` + `brain-storage-part2.js`
+
+यह Brain Foundation Page को Main App के Navigation से खोलता है और उसे सीमित App Facade, Security और Storage देता है। इसे पूर्ण central intelligence integration नहीं कहा जाएगा। Main App TTS route key `jump-text` अभी Brain Facade की route allowlist में मौजूद नहीं है; संबंधित Integration Contract Audit/Correction के बाद ही इस route bridge को पूर्ण माना जाएगा।
+
+### 15.2 Central Brain को Main App में जोड़ने का प्रारंभिक बिंदु
+
+Central Brain Integration क्रमांक 13 — `assets/js/brain/brain-core-part2.js` के निर्माण के साथ शुरू होगा। इसे सभी 22 फाइलें समाप्त होने तक टाला नहीं जाएगा।
+
+इस milestone में:
+1. Brain Core को मौजूदा Main App Facade और Brain Integration Foundation से जोड़ा जाएगा।
+2. Brain Page/Page Loader से Core का नियंत्रित initialization, lifecycle, diagnostics और shutdown contract स्थापित होगा।
+3. Core, Memory/Knowledge/Reasoning/Planning adapters के लिए एक केंद्रीय module interface देगा।
+4. Core के initialization और उपयोगकर्ता-facing Brain route का वास्तविक Main App Browser Integration Test होगा।
+5. यदि Page/Integration bridge की मौजूदा फाइल में आवश्यक बदलाव हो, तो उसका अलग one-file Commit और regression test होगा; `index.html` Script Tags अपरिवर्तित रहेंगे।
+
+इस प्रकार Main App में Brain का central orchestration क्रमांक 13 के चरण से जुड़ना शुरू होगा, न कि सभी भावी modules बन जाने के बाद।
+
+### 15.3 प्रत्येक बाद के Module का तत्काल Integration
+
+क्रमांक 14–22 में कोई module अलग-थलग deliverable नहीं माना जाएगा। हर module के बनने पर:
+- उसका interface Central Brain Core में register/connect होगा;
+- संबंधित मौजूदा App Engine का source/interface audit होगा;
+- आवश्यक adapter के माध्यम से वास्तविक data/control flow जोड़ा जाएगा;
+- module self-test और Main App integration/regression test चलेंगे;
+- feature को केवल उसके प्रमाणित स्तर तक ही Integrated/Ready घोषित किया जाएगा।
+
+विशेषतः Sanskrit/Nano Server, TTS, Singing Voice Synthesis, Avatar/Lip-Sync, Media Learning और Local Model Runtime अपने-अपने adapter/runtime उपलब्ध होने और test pass होने के बाद ही सक्रिय क्षमताएँ माने जाएँगे।
+
+### 15.4 Full Main App Integration की अंतिम स्वीकृति
+
+पूरा Brain तभी Main App में Integrated/Accepted माना जाएगा जब:
+1. Central Brain Core Main App से वास्तविक रूप में जुड़ा हो;
+2. क्रमांक 14–22 के आवश्यक engines/adapters Core से जुड़े और परीक्षणित हों;
+3. TTS, Sanskrit, Avatar, Video/Media तथा अन्य मौजूदा सुविधाएँ Regression Tests में सुरक्षित रहें;
+4. प्रत्येक integration पर Browser/Chromium tests सफल हों;
+5. वास्तविक Android Chrome डिवाइस पर app cold start, navigation, performance, storage, voice/avatar flow और recovery परीक्षण दर्ज हों;
+6. Strict Offline दावे के लिए network-disabled वास्तविक device test सफल हो;
+7. सभी आवश्यक Acceptance Criteria पूरे हों और कोई ज्ञात high-severity defect खुला न हो।
+
+### 15.5 समय-सीमा के बारे में सत्यता
+
+किसी निश्चित कैलेंडर तारीख़ या अवधि का अनुमान बिना implementation और device-test evidence के नहीं दिया जाएगा। प्रगति फाइल-क्रम और acceptance gates से मापी जाएगी। लेकिन integration का प्रारंभिक milestone निश्चित है: Foundation bridge की आवश्यक जाँच/सुधार के बाद क्रमांक 13 पर Central Brain Core को Main App से जोड़ना शुरू करना अनिवार्य है; इसे क्रमांक 22 के बाद तक टालना इस Charter का उल्लंघन होगा।
 
 ---
 
