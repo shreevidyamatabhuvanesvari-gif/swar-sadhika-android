@@ -3,7 +3,7 @@
  * and digest verification. This module never imports or executes downloaded code.
  */
 
-export const BRAIN_SECURITY_VERSION_PART2 = "1.0.0";
+export const BRAIN_SECURITY_VERSION_PART2 = "1.1.0";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,95}$/i;
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9a-z.-]+)?(?:\+[0-9a-z.-]+)?$/i;
@@ -123,12 +123,15 @@ export function validateSkillManifestPart2(input) {
     if (!["low", "medium", "high"].includes(skill.risk)) {
       fail("Skill risk level अमान्य है: " + skill.id, "INVALID_RISK_LEVEL");
     }
+    if (skill.enabled !== undefined && typeof skill.enabled !== "boolean") {
+      fail("Skill enabled स्थिति केवल boolean हो सकती है।", "INVALID_SKILL_ENABLED");
+    }
     if (skill.execution !== "builtin" || Object.hasOwn(skill, "file") || Object.hasOwn(skill, "url") || Object.hasOwn(skill, "script")) {
       fail("केवल built-in, data-only Skill घोषणाएँ स्वीकार्य हैं।", "EXECUTABLE_SKILL_REJECTED");
     }
     return Object.freeze({
       id: skill.id, title: skill.title.trim(), version: skill.version, risk: skill.risk,
-      capabilities: Object.freeze(capabilities), enabled: skill.enabled !== false
+      capabilities: Object.freeze(capabilities), enabled: skill.enabled === undefined ? true : skill.enabled
     });
   });
   return Object.freeze({ schema: MANIFEST_SCHEMA, schemaVersion: 1, skills: Object.freeze(skills) });
@@ -237,7 +240,63 @@ export function selfTest() {
     catch (error) { manifestRejected = error.code === "EXECUTABLE_SKILL_REJECTED"; }
     check("manifest-executable-path-rejected", manifestRejected);
     const valid = validateSkillManifestPart2({ schema: MANIFEST_SCHEMA, schemaVersion: 1, skills: [{ id: "memory.read", title: "Read memory", version: "1.0.0", risk: "low", capabilities: ["memory.read"], execution: "builtin" }] });
-    check("valid-data-only-manifest-accepted", valid.skills.length === 1);
+    check("valid-data-only-manifest-accepted", valid.skills.length === 1 && valid.skills[0].enabled === true);
+
+    const allTwelve = [
+      "memory.read", "memory.write", "knowledge.read", "knowledge.propose",
+      "tts.speak", "audio.analyze", "microphone.read", "media.read",
+      "filesystem.read", "filesystem.write", "model.inference", "avatar.control"
+    ];
+    const fullCapabilityManifest = validateSkillManifestPart2({
+      schema: MANIFEST_SCHEMA,
+      schemaVersion: 1,
+      skills: [{
+        id: "full-capability-contract",
+        title: "Full capability contract",
+        version: "1.0.0",
+        risk: "high",
+        capabilities: allTwelve,
+        execution: "builtin"
+      }]
+    });
+    check("all-twelve-capabilities-remain-declared-and-accepted",
+      fullCapabilityManifest.skills[0].capabilities.length === 12 &&
+      allTwelve.every(item => fullCapabilityManifest.skills[0].capabilities.includes(item)));
+
+    const disabledManifest = validateSkillManifestPart2({
+      schema: MANIFEST_SCHEMA,
+      schemaVersion: 1,
+      skills: [{
+        id: "disabled-skill",
+        title: "Disabled Skill",
+        version: "1.0.0",
+        risk: "low",
+        capabilities: ["memory.read"],
+        execution: "builtin",
+        enabled: false
+      }]
+    });
+    check("explicit-false-remains-disabled", disabledManifest.skills[0].enabled === false);
+
+    let invalidEnabledRejected = false;
+    try {
+      validateSkillManifestPart2({
+        schema: MANIFEST_SCHEMA,
+        schemaVersion: 1,
+        skills: [{
+          id: "malformed-enabled",
+          title: "Malformed enabled",
+          version: "1.0.0",
+          risk: "low",
+          capabilities: ["memory.read"],
+          execution: "builtin",
+          enabled: "false"
+        }]
+      });
+    } catch (error) {
+      invalidEnabledRejected = error.code === "INVALID_SKILL_ENABLED";
+    }
+    check("non-boolean-enabled-state-rejected", invalidEnabledRejected);
     let denied = false;
     const gate = createCapabilityGatePart2();
     try { gate.require("memory.read"); } catch (error) { denied = error.code === "CAPABILITY_DENIED"; }
@@ -250,6 +309,26 @@ export function selfTest() {
     try { gate.require("memory.read"); } catch (error) { deniedAgain = error.code === "CAPABILITY_DENIED"; }
     check("capability-remains-denied-without-trusted-grant", deniedAgain);
     gate.dispose();
+
+    class TestTrustedEvent {
+      constructor(type) { this.type = type; this.isTrusted = true; }
+    }
+    let approvedPrompt = 0;
+    const fullGate = createCapabilityGatePart2({
+      EventConstructor: TestTrustedEvent,
+      windowRef: { confirm: () => { approvedPrompt += 1; return true; } }
+    });
+    const grantedAll = fullGate.requestGrant(allTwelve, new TestTrustedEvent("click"));
+    let allCapabilitiesWork = false;
+    try {
+      allCapabilitiesWork =
+        fullGate.require(allTwelve) === true &&
+        fullGate.diagnostics().grantedCapabilities.length === 12;
+    } catch (_) {}
+    check("all-twelve-capabilities-remain-grantable-after-explicit-approval",
+      grantedAll.length === 12 && allCapabilitiesWork && approvedPrompt === 1);
+    fullGate.dispose();
+
   } catch (_) { check("security-self-test-unexpected-error", false); }
   return Object.freeze({ module: "brain-security-part2", status: checks.every(item => item.passed) ? "PASSED" : "FAILED",
     total: checks.length, passed: checks.filter(item => item.passed).length,
