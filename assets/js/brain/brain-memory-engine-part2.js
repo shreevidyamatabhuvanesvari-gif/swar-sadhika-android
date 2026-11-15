@@ -10,6 +10,7 @@ import { assertSafeBrainIdPart2, cloneSafeJsonPart2 } from "./brain-security-par
 
 export const BRAIN_MEMORY_VERSION_PART2 = "1.0.0";
 
+const MEMORY_RECORD_SCHEMA = "swar-sadhika.memory-record";
 const READER_MODULE_ID = "memory.reader";
 const WRITER_MODULE_ID = "memory.writer";
 const MAINTAINER_MODULE_ID = "memory.maintainer";
@@ -188,7 +189,12 @@ function activeVersions(records) {
     records.map(record => record && record.supersedes).filter(value => typeof value === "string")
   );
   return records.filter(record =>
-    record && record.status === "active" && !superseded.has(record.id)
+    record &&
+    record.schema === MEMORY_RECORD_SCHEMA &&
+    typeof record.title === "string" &&
+    typeof record.logicalId === "string" &&
+    record.status === "active" &&
+    !superseded.has(record.id)
   );
 }
 
@@ -298,13 +304,13 @@ export function createBrainMemoryEnginePart2(options = {}) {
 
         if (input.operation === "get") {
           const record = await memory.getRecord(input.recordId);
-          return record || null;
+          return record && record.schema === MEMORY_RECORD_SCHEMA ? record : null;
         }
         if (input.operation === "list" || input.operation === "search" || input.operation === "history") {
           const records = await memory.listRecords({ limit: MAX_RECORDS });
           if (input.operation === "history") {
             return records
-              .filter(record => record.logicalId === input.logicalId)
+              .filter(record => record.schema === MEMORY_RECORD_SCHEMA && record.logicalId === input.logicalId)
               .sort((a, b) => b.version - a.version);
           }
           if (input.operation === "list") {
@@ -354,6 +360,7 @@ export function createBrainMemoryEnginePart2(options = {}) {
           const now = Date.now();
           const id = makeId("memory", host, ++sequence);
           const record = {
+            schema: MEMORY_RECORD_SCHEMA,
             id,
             logicalId: id,
             ...normalized,
@@ -388,7 +395,7 @@ export function createBrainMemoryEnginePart2(options = {}) {
         }
 
         const previous = await memory.getRecord(input.recordId);
-        if (!previous) fail("संशोधित करने योग्य Memory Record नहीं मिला।", "MEMORY_RECORD_NOT_FOUND");
+        if (!previous || previous.schema !== MEMORY_RECORD_SCHEMA) fail("संशोधित करने योग्य Memory Record नहीं मिला।", "MEMORY_RECORD_NOT_FOUND");
         if (previous.status !== "active") fail("केवल सक्रिय Memory Record का नया संस्करण बनाया जा सकता है।", "MEMORY_RECORD_NOT_ACTIVE");
 
         const all = await memory.listRecords({ limit: MAX_RECORDS });
@@ -411,6 +418,7 @@ export function createBrainMemoryEnginePart2(options = {}) {
 
         const now = Date.now();
         const next = {
+          schema: MEMORY_RECORD_SCHEMA,
           id: makeId("memory", host, ++sequence),
           logicalId: previous.logicalId,
           ...normalized,
@@ -728,7 +736,21 @@ export async function selfTest() {
     catch (error) { fakeGestureRejected = error.code === "USER_GESTURE_REQUIRED"; }
     check("forged-write-gesture-rejected", fakeGestureRejected);
 
-    engine.requestPermissions(new MemoryTestEventPart2("click"), { read: true, write: true });
+    engine.requestPermissions(new MemoryTestEventPart2("click"), { read: true, write: false });
+    const readOnlyList = await engine.list();
+    check("read-only-grant-allows-reading", readOnlyList.records.length === 0);
+
+    let readOnlyWriteRejected = false;
+    try {
+      await engine.remember({
+        category: "fact",
+        title: "Read-only write attempt",
+        content: "must be rejected"
+      }, engine.issueWriteApproval(new MemoryTestEventPart2("click")));
+    } catch (error) { readOnlyWriteRejected = error.code === "CAPABILITY_REQUIRED"; }
+    check("read-only-grant-cannot-write", readOnlyWriteRejected);
+
+    engine.requestPermissions(new MemoryTestEventPart2("click"), { read: false, write: true });
     const approval = engine.issueWriteApproval(new MemoryTestEventPart2("click"));
     const first = await engine.remember({
       category: "preference",
