@@ -793,7 +793,7 @@ export async function selfTest() {
 
     let unsafeFileNameBlocked = false;
     const opfs = createOpfsAssetStorePart2({ navigatorRef: {} });
-    try { opfs.read("../secrets"); }
+    try { await opfs.read("../secrets"); }
     catch (error) { unsafeFileNameBlocked = error.code === "INVALID_ASSET_NAME"; }
     check("opfs-path-traversal-rejected", unsafeFileNameBlocked);
 
