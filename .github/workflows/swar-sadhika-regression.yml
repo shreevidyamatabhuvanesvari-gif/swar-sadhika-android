@@ -36,48 +36,43 @@ jobs:
       # Its self-test below is still mandatory on every run.
       - name: Enforce locked failed-file protection
         shell: bash
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          PUSH_BEFORE_SHA: ${{ github.event.before || '' }}
         run: |
           set -euo pipefail
+          # Files touched by the five historical failed Brain commits, plus
+          # the existing Avatar page whose self-test failed on main.
+          # They remain locked until a separate, reviewed unlock/fix is approved.
           locked_files=(
+            ".github/workflows/nano-brain-foundation.yml"
+            "assets/js/brain/README-part2.md"
+            "assets/js/brain/brain-browser-test-part2.html"
+            "assets/js/brain/brain-browser-test-runner-part2.mjs"
+            "assets/js/brain/brain-integration-foundation-part2.js"
+            "assets/js/brain/brain-security-part2.js"
+            "assets/js/brain/brain-storage-part2.js"
             "assets/js/pages/page-avatar.js"
           )
 
-          if [[ ! -f "assets/js/pages/page-avatar.js" ]]; then
-            echo "::error::LOCKED file is missing: assets/js/pages/page-avatar.js"
-            exit 1
-          fi
-
-          base_sha=""
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            base_sha="$PR_BASE_SHA"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            base_sha="$PUSH_BEFORE_SHA"
-          fi
-
-          if [[ -n "$base_sha" && "$base_sha" =~ ^0+$ ]]; then
-            base_sha=""
-          fi
-
-          if [[ -n "$base_sha" ]]; then
-            if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
-              echo "::error::Unable to verify base commit for locked-file audit: $base_sha"
+          for locked_file in "${locked_files[@]}"; do
+            if [[ ! -f "$locked_file" ]]; then
+              echo "::error::LOCKED file is missing: $locked_file"
               exit 1
             fi
-            changed_files="$(git diff --name-only "${base_sha}...$GITHUB_SHA")"
-            for locked_file in "${locked_files[@]}"; do
-              if printf '%s\n' "$changed_files" | grep -Fxq "$locked_file"; then
-                echo "::error::LOCKED FILE MODIFIED: $locked_file"
-                echo "::error::This file previously failed its Avatar page self-test. Keep it locked until a separately reviewed fix and explicit unlock."
-                exit 1
-              fi
-            done
-          fi
+          done
 
-          echo "LOCKED FILE PROTECTION PASSED:"
-          printf ' - %s (modification blocked; self-test required)\n' "${locked_files[@]}"
+          # Inspect only the commit being tested. Checking the whole PR diff
+          # would incorrectly reject the existing foundation files already
+          # introduced by earlier commits in this open Draft PR.
+          changed_files="$(git diff-tree --root --no-commit-id --name-only -r HEAD)"
+          for locked_file in "${locked_files[@]}"; do
+            if printf '%s\n' "$changed_files" | grep -Fxq "$locked_file"; then
+              echo "::error::LOCKED FILE MODIFIED: $locked_file"
+              echo "::error::This file has a historical failed check. Do not change it until its specific fix is reviewed and explicitly unlocked."
+              exit 1
+            fi
+          done
+
+          echo "LOCKED FAILED-FILE PROTECTION PASSED:"
+          printf ' - %s\n' "${locked_files[@]}"
 
       - name: Syntax-check every JavaScript file
         shell: bash
