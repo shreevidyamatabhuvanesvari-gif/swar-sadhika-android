@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           count=0
           while IFS= read -r -d '' file; do
-            node --experimental-default-type=module --check "$file"
+            node --check "$file"
             count=$((count + 1))
           done < <(find assets/js -type f -name '*.js' -print0 | sort -z)
           test "$count" -gt 0
@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node --experimental-default-type=module --input-type=module <<'NODE'
+          node --input-type=module <<'NODE'
           import { selfTest as securityTest } from "./assets/js/brain/brain-security-part2.js";
           import { selfTest as integrationTest } from "./assets/js/brain/brain-integration-foundation-part2.js";
           import { selfTest as pageTest } from "./assets/js/pages/page-nano-brain-part2.js";
@@ -93,12 +93,16 @@ jobs:
           console.log(`Security + Integration + Page self-tests: ${passed}/${total} PASS.`);
           NODE
 
-      - name: Explain Storage aggregate self-test scope
+      - name: Run complete Brain Foundation aggregate self-test
         shell: bash
         run: |
           set -euo pipefail
-          echo "Storage is tested by the real IndexedDB Browser Audit below."
-          echo "The aggregate brain-foundation-selftest suite is not invoked in this workflow yet: its current Storage self-test has an async OPFS path-validation assertion that is not awaited. It must be corrected in its own one-file commit before the aggregate suite can be enabled."
+          node --input-type=module <<'NODE'
+          import { assertBrainFoundationSelfTestPart2 } from "./assets/js/brain/brain-foundation-selftest-part2.js";
+          const result = await assertBrainFoundationSelfTestPart2();
+          console.log(JSON.stringify(result, null, 2));
+          console.log(`PASS: Brain Foundation aggregate self-test ${result.passed}/${result.total}; skipped=${result.skipped.length}.`);
+          NODE
 
       - name: Run real Chromium IndexedDB, migration, and cross-process persistence audit
         shell: bash
