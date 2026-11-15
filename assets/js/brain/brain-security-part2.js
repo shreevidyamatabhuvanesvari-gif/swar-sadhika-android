@@ -3,7 +3,7 @@
  * and digest verification. This module never imports or executes downloaded code.
  */
 
-export const BRAIN_SECURITY_VERSION_PART2 = "1.1.0";
+export const BRAIN_SECURITY_VERSION_PART2 = "1.2.0";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,95}$/i;
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9a-z.-]+)?(?:\+[0-9a-z.-]+)?$/i;
@@ -18,6 +18,8 @@ const MAX_JSON_NODES = 12000;
 const MAX_JSON_STRING_LENGTH = 262144;
 const MAX_JSON_TOTAL_CHARS = 1048576;
 const MANIFEST_SCHEMA = "swar-sadhika.brain.skill-registry";
+const PUBLIC_MEDIAWIKI_HOST = /^(?:[a-z0-9-]+\\.)+(?:wikipedia|wikimedia|wiktionary|wikisource|wikibooks|wikiquote|wikiversity|wikivoyage|wikinews|wikidata)\\.org$/i;
+const PUBLIC_MEDIAWIKI_PATHS = new Set(["/w/api.php", "/w/rest.php/v1", "/api/rest_v1"]);
 
 export class BrainSecurityErrorPart2 extends Error {
   constructor(message, code = "BRAIN_SECURITY_ERROR") {
@@ -95,6 +97,75 @@ export function cloneSafeJsonPart2(value) {
   return visit(value, 0);
 }
 
+/**
+ * Validate a public, read-only MediaWiki API source descriptor.
+ * This accepts API endpoint metadata, never executable code or arbitrary URLs.
+ * The future Knowledge Engine adapter is responsible for making CORS requests,
+ * enforcing response-size limits, parsing JSON and caching validated data.
+ */
+export function validatePublicKnowledgeSourcePart2(input) {
+  const source = cloneSafeJsonPart2(input);
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    fail("Public Knowledge Source का विवरण अमान्य है।", "INVALID_KNOWLEDGE_SOURCE");
+  }
+  const allowedKeys = new Set([
+    "id", "provider", "endpoint", "access", "method", "format",
+    "maxResponseBytes", "cacheTtlSeconds"
+  ]);
+  if (Object.keys(source).some(key => !allowedKeys.has(key))) {
+    fail("Knowledge Source में अनजान property मिली।", "UNKNOWN_KNOWLEDGE_SOURCE_PROPERTY");
+  }
+  assertSafeBrainIdPart2(source.id, "Knowledge Source ID");
+  if (source.provider !== "mediawiki") {
+    fail("Knowledge Source provider अभी mediawiki होना चाहिए।", "UNSUPPORTED_KNOWLEDGE_PROVIDER");
+  }
+  if (source.access !== "public-read" || source.method !== "GET" || source.format !== "json") {
+    fail("Public Knowledge Source में public-read, GET और JSON format अपेक्षित हैं।", "UNSAFE_KNOWLEDGE_SOURCE_MODE");
+  }
+  if (typeof source.endpoint !== "string" || source.endpoint.length > 512) {
+    fail("Knowledge API endpoint का आकार या प्रकार अमान्य है।", "INVALID_KNOWLEDGE_ENDPOINT");
+  }
+
+  let endpoint;
+  try {
+    endpoint = new URL(source.endpoint);
+  } catch (_) {
+    fail("Knowledge API endpoint URL अमान्य है।", "INVALID_KNOWLEDGE_ENDPOINT");
+  }
+
+  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password ||
+      endpoint.port || endpoint.search || endpoint.hash) {
+    fail("Knowledge API endpoint में HTTPS, बिना credentials और बिना embedded query अपेक्षित है।", "UNSAFE_KNOWLEDGE_ENDPOINT");
+  }
+  if (!PUBLIC_MEDIAWIKI_HOST.test(endpoint.hostname) ||
+      !PUBLIC_MEDIAWIKI_PATHS.has(endpoint.pathname)) {
+    fail("Knowledge API endpoint स्वीकृत सार्वजनिक MediaWiki API host/path से मेल नहीं खाता।", "KNOWLEDGE_ENDPOINT_NOT_ALLOWED");
+  }
+
+  const maxResponseBytes = source.maxResponseBytes === undefined ? 1048576 : source.maxResponseBytes;
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 4194304) {
+    fail("Knowledge API response size सीमा 1 KiB से 4 MiB के बीच होनी चाहिए।", "INVALID_KNOWLEDGE_RESPONSE_LIMIT");
+  }
+
+  const cacheTtlSeconds = source.cacheTtlSeconds === undefined ? 3600 : source.cacheTtlSeconds;
+  if (!Number.isSafeInteger(cacheTtlSeconds) || cacheTtlSeconds < 0 || cacheTtlSeconds > 604800) {
+    fail("Knowledge API cache अवधि 0 से 7 दिन के बीच होनी चाहिए।", "INVALID_KNOWLEDGE_CACHE_TTL");
+  }
+
+  return Object.freeze({
+    id: source.id,
+    provider: "mediawiki",
+    endpoint: endpoint.origin + endpoint.pathname,
+    access: "public-read",
+    method: "GET",
+    format: "json",
+    capability: "knowledge.read",
+    credentials: "omit",
+    maxResponseBytes,
+    cacheTtlSeconds
+  });
+}
+
 export function validateSkillManifestPart2(input) {
   const manifest = cloneSafeJsonPart2(input);
   if (!manifest || manifest.schema !== MANIFEST_SCHEMA || manifest.schemaVersion !== 1 || !Array.isArray(manifest.skills)) {
@@ -127,11 +198,31 @@ export function validateSkillManifestPart2(input) {
       fail("Skill enabled स्थिति केवल boolean हो सकती है।", "INVALID_SKILL_ENABLED");
     }
     if (skill.execution !== "builtin" || Object.hasOwn(skill, "file") || Object.hasOwn(skill, "url") || Object.hasOwn(skill, "script")) {
-      fail("केवल built-in, data-only Skill घोषणाएँ स्वीकार्य हैं।", "EXECUTABLE_SKILL_REJECTED");
+      fail("Remote executable code स्वीकार्य नहीं है; public Knowledge API data source अलग descriptor से जोड़ा जाता है।", "EXECUTABLE_SKILL_REJECTED");
     }
+
+    const rawSources = skill.knowledgeSources === undefined ? [] : skill.knowledgeSources;
+    if (!Array.isArray(rawSources) || rawSources.length > 8) {
+      fail("एक Skill में Knowledge API Sources की संख्या 8 से अधिक नहीं हो सकती।", "INVALID_KNOWLEDGE_SOURCES");
+    }
+    const sourceIds = new Set();
+    const knowledgeSources = rawSources.map(source => {
+      const validatedSource = validatePublicKnowledgeSourcePart2(source);
+      if (sourceIds.has(validatedSource.id)) {
+        fail("Knowledge Source ID दोहराया गया है: " + validatedSource.id, "DUPLICATE_KNOWLEDGE_SOURCE_ID");
+      }
+      sourceIds.add(validatedSource.id);
+      return validatedSource;
+    });
+    if (knowledgeSources.length && !capabilities.includes("knowledge.read")) {
+      fail("Public Knowledge API Source के लिए knowledge.read capability आवश्यक है।", "KNOWLEDGE_READ_CAPABILITY_REQUIRED");
+    }
+
     return Object.freeze({
       id: skill.id, title: skill.title.trim(), version: skill.version, risk: skill.risk,
-      capabilities: Object.freeze(capabilities), enabled: skill.enabled === undefined ? true : skill.enabled
+      capabilities: Object.freeze(capabilities),
+      knowledgeSources: Object.freeze(knowledgeSources),
+      enabled: skill.enabled === undefined ? true : skill.enabled
     });
   });
   return Object.freeze({ schema: MANIFEST_SCHEMA, schemaVersion: 1, skills: Object.freeze(skills) });
@@ -241,6 +332,91 @@ export function selfTest() {
     check("manifest-executable-path-rejected", manifestRejected);
     const valid = validateSkillManifestPart2({ schema: MANIFEST_SCHEMA, schemaVersion: 1, skills: [{ id: "memory.read", title: "Read memory", version: "1.0.0", risk: "low", capabilities: ["memory.read"], execution: "builtin" }] });
     check("valid-data-only-manifest-accepted", valid.skills.length === 1 && valid.skills[0].enabled === true);
+
+    const wikipediaSource = {
+      id: "wikipedia-hi",
+      provider: "mediawiki",
+      endpoint: "https://hi.wikipedia.org/w/api.php",
+      access: "public-read",
+      method: "GET",
+      format: "json"
+    };
+    const validatedWikipediaSource = validatePublicKnowledgeSourcePart2(wikipediaSource);
+    check("public-wikipedia-readonly-json-source-accepted",
+      validatedWikipediaSource.endpoint === "https://hi.wikipedia.org/w/api.php" &&
+      validatedWikipediaSource.capability === "knowledge.read" &&
+      validatedWikipediaSource.credentials === "omit");
+
+    const wikipediaSkill = validateSkillManifestPart2({
+      schema: MANIFEST_SCHEMA,
+      schemaVersion: 1,
+      skills: [{
+        id: "wikipedia-knowledge",
+        title: "Wikipedia Public Knowledge",
+        version: "1.0.0",
+        risk: "medium",
+        capabilities: ["knowledge.read"],
+        execution: "builtin",
+        knowledgeSources: [wikipediaSource]
+      }]
+    });
+    check("manifest-accepts-wikipedia-source-as-data-descriptor",
+      wikipediaSkill.skills[0].knowledgeSources.length === 1);
+
+    let knowledgeCapabilityRequired = false;
+    try {
+      validateSkillManifestPart2({
+        schema: MANIFEST_SCHEMA,
+        schemaVersion: 1,
+        skills: [{
+          id: "source-without-capability",
+          title: "Source without knowledge permission",
+          version: "1.0.0",
+          risk: "medium",
+          capabilities: ["memory.read"],
+          execution: "builtin",
+          knowledgeSources: [wikipediaSource]
+        }]
+      });
+    } catch (error) {
+      knowledgeCapabilityRequired = error.code === "KNOWLEDGE_READ_CAPABILITY_REQUIRED";
+    }
+    check("public-source-requires-knowledge-read-capability", knowledgeCapabilityRequired);
+
+    const unsafeSources = [
+      [{...wikipediaSource, endpoint: "http://hi.wikipedia.org/w/api.php"}, "UNSAFE_KNOWLEDGE_ENDPOINT"],
+      [{...wikipediaSource, endpoint: "https://evil.example/w/api.php"}, "KNOWLEDGE_ENDPOINT_NOT_ALLOWED"],
+      [{...wikipediaSource, endpoint: "https://hi.wikipedia.org/w/api.php?origin=*"}, "UNSAFE_KNOWLEDGE_ENDPOINT"],
+      [{...wikipediaSource, endpoint: "https://user:pass@hi.wikipedia.org/w/api.php"}, "UNSAFE_KNOWLEDGE_ENDPOINT"],
+      [{...wikipediaSource, endpoint: "https://hi.wikipedia.org/wiki/Main_Page"}, "KNOWLEDGE_ENDPOINT_NOT_ALLOWED"],
+      [{...wikipediaSource, method: "POST"}, "UNSAFE_KNOWLEDGE_SOURCE_MODE"]
+    ];
+    let unsafeSourcesRejected = 0;
+    for (const [candidate, expectedCode] of unsafeSources) {
+      try { validatePublicKnowledgeSourcePart2(candidate); }
+      catch (error) { if (error.code === expectedCode) unsafeSourcesRejected += 1; }
+    }
+    check("unsafe-public-api-endpoints-and-methods-rejected", unsafeSourcesRejected === unsafeSources.length);
+
+    let remoteScriptRejected = false;
+    try {
+      validateSkillManifestPart2({
+        schema: MANIFEST_SCHEMA,
+        schemaVersion: 1,
+        skills: [{
+          id: "remote-script",
+          title: "Remote Script",
+          version: "1.0.0",
+          risk: "high",
+          capabilities: ["knowledge.read"],
+          execution: "builtin",
+          script: "https://hi.wikipedia.org/w/api.php"
+        }]
+      });
+    } catch (error) {
+      remoteScriptRejected = error.code === "EXECUTABLE_SKILL_REJECTED";
+    }
+    check("remote-executable-script-remains-rejected", remoteScriptRejected);
 
     const allTwelve = [
       "memory.read", "memory.write", "knowledge.read", "knowledge.propose",
