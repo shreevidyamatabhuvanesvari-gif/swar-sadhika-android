@@ -58,7 +58,7 @@ jobs:
           node --check assets/js/brain/brain-browser-test-runner-part2.mjs
           echo "PASS: syntax checked $count JavaScript files and the Browser Test Runner."
 
-      - name: Run independent Security, Integration, and Page self-tests
+      - name: Run independent Security, Integration, Core, Memory, and Page self-tests
         shell: bash
         run: |
           set -euo pipefail
@@ -66,12 +66,14 @@ jobs:
           import { selfTest as securityTest } from "./assets/js/brain/brain-security-part2.js";
           import { selfTest as integrationTest } from "./assets/js/brain/brain-integration-foundation-part2.js";
           import { selfTest as coreTest } from "./assets/js/brain/brain-core-part2.js";
+          import { selfTest as memoryTest } from "./assets/js/brain/brain-memory-engine-part2.js";
           import { selfTest as pageTest } from "./assets/js/pages/page-nano-brain-part2.js";
 
           const suites = [
             ["Security Foundation", securityTest],
             ["Integration Foundation", integrationTest],
             ["Central Brain Core", coreTest],
+            ["Central Brain Memory Engine", memoryTest],
             ["Nano Brain Page", pageTest]
           ];
           let total = 0;
