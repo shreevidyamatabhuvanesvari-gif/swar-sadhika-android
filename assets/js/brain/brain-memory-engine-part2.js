@@ -511,6 +511,16 @@ export function createBrainMemoryEnginePart2(options = {}) {
     return readOperation("export");
   }
 
+  async function cancelActiveTasks(reason = "memory-engine-paused") {
+    assertReady();
+    const pending = [...activeTasks.entries()];
+    for (const [taskId] of pending) {
+      try { core.cancelTask(taskId, reason); } catch (_) {}
+    }
+    if (pending.length) await Promise.allSettled(pending.map(([, promise]) => promise));
+    return pending.length;
+  }
+
   function diagnostics() {
     const coreStatus = core.getStatus();
     return Object.freeze({
@@ -579,6 +589,7 @@ export function createBrainMemoryEnginePart2(options = {}) {
     search,
     history,
     exportBackup,
+    cancelActiveTasks,
     diagnostics,
     dispose
   });
