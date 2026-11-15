@@ -417,10 +417,16 @@ export function createBrainCorePart2(options = {}) {
     if (state === "disposed") return Promise.resolve(false);
     state = "disposing";
     disposePromise = (async () => {
-      for (const task of tasks.values()) {
+      const activeTasks = [...tasks.values()];
+      for (const task of activeTasks) {
         if (!task.controller.signal.aborted) {
           try { task.controller.abort("core-disposed"); } catch (_) { task.controller.abort(); }
         }
+      }
+      // Do not dispose the dependent Integration/Storage layer until every
+      // cooperative local task has completed its abort/finally cleanup.
+      if (activeTasks.length) {
+        await Promise.allSettled(activeTasks.map(task => task.promise));
       }
       modules.clear();
       state = "disposed";
@@ -605,8 +611,26 @@ export async function selfTest() {
       status.neuralModelRuntime === "not-installed" &&
       status.localOnly === true);
 
+    core.registerModule({
+      id: "selftest.dispose-cancel",
+      title: "Dispose Cancels Active Task",
+      risk: "low",
+      capabilities: [],
+      execute: ({ signal }) => new Promise((resolve, reject) => {
+        if (signal.aborted) return reject(new Error("already aborted"));
+        signal.addEventListener("abort", () => reject(new Error("disposed")), { once: true });
+      })
+    });
+    const activeDuringDispose = core.runTask("selftest.dispose-cancel");
+    const activeOutcome = activeDuringDispose.then(
+      () => "unexpected-success",
+      error => error.code
+    );
     await core.dispose();
+    const disposedTaskOutcome = await activeOutcome;
     await core.dispose();
+    check("core-dispose-aborts-and-awaits-active-tasks",
+      disposedTaskOutcome === "TASK_ABORTED" && core.getStatus().activeTaskCount === 0);
     check("core-dispose-is-idempotent", core.getStatus().disposed);
   } catch (error) {
     checks.push({
