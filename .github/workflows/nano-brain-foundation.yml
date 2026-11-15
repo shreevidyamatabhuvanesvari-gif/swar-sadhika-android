@@ -51,19 +51,9 @@ jobs:
             fi
             sleep 1
           done
-          profile="$RUNNER_TEMP/brain-chrome-profile"
           chrome="${{ steps.chrome.outputs.chrome-path }}"
-          "$chrome" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --virtual-time-budget=15000 --user-data-dir="$profile" --dump-dom "http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html?phase=write" > "$RUNNER_TEMP/brain-write.html"
-          if ! grep -q 'data-result="PASSED"' "$RUNNER_TEMP/brain-write.html"; then
-            cat "$RUNNER_TEMP/brain-write.html"
-            exit 1
-          fi
-          "$chrome" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --virtual-time-budget=15000 --user-data-dir="$profile" --dump-dom "http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html?phase=read" > "$RUNNER_TEMP/brain-read.html"
-          if ! grep -q 'data-result="PASSED"' "$RUNNER_TEMP/brain-read.html"; then
-            cat "$RUNNER_TEMP/brain-read.html"
-            exit 1
-          fi
-          grep 'RESULT PASSED' "$RUNNER_TEMP/brain-write.html" "$RUNNER_TEMP/brain-read.html"
+          npm install --no-save --no-package-lock playwright
+          CHROME_PATH="$chrome" BRAIN_TEST_URL="http://127.0.0.1:8765/assets/js/brain/brain-browser-test-part2.html" node --experimental-default-type=module assets/js/brain/brain-browser-test-runner-part2.mjs
       - name: Run Nano Brain foundation self-tests
         shell: bash
         run: |

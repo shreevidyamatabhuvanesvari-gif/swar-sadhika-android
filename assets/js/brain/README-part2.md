@@ -50,7 +50,7 @@ These require separate audited implementation and real Android Chrome tests.
 
 ## Browser-level IndexedDB persistence test
 
-`brain-browser-test-part2.html` uses the browser's native IndexedDB implementation and requires a secure context (localhost is suitable for CI).
+`brain-browser-test-part2.html` uses the browser's native IndexedDB implementation and requires a secure context (localhost is suitable for CI). `brain-browser-test-runner-part2.mjs` drives it with Playwright and the installed Chrome binary; Playwright is installed only inside CI and is not a runtime dependency of the Android app.
 
 The Foundation workflow launches Chrome twice with the same isolated browser profile:
 1. `phase=write` creates a separate test database, writes a record, metadata and an event, then closes the connection.
