@@ -8,6 +8,7 @@
 
 import { createBrainIntegrationPart2 } from "../brain/brain-integration-foundation-part2.js";
 import { createBrainCorePart2 } from "../brain/brain-core-part2.js";
+import { createBrainMemoryEnginePart2 } from "../brain/brain-memory-engine-part2.js";
 import { createOpfsAssetStorePart2 } from "../brain/brain-storage-part2.js";
 
 export const NANO_BRAIN_PAGE_VERSION_PART2 = "1.1.0";
@@ -98,6 +99,10 @@ export async function mount(context) {
   });
   const brainCore = createBrainCorePart2({
     integration,
+    host
+  });
+  const memoryEngine = createBrainMemoryEnginePart2({
+    core: brainCore,
     host
   });
 
@@ -297,12 +302,20 @@ export async function mount(context) {
 
     addStatusTile(documentRef, foundationGrid, "Integration Version", diagnostics.version);
     const coreStatus = brainCore.getStatus();
+    const memoryStatusInfo = memoryEngine.diagnostics();
     addStatusTile(
       documentRef,
       foundationGrid,
       "Central Brain Core",
       coreStatus.state === "ready" ? "READY" : coreStatus.state.toUpperCase(),
       "Version " + coreStatus.version + " · Local Modules: " + coreStatus.moduleCount
+    );
+    addStatusTile(
+      documentRef,
+      foundationGrid,
+      "Memory Engine",
+      memoryStatusInfo.state === "ready" ? "READY" : memoryStatusInfo.state.toUpperCase(),
+      "Version " + memoryStatusInfo.version + " · Append-only versioned records"
     );
     addStatusTile(documentRef, foundationGrid, "Storage Backend", backendLabel(storage));
     addStatusTile(documentRef, foundationGrid, "Storage Durability", durabilityLabel(storage));
@@ -397,6 +410,8 @@ export async function mount(context) {
     try {
       await brainCore.initialize();
       if (disposed) return;
+      await memoryEngine.initialize();
+      if (disposed) return;
       initialized = true;
       await refreshDiagnostics();
     } catch (error) {
@@ -416,7 +431,10 @@ export async function mount(context) {
   async function grantCapability(capability, event) {
     if (disposed || !initialized) return;
     try {
-      const granted = integration.requestCapabilities([capability], event);
+      const granted = memoryEngine.requestPermissions(event, {
+        read: capability === "memory.read",
+        write: capability === "memory.write"
+      });
       await refreshDiagnostics();
       renderPermissions();
       setStatus(
@@ -591,7 +609,11 @@ export async function mount(context) {
       listeners.splice(0).forEach(remove => {
         try { remove(); } catch (_) {}
       });
-      try { await brainCore.dispose(); } finally { await integration.dispose(); }
+      try {
+        await memoryEngine.dispose();
+      } finally {
+        try { await brainCore.dispose(); } finally { await integration.dispose(); }
+      }
     },
 
     getDiagnostics() {
