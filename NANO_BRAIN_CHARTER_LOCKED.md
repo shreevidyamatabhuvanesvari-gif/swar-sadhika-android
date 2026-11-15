@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.2  
+**संस्करण:** 1.0.3  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -348,6 +348,16 @@ Brain की सफलता का कोई काल्पनिक प्र
 4. हर रिपोर्ट में यह स्पष्ट होगा कि कौन-सा परीक्षण वास्तव में चला, कौन-सा PASS/FAIL/SKIPPED रहा, और कौन-सी जाँच अभी हुई ही नहीं।
 5. Absolute zero-defect guarantee तकनीकी रूप से सत्यापित नहीं की जा सकती। इस Charter का व्यावहारिक quality target है: कोई ज्ञात defect अनसुलझा छोड़कर आगे न बढ़ना, सभी आवश्यक स्वचालित परीक्षण सफल करना, और शेष जोखिम/सीमाएँ स्पष्ट रखना।
 6. Repository write access या CI green होना सम्पूर्ण app correctness, physical Android compatibility या production readiness का प्रमाण नहीं है।
+
+### 14.6 आवश्यक बदलाव, दक्षता और समय-सीमा — LOCKED
+
+1. किसी मौजूदा फाइल को केवल इसलिए दोबारा update नहीं किया जाएगा कि वह निर्माण-क्रम में अगली है। पहले उसके वर्तमान content SHA, हाल के commit, dependencies, वास्तविक defect, integration gap और test evidence की समीक्षा होगी।
+2. यदि फाइल पहले से अपेक्षित कार्य सही ढंग से कर रही है और कोई प्रमाणित defect, security issue, missing requirement या आवश्यक integration gap नहीं है, तो उसे दोबारा update नहीं किया जाएगा।
+3. एक फाइल को बार-बार बदलने से बचें। एक ही review में सभी प्रमाणित आवश्यक सुधार समेकित करें; पर unrelated changes या multi-file scope expansion न करें।
+4. हर update report में स्पष्ट रूप से बताएं: (a) बदलाव क्यों आवश्यक था, (b) क्या तकनीकी व्यवहार बदला, (c) App की वास्तविक क्षमता/दक्षता पर मापने योग्य प्रभाव क्या है, और (d) कौन-सा test उस प्रभाव का प्रमाण देता है।
+5. यदि प्रभाव को विश्वसनीय रूप से मापा नहीं गया है, तो कोई प्रतिशत, speed-up या “इतनी शक्ति बढ़ी” जैसा अनुमान न दें। “कोई सीधा runtime gain नहीं; केवल testability/security/maintainability में सुधार” कहना स्वीकार्य और आवश्यक है।
+6. जल्द पूर्ण करने के लिए अनावश्यक refactoring, duplicate modules या repeated commits न करें। पहले से सत्यापित और उपयोगी काम सुरक्षित रखते हुए सबसे छोटे प्रमाणित बदलाव को प्राथमिकता दें।
+7. एक फाइल का आवश्यक update, commit और relevant verification पूरा होने के बाद ही अगले क्रमांक पर जाएँ। किसी test pass का अर्थ केवल उसी test की coverage तक सीमित रहेगा।
 
 ### 14.5 इस लॉक का Acceptance Evidence
 
