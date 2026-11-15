@@ -1,7 +1,7 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.6  
+**संस्करण:** 1.0.7  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
@@ -501,6 +501,27 @@ Security Foundation में घोषित ये सभी बारह capa
 10. कोई भी फाइल “complete”, “ready” या “integrated” तभी कही जाएगी जब उसके निर्धारित tests और वास्तविक integration checks पास हों। केवल commit होना कार्यक्षमता का प्रमाण नहीं है।
 11. उपयोगकर्ता की स्वीकृति के बिना Main App की मौजूदा कार्यक्षमता, 12 capability catalogue, स्थानीय डेटा या निर्धारित Brain उद्देश्य कम करने वाला परिवर्तन नहीं किया जाएगा।
 12. index.html और उसके Script Tags अपरिवर्तित रहेंगे, जब तक उपयोगकर्ता अलग से स्पष्ट अनुमति न दे।
+
+---
+
+## 18. Single-Pass File Audit and Minimal Commit Policy — कठोर LOCKED
+
+यह नियम वर्तमान तथा भविष्य के सभी 22 क्रमांकित modules, Main App integration, tests और documentation पर लागू होगा।
+
+1. किसी फाइल को update करने से पहले उसका पूरा relevant source, import/export contracts, dependency graph, recent commit history, existing tests और Main App use एक ही समेकित audit में जाँचे जाएँगे।
+2. उसी audit में मिले सभी प्रमाणित, संबंधित और आवश्यक सुधारों को एक ही complete patch में समेकित किया जाएगा। केवल एक-एक छोटे सुधार के लिए बार-बार उसी फाइल को Commit करना अनुचित है।
+3. सामान्य नियम: एक निर्धारित file task में अधिकतम एक update और एक implementation Commit। यदि कोई प्रमाणित कमी नहीं है, तो file unchanged रहेगी और कोई Commit नहीं बनेगा।
+4. Commit से पहले उपलब्ध syntax/static checks, self-test expectations, call sites, browser contracts और dependency compatibility का पूरा pre-commit review किया जाएगा। परीक्षण के बिना अधूरा या अनुमानित patch Commit नहीं किया जाएगा।
+5. किसी उसी फाइल पर दूसरा Commit तभी स्वीकार्य होगा जब पहले Commit के बाद नया, पहले से उपलब्ध source/test evidence से न पहचाना जा सकने वाला गंभीर defect मिले, या वास्तविक test run किसी नए failure को उजागर करे। कारण, log और आवश्यक diff दर्ज करना अनिवार्य है।
+6. केवल formatting, version number, message, cosmetic wording या पहले से पता सुधार छूट जाने के कारण लगातार follow-up Commits नहीं किए जाएँगे।
+7. यदि test failure किसी दूसरे dependent module में है, तो बिना आवश्यकता मूल फाइल को फिर से बदलने के बजाय वास्तविक failing dependency को अलग audit किया जाएगा।
+8. एक Commit में कई files के बदलाव नहीं मिलाए जाएँगे; प्रत्येक file का अपना atomic Commit रहेगा। परन्तु उसी file के सभी प्रमाणित सुधार उसी single patch में रहेंगे।
+9. समय बचाने के लिए सही और हाल ही में सत्यापित फाइल को दोबारा नहीं छुआ जाएगा। Repository inspection और पहले से उपलब्ध test evidence का पुनः उपयोग किया जाएगा।
+10. हर रिपोर्ट में साफ लिखा जाएगा: file बदली गई या unchanged रही; क्यों; कितने Commits आवश्यक हुए; tests का exact SHA परिणाम; और App की शक्ति/दक्षता पर प्रमाणित प्रभाव।
+11. कोई भी बदलाव Brain की निर्धारित क्षमता, 12-capability catalogue, मौजूदा Main App engines या user data को कमजोर नहीं करेगा। सुरक्षा के नाम पर भविष्य की कार्यक्षमता हटाना स्वीकार्य समाधान नहीं है।
+12. अगली फाइल पर तभी बढ़ेंगे जब मौजूदा file task के आवश्यक tests और उस पर निर्भर regression/browser checks पास हों।
+
+इस नियम का उद्देश्य “कम Commit” अपने-आप में नहीं, बल्कि एक ही बार में सही, पूर्ण, समीक्षा योग्य और सत्यापित परिवर्तन करना है।
 
 ---
 
