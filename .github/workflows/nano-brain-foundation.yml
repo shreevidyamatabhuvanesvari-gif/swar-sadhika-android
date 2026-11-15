@@ -1,0 +1,51 @@
+name: Nano Brain Foundation Part 2 Tests
+
+on:
+  push:
+    branches:
+      - main
+      - feat/nano-brain-foundation-part2
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Nano Brain foundation regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check Nano Brain modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          find assets/js/brain assets/js/pages -type f -name '*part2.js' -print0 |
+            while IFS= read -r -d '' file; do
+              node --experimental-default-type=module --check "$file"
+            done
+      - name: Run Nano Brain foundation self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-default-type=module --input-type=module <<'NODE'
+          import { selfTest } from "./assets/js/brain/brain-foundation-selftest-part2.js";
+          const result = await selfTest();
+          for (const suite of result.suites) {
+            console.log(`${suite.status} ${suite.name}: ${suite.passed}/${suite.total}`);
+            for (const check of suite.checks) {
+              if (!check.passed) console.error(`  - FAIL ${check.id}`);
+            }
+          }
+          console.log(`Nano Brain Foundation: ${result.passed}/${result.total}`);
+          if (result.status !== "PASSED") process.exitCode = 1;
+          NODE

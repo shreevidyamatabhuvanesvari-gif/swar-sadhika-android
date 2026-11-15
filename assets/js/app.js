@@ -4,7 +4,7 @@
  *   assets/js/pages/page-nano-server.js
  *   assets/js/pages/page-avatar.js
  *
- * Nano Brain and File Check remain disabled until their modules exist.
+ * Nano Brain Part 2 is routed through the existing Page Loader; File Check remains disabled.
  */
 (() => {
   "use strict";
@@ -15,14 +15,16 @@
     "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
     "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
     "avatar": { id: "avatar", file: "page-avatar.js", root: "view-avatar", view: "view-avatar" },
-    "video": { id: "video", file: "page-video.js", root: "view-video", view: "view-video" }
+    "video": { id: "video", file: "page-video.js", root: "view-video", view: "view-video" },
+    "nano-brain": { id: "nano-brain", file: "page-nano-brain-part2.js", root: "view-nano-brain", view: "view-nano-brain" }
   });
 
   const views = Object.freeze({
     "index": "view-index",
     "nano-server": "view-nano-server",
     "avatar": "view-avatar",
-    "video": "view-video"
+    "video": "view-video",
+    "nano-brain": "view-nano-brain"
   });
 
   const state = {
