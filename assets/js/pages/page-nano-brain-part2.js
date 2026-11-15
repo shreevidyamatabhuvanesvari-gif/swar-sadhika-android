@@ -588,8 +588,9 @@ export async function mount(context) {
     async onHide() {
       if (disposed || !pageVisible) return;
       pageVisible = false;
-      // Stop local Core tasks before revoking the page's temporary permissions.
+      // Stop local Core tasks and await Memory Engine cleanup before permissions/storage change.
       try { brainCore.cancelAllTasks("brain-page-hidden"); } catch (_) {}
+      try { await memoryEngine.cancelActiveTasks("brain-page-hidden"); } catch (_) {}
       // A running user-requested probe must finish its own cleanup before
       // its session permissions are revoked.
       if (memoryProbePromise) {
