@@ -197,3 +197,53 @@ jobs:
           );
           console.log("PASS Nano Brain route, lazy loading, mount point, and unchanged entry-point contract.");
           NODE
+      - name: Verify Index, TTS, and Brain Page Loader lifecycle contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-default-type=module --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+
+          const app = readFileSync("assets/js/app.js", "utf8");
+          const html = readFileSync("index.html", "utf8");
+          const tts = readFileSync("assets/js/pages/page-tts.js", "utf8");
+          const brainPage = readFileSync("assets/js/pages/page-nano-brain-part2.js", "utf8");
+
+          // Index owns the TTS controls, so its module uses the shared Page Loader lifecycle.
+          assert.match(app,
+            /const pageToActivate = page \|\| \(key === "index" \? PAGE_MODULES\["jump-text"\] : null\);/,
+            "Index navigation must activate the existing TTS module");
+          assert.match(app,
+            /await hideActivePage\(pageToActivate \? pageToActivate\.id : null\);/,
+            "Leaving Index must invoke the active TTS module onHide hook");
+          assert.match(app,
+            /await loadPageModule\(pageToActivate, navigationSequence\);/,
+            "Returning to Index must reuse and reactivate the TTS module");
+          assert.match(app,
+            /if \(instance\.activated\) \{[\s\S]*?runPageHook\([\s\S]*?"onShow"/,
+            "Reused Page Loader instances must receive onShow");
+          assert.match(app, /await import\(url\.href\)/, "Page modules must remain lazy-loaded");
+          assert.match(app, /createPageContext\(page, root\)/,
+            "Page modules must receive the existing mount(context) contract");
+          assert.match(tts, /async function onHide\(\)/, "TTS must implement onHide");
+          assert.match(tts, /async function onShow\(\)/, "TTS must implement onShow");
+          assert.match(tts, /return Object\.freeze\(\{ onShow, onHide, unmount \}\);/,
+            "TTS must expose lifecycle hooks to the Page Loader");
+          assert.doesNotMatch(app, /const indexTtsPage = PAGE_MODULES\["jump-text"\];/,
+            "Startup must not perform a second separate TTS module load");
+
+          // The Brain remains on the existing single app.js/Page Loader entry path.
+          assert.match(app,
+            /"nano-brain": \{ id: "nano-brain", file: "page-nano-brain-part2\.js"/,
+            "The existing Brain route ID must remain intact");
+          assert.match(brainPage, /export async function mount\(context\)/,
+            "Brain Page must expose mount(context)");
+          assert.match(html, /data-route=["']nano-brain["']/, "Index must retain the Brain route");
+          const appEntryScripts = [...html.matchAll(/<script[^>]*src=["']\.\/assets\/js\/app\.js["'][^>]*>/gi)];
+          assert.equal(appEntryScripts.length, 1, "Index must keep exactly one app.js entry point");
+          assert.doesNotMatch(html, /<script[^>]*page-nano-brain-part2/i,
+            "Brain must not be added as another script tag");
+
+          console.log("PASS Index/TTS lifecycle, single-load behavior, Brain route and Page Loader contracts.");
+          NODE
