@@ -718,13 +718,16 @@ export function createOpfsAssetStorePart2(options = {}) {
       if (!(blob instanceof Blob)) fail("OPFS asset के लिए Blob आवश्यक है।", "INVALID_ASSET_BLOB");
       if (blob.size > maxFileBytes) fail("Asset अनुमत आकार सीमा से बड़ा है।", "ASSET_TOO_LARGE");
       const directory = await root();
-      const handle = await directory.getFileHandle(name, { create: true });
-      const writable = await handle.createWritable({ keepExistingData: false });
+      let writable = null;
       try {
+        const handle = await directory.getFileHandle(name, { create: true });
+        writable = await handle.createWritable({ keepExistingData: false });
         await writable.write(blob);
         await writable.close();
       } catch (error) {
-        try { await writable.abort(); } catch (_) {}
+        if (writable && typeof writable.abort === "function") {
+          try { await writable.abort(); } catch (_) {}
+        }
         throw normalizeStorageError(error, "OPFS_WRITE_FAILED");
       }
       return Object.freeze({ name, size: blob.size, type: blob.type || "application/octet-stream" });
@@ -732,25 +735,37 @@ export function createOpfsAssetStorePart2(options = {}) {
     async read(name) {
       validateFileName(name);
       const directory = await root();
-      const handle = await directory.getFileHandle(name);
-      return handle.getFile();
+      try {
+        const handle = await directory.getFileHandle(name);
+        return await handle.getFile();
+      } catch (error) {
+        throw normalizeStorageError(error, "OPFS_READ_FAILED");
+      }
     },
     async remove(name) {
       validateFileName(name);
       const directory = await root();
-      await directory.removeEntry(name);
-      return true;
+      try {
+        await directory.removeEntry(name);
+        return true;
+      } catch (error) {
+        throw normalizeStorageError(error, "OPFS_REMOVE_FAILED");
+      }
     },
     async list() {
       const directory = await root();
       const items = [];
-      for await (const [name, handle] of directory.entries()) {
-        if (handle.kind === "file") {
-          const file = await handle.getFile();
-          items.push({ name, size: file.size, type: file.type || "application/octet-stream" });
+      try {
+        for await (const [name, handle] of directory.entries()) {
+          if (handle.kind === "file") {
+            const file = await handle.getFile();
+            items.push({ name, size: file.size, type: file.type || "application/octet-stream" });
+          }
         }
+        return items;
+      } catch (error) {
+        throw normalizeStorageError(error, "OPFS_LIST_FAILED");
       }
-      return items;
     }
   });
 }
@@ -786,6 +801,81 @@ export async function selfTest() {
   try {
     check("opfs-feature-detection-safe",
       createOpfsAssetStorePart2({ navigatorRef: {} }).supported === false);
+
+    const deniedFileError = () => {
+      const error = new Error("OPFS permission denied");
+      error.name = "NotAllowedError";
+      return error;
+    };
+    const failingDirectory = {
+      async getFileHandle() { throw deniedFileError(); },
+      async removeEntry() { throw deniedFileError(); },
+      async *entries() { throw deniedFileError(); }
+    };
+    const failingOpfs = createOpfsAssetStorePart2({
+      navigatorRef: {
+        storage: {
+          async getDirectory() {
+            return {
+              async getDirectoryHandle() { return failingDirectory; }
+            };
+          }
+        }
+      }
+    });
+    const hasNormalizedOpfsError = async (operation, expectedCode) => {
+      try {
+        await operation();
+      } catch (error) {
+        return error instanceof BrainStorageErrorPart2 &&
+          error.code === expectedCode &&
+          Boolean(error.cause && error.cause.name === "NotAllowedError");
+      }
+      return false;
+    };
+    check("opfs-read-errors-use-brain-storage-contract",
+      await hasNormalizedOpfsError(() => failingOpfs.read("missing.txt"), "OPFS_READ_FAILED"));
+    check("opfs-write-errors-use-brain-storage-contract",
+      await hasNormalizedOpfsError(
+        () => failingOpfs.write("write-denied.txt", new Blob(["test"])),
+        "OPFS_WRITE_FAILED"
+      ));
+    check("opfs-remove-errors-use-brain-storage-contract",
+      await hasNormalizedOpfsError(() => failingOpfs.remove("remove-denied.txt"), "OPFS_REMOVE_FAILED"));
+    check("opfs-list-errors-use-brain-storage-contract",
+      await hasNormalizedOpfsError(() => failingOpfs.list(), "OPFS_LIST_FAILED"));
+
+    let writeAborted = false;
+    const partialWriteOpfs = createOpfsAssetStorePart2({
+      navigatorRef: {
+        storage: {
+          async getDirectory() {
+            return {
+              async getDirectoryHandle() {
+                return {
+                  async getFileHandle() {
+                    return {
+                      async createWritable() {
+                        return {
+                          async write() { throw deniedFileError(); },
+                          async close() {},
+                          async abort() { writeAborted = true; }
+                        };
+                      }
+                    };
+                  }
+                };
+              }
+            };
+          }
+        }
+      }
+    });
+    const partialWriteFailed = await hasNormalizedOpfsError(
+      () => partialWriteOpfs.write("partial.txt", new Blob(["test"])),
+      "OPFS_WRITE_FAILED"
+    );
+    check("opfs-partial-write-aborts-on-failure", partialWriteFailed && writeAborted);
 
     let gestureBlocked = false;
     try {
