@@ -197,7 +197,7 @@ jobs:
           );
           console.log("PASS Nano Brain route, lazy loading, mount point, and unchanged entry-point contract.");
           NODE
-- name: Verify Index, TTS, and Brain Page Loader lifecycle contracts
+      - name: Verify Index, TTS, and Brain Page Loader lifecycle contracts
         shell: bash
         run: |
           set -euo pipefail
