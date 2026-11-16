@@ -226,6 +226,9 @@
 
   async function navigate(key) {
     const page = PAGE_MODULES[key];
+    // The index view owns the TTS controls. Treat its TTS module as the active
+    // page too, so leaving Index pauses it and returning to Index invokes onShow.
+    const pageToActivate = page || (key === "index" ? PAGE_MODULES["jump-text"] : null);
     const viewId = key === "jump-text" ? "view-index" : views[key];
 
     if (key !== "index" && key !== "jump-text" && !page) {
@@ -238,14 +241,21 @@
     }
 
     const navigationSequence = ++state.navigationSequence;
-    await hideActivePage(page ? page.id : null);
+    await hideActivePage(pageToActivate ? pageToActivate.id : null);
     if (navigationSequence !== state.navigationSequence) return;
     if (!showView(viewId)) return;
 
-    if (page) {
-      setCurrentNavigation(page.id === "tts" ? "tts" : key);
-      await loadPageModule(page, navigationSequence);
-      if (navigationSequence === state.navigationSequence && page.id === "tts") {
+    if (pageToActivate) {
+      setCurrentNavigation(key === "jump-text" ? "tts" : key);
+      if (pageToActivate.id === "tts" &&
+          !state.pageInstances.has(pageToActivate.id) &&
+          !state.pagePromises.has(pageToActivate.id)) {
+        const ttsSpeakButton = byId("speak-btn");
+        if (ttsSpeakButton) ttsSpeakButton.disabled = true;
+        setText("tts-status", "स्थानीय TTS Engine और डिवाइस की आवाज़ों की जाँच की जा रही है…");
+      }
+      await loadPageModule(pageToActivate, navigationSequence);
+      if (navigationSequence === state.navigationSequence && key === "jump-text") {
         const textSection = byId("text-section");
         if (textSection) {
           textSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -570,18 +580,10 @@
     bindNavigation();
     bindIndexControls();
     loadRegistry();
+    // navigate("index") also mounts/activates the TTS module because its
+    // controls live inside the Index view. This keeps startup and return-to-Index
+    // behavior on the same Page Loader and lifecycle path.
     await navigate("index");
-
-    // The TTS controls are part of the index panel, so mount the existing
-    // TTS page module during startup instead of waiting for the separate
-    // "पाठ / TTS" navigation button. Reuse the same PAGE_MODULES entry and
-    // Page Loader so only one TTS engine instance and one set of handlers
-    // are ever created.
-    const indexTtsPage = PAGE_MODULES["jump-text"];
-    const ttsSpeakButton = byId("speak-btn");
-    if (ttsSpeakButton) ttsSpeakButton.disabled = true;
-    setText("tts-status", "स्थानीय TTS Engine और डिवाइस की आवाज़ों की जाँच की जा रही है…");
-    await loadPageModule(indexTtsPage, state.navigationSequence);
 
     window.addEventListener("pagehide", () => {
       state.media.forEach(releaseMediaUrl);
