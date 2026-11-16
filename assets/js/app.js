@@ -4,7 +4,7 @@
  *   assets/js/pages/page-nano-server.js
  *   assets/js/pages/page-avatar.js
  *
- * Nano Brain Part 2 is routed through the existing Page Loader; File Check remains disabled.
+ * AI Brain Part 2 uses the existing "nano-brain" route ID and Page Loader; File Check remains disabled.
  */
 (() => {
   "use strict";
