@@ -12,9 +12,10 @@ import { createBrainMemoryEnginePart2 } from "../brain/brain-memory-engine-part2
 import { createBrainKnowledgeEnginePart2 } from "../brain/brain-knowledge-engine-part2.js";
 import { createOpfsAssetStorePart2 } from "../brain/brain-storage-part2.js";
 
-export const NANO_BRAIN_PAGE_VERSION_PART2 = "1.2.0";
+export const NANO_BRAIN_PAGE_VERSION_PART2 = "1.2.1";
 
 const PAGE_TITLE = "नैनो ब्रेन — Foundation एवं Knowledge Console";
+const TTS_ROUTE = "jump-text";
 const MEMORY_CAPABILITIES = Object.freeze(["memory.read", "memory.write"]);
 const KNOWLEDGE_CAPABILITIES = Object.freeze(["knowledge.read", "knowledge.propose"]);
 const SESSION_CAPABILITIES = Object.freeze([
@@ -977,7 +978,7 @@ export async function mount(context) {
   async function navigateToTts() {
     if (disposed || !initialized) return;
     try {
-      await integration.app.navigate("jump-text");
+      await integration.app.navigate(TTS_ROUTE);
     } catch (error) {
       setStatus(
         foundationStatus,
@@ -1108,7 +1109,7 @@ export function selfTest() {
   const checks = [];
   const check = (id, passed) => checks.push({ id, passed: Boolean(passed) });
 
-  check("page-version-declared", NANO_BRAIN_PAGE_VERSION_PART2 === "1.2.0");
+  check("page-version-declared", NANO_BRAIN_PAGE_VERSION_PART2 === "1.2.1");
   check("bytes-zero-formatted", formatBytes(0) === "0 B");
   check("bytes-invalid-marked-unavailable", formatBytes(Number.NaN) === "उपलब्ध नहीं");
   check("indexeddb-best-effort-not-called-durable",
@@ -1144,8 +1145,8 @@ export function selfTest() {
   check("knowledge-source-catalogue-is-nonempty",
     KNOWLEDGE_SOURCE_KINDS.some(item => item[0] === "primary") &&
     KNOWLEDGE_SOURCE_KINDS.some(item => item[0] === "user-supplied"));
-  check("tts-route-key-remains-correct",
-    "jump-text" === "jump-text" && PAGE_TITLE.includes("नैनो ब्रेन"));
+  check("tts-navigation-uses-main-app-supported-route",
+    TTS_ROUTE === "jump-text" && PAGE_TITLE.includes("नैनो ब्रेन"));
 
   return Object.freeze({
     module: "page-nano-brain-part2",
