@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Swar-Sadhika Nano Brain — Browser Storage Audit</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;color-scheme:light dark}
+    body{margin:0;padding:20px;max-width:900px;margin-inline:auto;line-height:1.55}
+    h1{font-size:1.35rem;margin:0 0 8px}
+    h2{font-size:1.05rem;margin:20px 0 8px}
+    p{margin:8px 0}
+    .muted{opacity:.75;font-size:.92rem}
+    .notice{border:1px solid currentColor;border-radius:10px;padding:12px;margin:14px 0}
+    .summary{font-weight:700;font-size:1.1rem;padding:12px;border-radius:10px;background:rgba(127,127,127,.12)}
+    .pass{color:#168348}.fail{color:#d04444}.skip{color:#b27b12}
+    button{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid currentColor;background:transparent}
+    button:disabled{opacity:.5}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{text-align:left;padding:9px 7px;border-bottom:1px solid rgba(127,127,127,.35);vertical-align:top}
+    th{font-size:.9rem}
+    code{overflow-wrap:anywhere}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+    #database{overflow-wrap:anywhere}
+    #log{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;max-height:280px;overflow:auto}
+    .small{font-size:.85rem}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Swar-Sadhika Nano Brain — वास्तविक Browser Storage Audit</h1>
+    <p class="muted">Part 2 · केवल स्थानीय Browser APIs · कोई बाहरी AI सेवा या Remote Inference नहीं</p>
+  </header>
+
+  <section class="notice">
+    <strong>परीक्षण सुरक्षा सीमा</strong>
+    <p>यह पृष्ठ केवल अपने अलग परीक्षण Database <code id="database"></code> और वैकल्पिक OPFS परीक्षण फ़ाइल का उपयोग करता है। यह ऐप के Nano Server Database या मौजूदा Brain Memory Database को नहीं खोलता, बदलता या हटाता।</p>
+    <p>Browser Persistent Storage अनुमति स्वतः नहीं माँगी जाती। Quota को जानबूझकर भरने का परीक्षण नहीं किया जाता। वास्तविक Android Cold Start तभी प्रमाणित होगा जब <code>phase=write</code> के बाद Chrome पूरी तरह बंद करके <code>phase=read</code> चलाया जाए।</p>
+  </section>
+
+  <section>
+    <h2>परीक्षण नियंत्रण</h2>
+    <p id="mode" class="muted">Mode: all — एक ही Browser Session में Database Migration, Write, Close, Reopen और Read।</p>
+    <div class="actions">
+      <button id="run" type="button">परीक्षण चलाएँ</button>
+      <button id="copy" type="button" disabled>रिपोर्ट कॉपी करें</button>
+    </div>
+    <div id="summary" class="summary" role="status" aria-live="polite">परीक्षण शुरू होने की प्रतीक्षा है।</div>
+  </section>
+
+  <section>
+    <h2>प्रत्येक जाँच का परिणाम</h2>
+    <table>
+      <thead><tr><th>जाँच</th><th>परिणाम</th><th>विवरण</th></tr></thead>
+      <tbody id="results"><tr><td colspan="3">अभी कोई जाँच नहीं चली।</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Browser और Storage Diagnostics</h2>
+    <pre id="log" class="notice">Diagnostics उपलब्ध होने पर यहाँ प्रदर्शित होंगे।</pre>
+  </section>
+
+  <section class="notice">
+    <strong>सीमाएँ — इन्हें PASS नहीं माना जाएगा</strong>
+    <p>इस पृष्ठ का same-session close/reopen परीक्षण Chrome Process को बंद करने के बराबर नहीं है। Cross-process Cold Start के लिए अलग <code>phase=write</code> और <code>phase=read</code> प्रयोग करें। Browser Storage Permission केवल वर्तमान स्थिति के रूप में पढ़ी जाती है। Quota Exhaustion, सफल Backup Restore, वास्तविक Android Device और Strict Offline Certification इस HTML Test के दायरे में प्रमाणित नहीं होते।</p>
+  </section>
+
+  <script type="module">
+    import { createBrainStoragePart2, createOpfsAssetStorePart2 } from "./brain-storage-part2.js";
+
+    const DB_COLDSTART = "swar-sadhika-brain-browser-coldstart-part2";
+    const DB_PREFIX = "swar-sadhika-brain-browser-audit-part2-";
+    const RECORD_ID = "coldstart-record";
+    const META_KEY = "coldstart-marker";
+    const EVENT_ID = "coldstart-event";
+    const RECORD_VALUE = "survives-browser-restart";
+    const INDEXED_STORES = ["records", "metadata", "events"];
+
+    const params = new URLSearchParams(location.search);
+    const requestedPhase = params.get("phase") || "all";
+    const phase = ["all", "write", "read"].includes(requestedPhase) ? requestedPhase : "invalid";
+    const databaseName = phase === "all"
+      ? DB_PREFIX + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9)
+      : DB_COLDSTART;
+
+    const databaseNode = document.getElementById("database");
+    const modeNode = document.getElementById("mode");
+    const summaryNode = document.getElementById("summary");
+    const resultsNode = document.getElementById("results");
+    const logNode = document.getElementById("log");
+    const runButton = document.getElementById("run");
+    const copyButton = document.getElementById("copy");
+
+    databaseNode.textContent = databaseName;
+    modeNode.textContent = phase === "write"
+      ? "Mode: write — पुराना Test DB हटेगा, v1 Schema बनेगा, v2 Migration और Test Data Write होगा।"
+      : phase === "read"
+        ? "Mode: read — पहले write phase में रखे गए Database को पढ़कर जाँचा जाएगा।"
+        : phase === "all"
+          ? "Mode: all — अलग अस्थायी Database पर Migration, Write, Close/Reopen और Read जाँच होगी।"
+          : "अमान्य phase parameter। केवल all, write या read स्वीकार्य हैं।";
+
+    const checks = [];
+    const skipped = [];
+    const diagnostics = {};
+    let reportText = "";
+    let running = false;
+
+    function addCheck(id, passed, detail) {
+      checks.push({ id, status: passed ? "PASS" : "FAIL", passed: Boolean(passed), detail: String(detail || "") });
+    }
+
+    function addSkip(id, detail) {
+      skipped.push({ id, detail: String(detail || "") });
+    }
+
+    function render() {
+      resultsNode.replaceChildren();
+      for (const item of checks) {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        const status = document.createElement("td");
+        const detail = document.createElement("td");
+        name.textContent = item.id;
+        status.textContent = item.status;
+        status.className = item.passed ? "pass" : "fail";
+        detail.textContent = item.detail;
+        row.append(name, status, detail);
+        resultsNode.appendChild(row);
+      }
+      for (const item of skipped) {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        const status = document.createElement("td");
+        const detail = document.createElement("td");
+        name.textContent = item.id;
+        status.textContent = "SKIPPED";
+        status.className = "skip";
+        detail.textContent = item.detail;
+        row.append(name, status, detail);
+        resultsNode.appendChild(row);
+      }
+      const passed = checks.filter(item => item.passed).length;
+      const failed = checks.length - passed;
+      summaryNode.className = "summary " + (failed ? "fail" : "pass");
+      summaryNode.textContent = failed
+        ? "FAILED — " + passed + "/" + checks.length + " assertions passed; " + failed + " failed; " + skipped.length + " skipped."
+        : "PASSED — " + passed + "/" + checks.length + " assertions passed; " + skipped.length + " skipped.";
+      reportText = JSON.stringify({
+        test: "Swar-Sadhika Nano Brain Browser Storage Audit Part 2",
+        phase,
+        database: databaseName,
+        origin: location.origin,
+        createdAt: new Date().toISOString(),
+        status: failed ? "FAILED" : "PASSED",
+        passed,
+        failed,
+        skipped,
+        checks,
+        diagnostics
+      }, null, 2);
+      copyButton.disabled = false;
+      logNode.textContent = reportText;
+    }
+
+    async function runCheck(id, operation) {
+      try {
+        const detail = await operation();
+        addCheck(id, true, detail || "Assertion passed.");
+      } catch (error) {
+        addCheck(id, false, (error && error.code ? error.code + ": " : "") +
+          (error && error.message ? error.message : String(error)));
+      }
+      render();
+    }
+
+    function openLegacyV1Database(name) {
+      return new Promise((resolve, reject) => {
+        let request;
+        try { request = indexedDB.open(name, 1); }
+        catch (error) { reject(error); return; }
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          const transaction = request.transaction;
+          for (const storeName of INDEXED_STORES) {
+            if (!db.objectStoreNames.contains(storeName)) {
+              db.createObjectStore(storeName, {
+                keyPath: storeName === "metadata" ? "key" : "id"
+              });
+            }
+          }
+          transaction.objectStore("records").put({
+            id: "legacy-v1-record",
+            value: "legacy-record-preserved",
+            updatedAt: 1
+          });
+          transaction.objectStore("metadata").put({
+            key: "legacy-v1-marker",
+            value: { marker: "legacy-metadata-preserved" },
+            updatedAt: 1
+          });
+          transaction.objectStore("events").put({
+            id: "legacy-v1-event",
+            type: "legacy-event-preserved",
+            createdAt: 1
+          });
+        };
+
+        request.onerror = () => reject(request.error || new Error("Legacy v1 database creation failed."));
+        request.onsuccess = () => {
+          const db = request.result;
+          const version = db.version;
+          db.close();
+          if (version !== 1) {
+            reject(new Error("Expected legacy Database Version 1; received " + version + "."));
+            return;
+          }
+          resolve(true);
+        };
+      });
+    }
+
+    function openCurrentDatabase(name) {
+      return new Promise((resolve, reject) => {
+        let request;
+        try { request = indexedDB.open(name); }
+        catch (error) { reject(error); return; }
+        request.onerror = () => reject(request.error || new Error("Database inspection failed."));
+        request.onsuccess = () => resolve(request.result);
+      });
+    }
+
+    function deleteTestDatabase(name) {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.deleteDatabase(name);
+        request.onsuccess = () => resolve(true);
+        request.onerror = () => reject(request.error || new Error("Test Database cleanup failed."));
+        request.onblocked = () => reject(new Error("Test Database cleanup is blocked by an open connection."));
+      });
+    }
+
+    async function writeAuditData(storage) {
+      await storage.putRecord({
+        id: RECORD_ID,
+        value: RECORD_VALUE,
+        kind: "browser-coldstart-test",
+        updatedAt: Date.now()
+      });
+      await storage.putMetadata(META_KEY, { value: RECORD_VALUE, written: true });
+      await storage.appendEvent({
+        id: EVENT_ID,
+        type: "browser-coldstart-test",
+        value: RECORD_VALUE,
+        createdAt: Date.now()
+      });
+      return "Test Record, Metadata और Event अलग-अलग Stores में लिखे गए।";
+    }
+
+    async function verifyAuditData(storage, prefix) {
+      const record = await storage.getRecord(RECORD_ID);
+      if (!record || record.value !== RECORD_VALUE) {
+        throw new Error(prefix + ": Record उपलब्ध नहीं या उसका value बदल गया।");
+      }
+
+      const metadata = await storage.getMetadata(META_KEY);
+      if (!metadata || metadata.value !== RECORD_VALUE || metadata.written !== true) {
+        throw new Error(prefix + ": Metadata सुरक्षित रूप में वापस नहीं मिला।");
+      }
+
+      const events = await storage.listEvents({ limit: 100 });
+      if (!events.some(event => event.id === EVENT_ID && event.value === RECORD_VALUE)) {
+        throw new Error(prefix + ": Event वापस नहीं मिला।");
+      }
+      return "Record, Metadata और Event तीनों मूल values के साथ वापस मिले।";
+    }
+
+    async function verifyMigration(storage, name) {
+      const legacyRecord = await storage.getRecord("legacy-v1-record");
+      if (!legacyRecord || legacyRecord.value !== "legacy-record-preserved") {
+        throw new Error("Database v1 का पुराना Record Migration के बाद सुरक्षित नहीं मिला।");
+      }
+
+      const legacyMetadata = await storage.getMetadata("legacy-v1-marker");
+      if (!legacyMetadata || legacyMetadata.marker !== "legacy-metadata-preserved") {
+        throw new Error("Database v1 का पुराना Metadata Migration के बाद सुरक्षित नहीं मिला।");
+      }
+
+      const oldEvents = await storage.listEvents({ limit: 100 });
+      if (!oldEvents.some(event => event.id === "legacy-v1-event" &&
+          event.type === "legacy-event-preserved")) {
+        throw new Error("Database v1 का पुराना Event Migration के बाद सुरक्षित नहीं मिला।");
+      }
+
+      const schemaVersion = await storage.getMetadata("schemaVersion");
+      if (schemaVersion !== 2) {
+        throw new Error("Schema marker Version 2 नहीं है।");
+      }
+
+      const db = await openCurrentDatabase(name);
+      try {
+        if (db.version !== 2) throw new Error("Expected migrated Database Version 2; received " + db.version + ".");
+        const recordIndexes = db.transaction("records", "readonly").objectStore("records").indexNames;
+        const eventIndexes = db.transaction("events", "readonly").objectStore("events").indexNames;
+        if (!recordIndexes.contains("byUpdatedAt") || !eventIndexes.contains("byCreatedAt")) {
+          throw new Error("Migration के बाद आवश्यक indexes नहीं मिले।");
+        }
+      } finally {
+        db.close();
+      }
+
+      return "v1 Record, Metadata और Event सुरक्षित; v2 schema marker तथा दोनों indexes उपलब्ध।";
+    }
+
+    async function verifyBackupIntegrity(storage) {
+      const backup = await storage.exportBackup();
+      if (!backup || backup.format !== "swar-sadhika.brain-backup" ||
+          backup.formatVersion !== 1 || !/^[a-f0-9]{64}$/i.test(backup.sha256)) {
+        throw new Error("Backup format/version/SHA-256 contract अमान्य है।");
+      }
+
+      const alteredPayload = {
+        ...backup.payload,
+        createdAt: Number(backup.payload.createdAt) + 1
+      };
+      let tamperRejected = false;
+      try {
+        await storage.importBackup({ ...backup, payload: alteredPayload });
+      } catch (error) {
+        tamperRejected = error && error.code === "BACKUP_INTEGRITY_FAILED";
+      }
+      if (!tamperRejected) {
+        throw new Error("बदले हुए Backup payload को SHA-256 जाँच ने अस्वीकार नहीं किया।");
+      }
+      return "Backup Export में SHA-256 मिला और बदला हुआ payload Import से पहले अस्वीकार हुआ।";
+    }
+
+    async function inspectDiagnostics(storage) {
+      const result = await storage.diagnostics();
+      if (result.backend !== "indexeddb" || result.persistent !== true || result.volatileFallback !== false) {
+        throw new Error("Native IndexedDB Backend सक्रिय नहीं है; Volatile fallback मिला।");
+      }
+      if (typeof result.persistenceSupported !== "boolean" ||
+          !(result.persistenceGranted === null || typeof result.persistenceGranted === "boolean")) {
+        throw new Error("Browser Persistence diagnostics contract अमान्य है।");
+      }
+      if (!result.quotaEstimate || !Object.hasOwn(result.quotaEstimate, "usage") ||
+          !Object.hasOwn(result.quotaEstimate, "quota")) {
+        throw new Error("Storage Quota diagnostics contract अधूरा है।");
+      }
+      diagnostics.storage = result;
+      return "Native IndexedDB की पुष्टि; durable permission और quota के वास्तविक browser values अलग दर्ज।";
+    }
+
+    async function verifyMainAppIntegrationContract() {
+      const localFiles = [
+        ["index.html", "../../../index.html"],
+        ["Main App Page Loader", "../app.js"],
+        ["Nano Brain Page", "../pages/page-nano-brain-part2.js"],
+        ["Brain Central Core", "./brain-core-part2.js"],
+        ["Brain Memory Engine", "./brain-memory-engine-part2.js"],
+        ["Brain Integration Foundation", "./brain-integration-foundation-part2.js"],
+        ["Brain Security Foundation", "./brain-security-part2.js"],
+        ["Brain Storage Foundation", "./brain-storage-part2.js"]
+      ];
+
+      const sources = {};
+      for (const [label, relativePath] of localFiles) {
+        const url = new URL(relativePath, location.href);
+        if (url.origin !== location.origin) {
+          throw new Error(label + " का source URL same-origin सीमा से बाहर है।");
+        }
+        const response = await fetch(url.href, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          throw new Error(label + " source HTTP " + response.status + " के साथ उपलब्ध नहीं है।");
+        }
+        sources[label] = await response.text();
+      }
+
+      const index = sources["index.html"];
+      const app = sources["Main App Page Loader"];
+      const page = sources["Nano Brain Page"];
+      const core = sources["Brain Central Core"];
+      const memoryEngine = sources["Brain Memory Engine"];
+      const integration = sources["Brain Integration Foundation"];
+      const security = sources["Brain Security Foundation"];
+      const storage = sources["Brain Storage Foundation"];
+
+      if (!/data-route=["']nano-brain["']/.test(index)) {
+        throw new Error("Main App Navigation में nano-brain route अनुपस्थित है।");
+      }
+      if (!/id=["']view-nano-brain["']/.test(index)) {
+        throw new Error("Main App में view-nano-brain mount container अनुपस्थित है।");
+      }
+
+      const scriptSources = [...index.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
+        .map(match => match[1]);
+      if (scriptSources.length !== 1 || scriptSources[0] !== "./assets/js/app.js") {
+        throw new Error("index.html में केवल मौजूदा app.js entry point होना चाहिए; अतिरिक्त entry point मिला।");
+      }
+      if (/<script\b[^>]*page-nano-brain-part2/i.test(index)) {
+        throw new Error("Brain Page का अतिरिक्त Script Tag index.html में पाया गया।");
+      }
+
+      if (!/"nano-brain":\s*\{\s*id:\s*"nano-brain",\s*file:\s*"page-nano-brain-part2\.js",\s*root:\s*"view-nano-brain",\s*view:\s*"view-nano-brain"\s*\}/.test(app)) {
+        throw new Error("Main App PAGE_MODULES में Brain route contract अपेक्षित रूप में नहीं मिला।");
+      }
+      if (!/await import\(url\.href\)/.test(app)) {
+        throw new Error("Main App Page Loader का Dynamic Import contract नहीं मिला।");
+      }
+
+      if (!/import\s*\{\s*createBrainIntegrationPart2\s*\}\s*from\s*["']\.\.\/brain\/brain-integration-foundation-part2\.js["']/.test(page) ||
+          !/import\s*\{\s*createBrainCorePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-core-part2\.js["']/.test(page) ||
+          !/import\s*\{\s*createBrainMemoryEnginePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-memory-engine-part2\.js["']/.test(page) ||
+          !/createBrainMemoryEnginePart2\(\s*\{\s*core:\s*brainCore/.test(page) ||
+          !/await memoryEngine\.initialize\(\)/.test(page) ||
+          !/memoryEngine\.dispose\(\)/.test(page) ||
+          !/memoryEngine\.cancelActiveTasks\(/.test(page) ||
+          !/import\s*\{\s*createOpfsAssetStorePart2\s*\}\s*from\s*["']\.\.\/brain\/brain-storage-part2\.js["']/.test(page) ||
+          !/createBrainIntegrationPart2\(\s*\{\s*app:\s*context\.app/.test(page) ||
+          !/createBrainCorePart2\(\s*\{\s*integration,\s*host\s*\}/.test(page) ||
+          !/await brainCore\.initialize\(\)/.test(page) ||
+          !/brainCore\.dispose\(\)/.test(page)) {
+        throw new Error("Nano Brain Page का वास्तविक Central Core → Integration → Storage/Security import और lifecycle chain अधूरा है।");
+      }
+      if (!/import\s*\{[^}]*validateSkillManifestPart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(core) ||
+          !/integration\.requestCapabilities\(capabilities, trustedEvent\)/.test(core) ||
+          !/integration\.getMemory\(\)/.test(core) ||
+          !/from\s*["']\.\/brain-security-part2\.js["']/.test(core)) {
+        throw new Error("Central Brain Core का Security/Permission/Memory contract अधूरा है।");
+      }
+      if (!/import\s*\{[^}]*cloneSafeJsonPart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(memoryEngine) ||
+          !/core\.registerModule\(/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory\.read"\]/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory\.write"\]/.test(memoryEngine) ||
+          !/capabilities:\s*\["memory.read",\s*"memory.write"\]/.test(memoryEngine) ||
+          !/issueWriteApproval\(/.test(memoryEngine) ||
+          !/supersedes/.test(memoryEngine) ||
+          !/core\.runTask\(/.test(memoryEngine)) {
+        throw new Error("Central Brain Memory Engine का Core/Security/Permission/Versioned-Record contract अधूरा है।");
+      }
+
+      if (!/import\s*\{[^}]*createBrainStoragePart2[^}]*\}\s*from\s*["']\.\/brain-storage-part2\.js["']/.test(integration) ||
+          !/import\s*\{[^}]*createCapabilityGatePart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(integration)) {
+        throw new Error("Brain Integration Foundation के Security/Storage dependencies अनुपस्थित हैं।");
+      }
+      if (!/import\s*\{[^}]*cloneSafeJsonPart2[^}]*\}\s*from\s*["']\.\/brain-security-part2\.js["']/.test(storage)) {
+        throw new Error("Brain Storage Foundation का Security JSON-boundary dependency अनुपस्थित है।");
+      }
+
+      diagnostics.mainAppIntegration = {
+        origin: location.origin,
+        filesRead: localFiles.map(item => item[0]),
+        centralCore: "brain-core-part2.js",
+        memoryEngine: "brain-memory-engine-part2.js",
+        memoryEngineUsesCoreAndCapabilityFacade: true,
+        coreInitializedByBrainPage: true,
+        appEntryPoint: scriptSources[0],
+        brainRoute: "nano-brain",
+        dynamicPageModule: "page-nano-brain-part2.js",
+        extraBrainScriptTag: false,
+        sourceChecks: "passed"
+      };
+      return "Main App Navigation, unchanged app.js entry point, Page Loader route, Brain Page → Central Core → Memory Engine → Integration → Security/Storage chain और cleanup contract का same-origin source audit सफल।";
+    }
+
+    async function testOptionalOpfs() {
+      const opfs = createOpfsAssetStorePart2({ navigatorRef: navigator });
+      if (!opfs.supported) {
+        addSkip("OPFS write/read", "इस Browser में navigator.storage.getDirectory() उपलब्ध नहीं है; इसे PASS नहीं गिना गया।");
+        render();
+        return;
+      }
+      const name = "brain-audit-" + Date.now().toString(36) + ".txt";
+      const expected = "swar-sadhika-opfs-audit-" + Date.now().toString(36);
+      const blob = new Blob([expected], { type: "text/plain" });
+      let written = false;
+      try {
+        await opfs.write(name, blob);
+        written = true;
+        const file = await opfs.read(name);
+        const actual = await file.text();
+        if (actual !== expected) throw new Error("OPFS में लिखी सामग्री वापस समान नहीं मिली।");
+        await opfs.remove(name);
+        written = false;
+        addCheck("optional-opfs-write-read-delete", true, "अस्थायी फ़ाइल लिखी, पढ़ी और हटाई गई।");
+      } finally {
+        if (written) {
+          try { await opfs.remove(name); } catch (_) {}
+        }
+        render();
+      }
+    }
+
+    async function runWritePhase(name) {
+      await runCheck("test-database-reset", async () => {
+        await deleteTestDatabase(name).catch(error => {
+          if (error && error.name === "NotFoundError") return false;
+          throw error;
+        });
+        return "केवल अलग Brain Browser Audit Test Database हटाया/रीसेट किया गया।";
+      });
+
+      await runCheck("legacy-v1-database-created-and-closed", async () => {
+        await openLegacyV1Database(name);
+        return "अलग Test Database Version 1 बनाया और Connection बंद किया।";
+      });
+
+      let storage = null;
+      try {
+        await runCheck("native-indexeddb-v2-migration", async () => {
+          storage = await createBrainStoragePart2({
+            host: window,
+            dbName: name,
+            allowVolatileFallback: false
+          });
+          const result = await storage.diagnostics();
+          if (result.backend !== "indexeddb" || result.databaseVersion !== 2) {
+            throw new Error("Native IndexedDB Version 2 नहीं खुला।");
+          }
+          return "Storage API ने वास्तविक IndexedDB Version 2 खोला; fallback निषिद्ध था।";
+        });
+
+        if (!storage) return;
+
+        await runCheck("non-destructive-v1-data-migration", () => verifyMigration(storage, name));
+        await runCheck("record-metadata-event-write", () => writeAuditData(storage));
+        await runCheck("event-history-is-append-only", async () => {
+          let rejected = false;
+          try {
+            await storage.appendEvent({
+              id: EVENT_ID,
+              type: "must-not-overwrite",
+              value: "replacement"
+            });
+          } catch (error) {
+            rejected = error && error.code === "STORAGE_KEY_CONFLICT";
+          }
+          const events = await storage.listEvents({ limit: 100 });
+          const original = events.find(event => event.id === EVENT_ID);
+          if (!rejected || !original || original.value !== RECORD_VALUE) {
+            throw new Error("Duplicate Event ID ने इतिहास overwrite किया या conflict नहीं दिया।");
+          }
+          return "Duplicate Event ID अस्वीकार हुआ; मूल Event सुरक्षित रहा।";
+        });
+        await runCheck("bounded-record-list", async () => {
+          const list = await storage.listRecords({ limit: 1 });
+          if (!Array.isArray(list) || list.length !== 1) {
+            throw new Error("listRecords({limit:1}) ने ठीक एक Record नहीं लौटाया।");
+          }
+          return "सीमित List API ने एक ही Record लौटाया।";
+        });
+        await runCheck("checksummed-backup-tamper-rejection", () => verifyBackupIntegrity(storage));
+        await runCheck("storage-quota-and-persistence-diagnostics", () => inspectDiagnostics(storage));
+      } finally {
+        if (storage) {
+          await storage.dispose();
+          storage = null;
+          addCheck("storage-connection-closed-after-write", true, "सफलतापूर्वक खोला गया Storage API Connection dispose किया गया।");
+          render();
+        }
+      }
+    }
+
+    async function runReadPhase(name) {
+      let storage = null;
+      try {
+        await runCheck("persisted-database-reopened", async () => {
+          storage = await createBrainStoragePart2({
+            host: window,
+            dbName: name,
+            allowVolatileFallback: false
+          });
+          const result = await storage.diagnostics();
+          if (result.backend !== "indexeddb" || result.databaseVersion !== 2) {
+            throw new Error("Reopened Browser Test Database IndexedDB v2 नहीं है।");
+          }
+          return "Database नए Page Load में Native IndexedDB से दोबारा खुला।";
+        });
+        if (storage) {
+          await runCheck("coldstart-record-metadata-event-recovered", () => verifyAuditData(storage, "Reopen"));
+          await runCheck("legacy-v1-data-still-present-after-reopen", () => verifyMigration(storage, name));
+          await runCheck("reopened-storage-diagnostics", () => inspectDiagnostics(storage));
+        }
+      } finally {
+        if (storage) {
+          await storage.dispose();
+          storage = null;
+        }
+      }
+      await runCheck("test-database-cleanup", async () => {
+        await deleteTestDatabase(name);
+        return "केवल Brain Browser Audit Test Database हटाया गया।";
+      });
+    }
+
+    async function runAll() {
+      if (running) return;
+      running = true;
+      runButton.disabled = true;
+      document.documentElement.dataset.auditComplete = "false";
+      checks.length = 0;
+      skipped.length = 0;
+      Object.keys(diagnostics).forEach(key => delete diagnostics[key]);
+      summaryNode.textContent = "परीक्षण चल रहा है…";
+      render();
+
+      try {
+        await runCheck("secure-context-and-required-browser-apis", async () => {
+          if (!isSecureContext) throw new Error("Browser Secure Context उपलब्ध नहीं है। HTTPS या localhost आवश्यक है।");
+          if (!window.indexedDB || typeof window.indexedDB.open !== "function") {
+            throw new Error("Native IndexedDB उपलब्ध नहीं है।");
+          }
+          if (!window.crypto || !window.crypto.subtle) {
+            throw new Error("Web Crypto SHA-256 उपलब्ध नहीं है।");
+          }
+          if (typeof window.TextEncoder !== "function") {
+            throw new Error("TextEncoder उपलब्ध नहीं है।");
+          }
+          return "Secure Context, IndexedDB और Web Crypto APIs उपलब्ध हैं।";
+        });
+
+        await runCheck("main-app-brain-integration-contract", verifyMainAppIntegrationContract);
+
+        if (phase === "invalid") {
+          addCheck("phase-parameter-validation", false, "अमान्य phase; all, write या read चुनें।");
+        } else if (phase === "write") {
+          await runWritePhase(databaseName);
+          addSkip(
+            "browser-process-cold-start",
+            "Write Phase पूरा हुआ। Chrome को पूरी तरह बंद करके इसी पृष्ठ को ?phase=read के साथ फिर खोलें। उसी Test Database का डेटा तब जाँचा जाएगा।"
+          );
+        } else if (phase === "read") {
+          await runReadPhase(databaseName);
+        } else {
+          await runWritePhase(databaseName);
+          if (!checks.some(item => !item.passed)) {
+            await runReadPhase(databaseName);
+          }
+          await testOptionalOpfs();
+          addSkip("browser-process-cold-start", "यह all mode एक ही Browser Process में Connection close/reopen करता है; Chrome Process बंद होने का प्रमाण नहीं है। इसके लिए write/read phases अलग-अलग चलाएँ।");
+          addSkip("quota-exhaustion", "Quota को जानबूझकर भरना सुरक्षित या पुनरुत्पाद्य नहीं; वास्तविक Quota केवल diagnostics में दर्ज है।");
+          addSkip("successful-backup-restore", "इस पृष्ठ में Backup integrity/tamper rejection जाँचा गया है; successful IndexedDB restore का positive-path test इस चरण में घोषित नहीं है।");
+          addSkip("android-device-and-strict-offline-certification", "Desktop/Browser इस पृष्ठ का परिणाम वास्तविक Android Chrome या Strict Offline प्रमाणन नहीं है।");
+        }
+      } catch (error) {
+        addCheck("browser-audit-unexpected-error", false,
+          (error && error.code ? error.code + ": " : "") +
+          (error && error.message ? error.message : String(error)));
+      } finally {
+        running = false;
+        runButton.disabled = false;
+        document.documentElement.dataset.auditComplete = "true";
+        render();
+      }
+    }
+
+    runButton.addEventListener("click", runAll);
+    copyButton.addEventListener("click", async () => {
+      if (!reportText) return;
+      try {
+        await navigator.clipboard.writeText(reportText);
+        copyButton.textContent = "रिपोर्ट कॉपी हुई";
+      } catch (_) {
+        copyButton.textContent = "Clipboard अनुमति उपलब्ध नहीं";
+      }
+    });
+
+    runAll();
+  </script>
+</body>
+</html>
