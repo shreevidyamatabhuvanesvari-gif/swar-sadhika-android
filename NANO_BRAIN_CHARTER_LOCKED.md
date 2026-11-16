@@ -1,12 +1,13 @@
 # Swar-Sadhika Nano Brain — Locked Master Charter
 
 **दस्तावेज़ ID:** SWAR-NANO-BRAIN-CHARTER  
-**संस्करण:** 1.0.7  
+**संस्करण:** 1.0.8  
 **स्थिति:** LOCKED — मूल उद्देश्य और निर्माण-सीमाएँ स्थिर  
 **निर्धारण तिथि:** 15 November 2026  
 **मुख्य Repository:** `shreevidyamatabhuvanesvari-gif/swar-sadhika-android`  
 **प्राथमिक Runtime:** Android Chrome  
-**मुख्य निष्पादन नीति:** Local-first, strict offline after installation
+**मुख्य निष्पादन नीति:** Local-first, strict offline after installation  
+**AI Brain Architecture Lock:** `SWAR-AI-BRAIN-ARCH-1.0`
 
 > यह दस्तावेज़ Swar-Sadhika Nano Brain का सर्वोच्च उद्देश्य और scope-control आधार है। आगे बनने वाली प्रत्येक Brain फ़ाइल, module, interface, test और architecture निर्णय इस Charter के अनुरूप होना आवश्यक है।
 
@@ -526,3 +527,128 @@ Security Foundation में घोषित ये सभी बारह capa
 ---
 
 **अंतिम लॉक घोषणा:** Swar-Sadhika Nano Brain का एकमात्र अंतिम उद्देश्य ऊपर परिभाषित स्वतंत्र, शक्तिशाली, सुरक्षित, स्थानीय और सीखने-सक्षम बुद्धि-तंत्र का निर्माण और सत्यापन है। सभी अगली फ़ाइलें और commits इसी उद्देश्य की सेवा करेंगे। परियोजना इस लक्ष्य से बिना उपयोगकर्ता की स्पष्ट स्वीकृति के नहीं भटकेगी।
+
+---
+
+## 19. AI Brain Complete Architecture — स्थायी एवं बाध्यकारी LOCK
+
+**Architecture Lock ID:** \`SWAR-AI-BRAIN-ARCH-1.0\`  
+**Display Name:** AI Brain | **Internal Compatibility Name:** Nano Brain / \`nano-brain\`  
+**स्थिति:** LOCKED — प्रत्येक Brain फ़ाइल, module, interface, test और integration इस Architecture के अनुसार होगा।
+
+यह अनुभाग पूर्ण Architecture Contract है और Sections 1–18 के साथ संयुक्त रूप से लागू होगा। किसी implementation से इस Architecture, 12-capability catalogue, एकल Core, सुरक्षा या मौजूदा App की कार्यक्षमता में विरोध हो तो implementation बदलेगा; Architecture को कमजोर नहीं किया जाएगा।
+
+### 19.1 एक Brain, एक Central Orchestrator — LOCK
+
+1. पूरे App में केवल एक Central AI Brain Core होगा। Reasoning, Planning, Memory, Knowledge, Learning, Model Runtime और Domain Intelligence उसी के अधीन modules होंगे; parallel Brain या दूसरा orchestrator नहीं बनेगा।
+2. User-facing नाम **AI Brain** होगा। मौजूदा \`nano-brain\` route IDs, filenames, storage keys और internal identifiers compatibility के लिए बने रह सकते हैं। केवल दृश्य नाम बदलने के लिए उनका rename नहीं होगा; migration पृथक audit, tests और explicit approval से होगा।
+3. एकमात्र execution path: \`index.html\` → \`assets/js/app.js\` Page Loader → Brain Page \`mount(context)\` → Integration Foundation → Security/Storage → Central Core → registered Modules/Adapters।
+4. \`index.html\` में नया Script Tag, parallel entry point या दूसरा loader नहीं जोड़ा जाएगा।
+5. मौजूदा Sanskrit, TTS, Avatar, Video, Media और Nano Server Engines की duplicate implementation नहीं बनेगी। Brain source-audited adapters द्वारा उन्हीं का उपयोग करेगा।
+
+### 19.2 Hybrid Neuro-Symbolic Intelligence — LOCK
+
+Brain में दो सहयोगी पक्ष होंगे:
+- **Neural Intelligence:** भाषा, intent, context, semantic patterns, speech/media features और संभावित उत्तर/योजना के candidate।
+- **Symbolic Intelligence:** नियम, constraints, deterministic checks, permissions, state transitions, plan validation और अंतिम execution authority।
+
+Neural output स्वतः सत्य, अनुमति या executable command नहीं होगा। Core और deterministic validators उसकी जाँच करेंगे। Model अनुपलब्ध होने पर सुरक्षित rule-based काम हो सकता है; Neural capability को उपलब्ध नहीं बताया जाएगा।
+
+### 19.3 End-to-End Task Flow — LOCK
+
+\`User Input → Input Validation → Intent/Context → Memory & Knowledge Retrieval → Reasoning → Task Planning → Plan Validation → Capability/Permission Gate → Allowlisted Skill Execution → Result Verification → User Response → Feedback\`
+
+Controlled learning flow:
+
+\`Feedback → Candidate Learning → Provenance/Evidence → Review → Regression Tests → Explicit Approval → Versioned Activation → Rollback-ready State\`
+
+कोई task validation से पहले execute नहीं होगा। Plan में उद्देश्य, constraints, dependencies, permissions और success criteria होंगे। प्रत्येक output का schema, evidence और relevant engine diagnostics से verification होगा। Partial, failed, cancelled, timeout और degraded परिणाम अलग-अलग दिखेंगे।
+
+### 19.4 Architecture Layers — LOCK
+
+**A. Experience & Interface:** AI Brain Page, task input, progress, approvals, evidence/results और diagnostics; मौजूदा Page Loader lifecycle, \`mount(context)\`, cancellation और cleanup सुरक्षित।
+
+**B. Central Orchestration:** एकमात्र Core; module registry, task lifecycle, dispatch, cancellation, events, permissions और diagnostics। Duplicate IDs, unknown capabilities और unregistered executors reject होंगे।
+
+**C. Cognitive Intelligence:** Intent/Context Understanding, Symbolic Reasoning, Task Planner, Local Neural Model Runtime और Decision/Plan Validator। Reasoning और Planning अलग testable modules, पर Core के अधीन।
+
+**D. Memory & Knowledge:** Working, Episodic, Semantic, Procedural और approved User Preference Memory। Knowledge में source, locator, provenance, confidence, domain, review status और version होंगे। Candidate और Active Knowledge अलग होंगे।
+
+**E. Skill & Execution:** केवल local, built-in, allowlisted skills। Arbitrary JavaScript, \`eval\`, remote executable code और model-generated code execution निषिद्ध। प्रत्येक skill का input/output schema, risk, capabilities, timeout, cancellation और failure contract होगा।
+
+**F. Domain Intelligence & Adapters:** Sanskrit/Vedic; TTS/Voice; Music/Audio/Singing; Media Learning; Avatar/Phoneme/Lip-Sync/Body Language। प्रत्येक adapter मौजूदा engine के audited वास्तविक interface पर बनेगा। TTS और Singing अलग क्षमताएँ रहेंगी।
+
+**G. Local Platform Runtime:** Android Chrome capability detection, IndexedDB structured records, समर्थित होने पर OPFS assets, local model loading, integrity/licence checks, resource limits, cancellation और safe unload।
+
+**H. Trust, Observability & Recovery:** permission/security gate, schema/provenance validation, audit events, diagnostics, error isolation, backup, migration, recovery और rollback। किसी एक module की विफलता unrelated App features को बंद नहीं करेगी।
+
+### 19.5 Canonical Module Contract — LOCK
+
+हर module में unique \`id\`, \`title\`, semantic \`version\`, \`risk\`, declared \`capabilities\`, local built-in executor, JSON-safe validated input/output, lifecycle, diagnostics, cleanup और प्रत्यक्ष \`selfTest()\` होगा। Tests में stable check IDs तथा total/passed/failed/skipped परिणाम होंगे। Errors में machine-readable code और स्पष्ट retryability होगी। Module अपनी permissions नहीं बढ़ाएगा और Core के बाहर task execute नहीं करेगा।
+
+Core की मौजूदा public methods — \`initialize\`, \`diagnostics\`, \`getStatus\`, \`registerModule\`, \`unregisterModule\`, \`listModules\`, \`requestCapabilities\`, \`runTask\`, \`cancelTask\`, \`cancelAllTasks\`, \`dispose\` — compatibility audit और regression tests के बिना हटाई या तोड़ी नहीं जाएँगी।
+
+### 19.6 Task, Reasoning और Planning Contract — LOCK
+
+हर task का logical record task ID, original request, normalized intent, context, constraints, selected modules, dependency plan, required capabilities, state, timestamps और cancellation signal रखेगा। सामान्य states:
+
+\`RECEIVED → VALIDATED → UNDERSTOOD → PLANNED → AWAITING_PERMISSION → EXECUTING → VERIFYING → COMPLETED\`
+
+अन्य वैध states: \`NEEDS_CLARIFICATION\`, \`PARTIAL\`, \`FAILED\`, \`CANCELLED\`, \`BLOCKED\`, \`DEGRADED\`।
+
+Reasoning facts, assumptions और evidence अलग करेगा; contradictions और missing evidence पहचानेगा। Planner dependency graph, order, priority, risk, timeout तथा verification criteria देगा। केवल independent subtasks parallel होंगे; retry bounded और idempotency-aware होगा। Neural-generated reasoning trace स्वयं प्रमाण नहीं होगा।
+
+### 19.7 Memory, Knowledge और Learning — LOCK
+
+Memory पाँचों memory classes तथा retention संभालेगा। Knowledge source-backed records, review और versioned activation संभालेगा। Learning Engine केवल candidate proposals बनाएगा; live Core, security policy, active lexicon, model assets या source code स्वतः rewrite नहीं करेगा। हर approved change में reason, evidence, before/after version, tests, approval और rollback target होगा। Experience memory, symbolic rule learning और neural weight training अलग capabilities हैं। Unreviewed knowledge सक्रिय TTS/pronunciation output को नहीं बदलेगा।
+
+### 19.8 Local Model Runtime — LOCK
+
+Model manifest, asset size, checksum, licence/provenance, device/browser compatibility, tokenizer/pre/post-processing, inference contract, memory budget, cancellation, unload और diagnostics आवश्यक होंगे। कोई external AI API, cloud inference या अनिवार्य remote backend नहीं। Hindi/Sanskrit/Voice performance वास्तविक benchmark से प्रमाणित होगी। Android पर memory, latency, battery/thermal और crash behavior मापे जाएँगे। Model अनुपलब्ध होने पर symbolic fallback और स्पष्ट \`DEGRADED\` स्थिति होगी; remote fallback नहीं।
+
+### 19.9 Domain Adapter Contracts — LOCK
+
+1. **Sanskrit/Vedic:** मौजूदा G2P, pronunciation compiler और Vedic resources के audited exports; lexicon बदलाव source review के बाद।
+2. **TTS/Voice:** मौजूदा TTS adapter; voice/language availability, rate, status और errors की reporting।
+3. **Audio/Music/Singing:** audio features, pitch, rhythm, prosody और singing generation के अलग interfaces; TTS को singing नहीं बताया जाएगा।
+4. **Media Learning:** user-provided media, explicit consent और local processing; निष्कर्ष candidate knowledge होंगे।
+5. **Avatar/Body Language:** phoneme/timestamp, viseme mapping, avatar controls और cleanup; synchronization test के बिना synced घोषित नहीं होगा।
+
+### 19.10 Security और 12 Capabilities — LOCK
+
+Section 16 के सभी बारह capability types स्थायी रहेंगे। Catalogue और actual grants अलग होंगे; access default-deny, task-specific और user-approved होगा। सभी capabilities Architecture में उपयोग योग्य रहेंगी; कोई capability हटाई या स्थायी रूप से निष्क्रिय नहीं होगी। Revocation, cancellation और audit trail आवश्यक हैं।
+
+### 19.11 Storage, Versioning और Offline — LOCK
+
+IndexedDB structured data का प्राथमिक persistent store होगा जहाँ supported हो; volatile fallback को persistent नहीं कहा जाएगा। OPFS बड़े assets के लिए optional होगा। सभी records/assets में schema version, integrity और migration strategy होगी। Backup/export/import, recovery और rollback आवश्यक हैं। Strict Offline केवल वास्तविक Android Chrome पर network-disabled cold start, restart, memory, reasoning और selected domain tasks के सफल परीक्षण के बाद प्रमाणित होगा। Silent network request या remote inference fallback नहीं होगा।
+
+### 19.12 Integration और Compatibility — LOCK
+
+Canonical integration Sections 14.2 और 15 के अनुसार होगा। \`index.html\` Script Tags, Page Loader/Registry और मौजूदा Engines सुरक्षित रहेंगे। User-facing label AI Brain हो सकता है, internal route/file IDs compatibility के लिए बने रहेंगे। Mock-only interface integration का प्रमाण नहीं होगा।
+
+### 19.13 Verification Gates — LOCK
+
+हर module पर क्रमशः source/dependency audit, syntax/static checks, schema/security tests, self-tests, dependent integration tests, Page Loader/lifecycle tests, whole-App regression (TTS, Sanskrit, Avatar, Video, Media, navigation), Chromium tests और वास्तविक Android Chrome tests होंगे। Strict Offline के लिए network-disabled device test अलग आवश्यक है।
+
+Statuses: \`PROPOSED\`, \`IMPLEMENTED\`, \`INTEGRATED\`, \`CI-TESTED\`, \`ANDROID-VERIFIED\`, \`OFFLINE-CERTIFIED\`। एक status दूसरी अवस्था का प्रमाण नहीं होगा।
+
+### 19.14 One-File Engineering और No-Rework Lock
+
+1. हर file Section 13 के locked order, इस Architecture और stable contracts का पालन करेगी।
+2. लिखने से पहले पूरा relevant source, history, imports/exports, dependent calls, tests और Main App integration audit होगा।
+3. सभी ज्ञात प्रमाणित सुधार उसी file के एक complete patch में होंगे।
+4. एक GitHub update call में केवल एक file बदलेगी; प्रत्येक file का अलग atomic commit होगा।
+5. उसी file के exact commit SHA पर आवश्यक tests सफल होने से पहले अगली dependent file शुरू नहीं होगी।
+6. File पहले से Architecture और tests के अनुरूप हो तो unchanged रहेगी; केवल बदलाव दिखाने के लिए update नहीं होगी।
+7. नया feature मौजूदा file का अनावश्यक rewrite नहीं करेगा; focused module/adapter बनेगा, जब तक audit मौजूदा file में बदलाव अनिवार्य न सिद्ध करे।
+8. प्रत्येक report में path, exact GitHub tool name, commit SHA, diff, tests और सीमाएँ दर्ज होंगी।
+9. \`index.html\` Script Tags, entry points और unrelated \`anujadha\` project बिना पृथक explicit approval नहीं बदले जाएँगे।
+
+### 19.15 Definition of Done — LOCK
+
+AI Brain पूर्ण तभी स्वीकार होगा जब एक Core से वास्तविक task routing, benchmark-सफल Reasoning/Planning, restart-persistent Memory, source-reviewed Knowledge, tested/approved/Rollback-able Learning, Android-benchmarked Local Model Runtime, वास्तविक Domain Adapters, permission-controlled execution और सभी आवश्यक regression/browser/Android tests सफल हों। Strict Offline दावा केवल network-disabled device evidence के बाद होगा। कोई ज्ञात high-severity defect खुला नहीं होगा।
+
+यह Architecture लक्ष्य, contracts और acceptance criteria को स्थिर करता है; इससे कोई module स्वतः implemented, integrated या certified नहीं माना जाएगा। वर्तमान स्थिति exact source और test evidence से तय होगी।
+
+**स्थायी मुख्य उद्देश्य:** Swar-Sadhika AI Brain का निर्माण, इसे मूल Swar-Sadhika App से वास्तविक रूप में जोड़ना और इसे इस Architecture के अंतर्गत शक्तिशाली, सुरक्षित, स्थानीय एवं सत्यापन योग्य बनाना। अनावश्यक rework, duplicate engines, parallel Brain, capability reduction और बिना प्रमाण completion claim निषिद्ध हैं।
+
