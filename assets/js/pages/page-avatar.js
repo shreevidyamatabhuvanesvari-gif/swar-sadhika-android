@@ -3,6 +3,7 @@
  * A single photograph supports subtle 2.5D motion only; this is not full 3D reconstruction.
  */
 import { createAvatarTtsEngine, SOFT_YOUNG_FEMININE_PRESET } from "../tts/avatar-tts-engine.js";
+import { createBrainAvatarAdapterPart2, BRAIN_AVATAR_ADAPTER_VERSION_PART2 } from "../brain/brain-avatar-adapter-part2.js";
 
 const MEDIAPIPE_VERSION = "0.10.21";
 const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@" + MEDIAPIPE_VERSION;
@@ -20,6 +21,55 @@ const EYE_GROUPS = [
 
 function finite(value, fallback = 0) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function normalizeBrainAvatarFrame(frame) {
+  if (!frame || frame.version !== BRAIN_AVATAR_ADAPTER_VERSION_PART2 ||
+      typeof frame.active !== "boolean" || typeof frame.paused !== "boolean" ||
+      !frame.mouth || !frame.face || !frame.face.gaze || !frame.body) return null;
+  const mode = ["idle", "speech", "singing"].includes(frame.mode) ? frame.mode : null;
+  const expression = ["gentle", "reverent", "focused", "neutral"].includes(frame.face.expression)
+    ? frame.face.expression : "gentle";
+  const gazeMode = ["auto", "center", "left", "right"].includes(frame.face.gaze.mode)
+    ? frame.face.gaze.mode : "auto";
+  const timestamp = Number(frame.timestamp);
+  if (!mode || !Number.isFinite(timestamp)) return null;
+  const grapheme = typeof frame.mouth.grapheme === "string" ? frame.mouth.grapheme.slice(0, 12) : "";
+  const phoneme = typeof frame.mouth.phoneme === "string" ? frame.mouth.phoneme.slice(0, 32) : "";
+  return Object.freeze({
+    version: BRAIN_AVATAR_ADAPTER_VERSION_PART2,
+    active: frame.active,
+    paused: frame.paused,
+    mode,
+    timestamp,
+    mouth: Object.freeze({
+      viseme: typeof frame.mouth.viseme === "string" ? frame.mouth.viseme.slice(0, 24) : "rest",
+      openness: Math.max(0, Math.min(1, finite(frame.mouth.openness, 0.02))),
+      grapheme,
+      phoneme,
+      charIndex: Math.max(0, Math.floor(finite(frame.mouth.charIndex, 0)))
+    }),
+    face: Object.freeze({
+      expression,
+      gaze: Object.freeze({
+        x: Math.max(-1, Math.min(1, finite(frame.face.gaze.x, 0))),
+        y: Math.max(-1, Math.min(1, finite(frame.face.gaze.y, 0))),
+        mode: gazeMode
+      }),
+      blink: Math.max(0, Math.min(1, finite(frame.face.blink, 0)))
+    }),
+    body: Object.freeze({
+      headSway: Math.max(-0.04, Math.min(0.04, finite(frame.body.headSway, 0))),
+      headNod: Math.max(-0.04, Math.min(0.04, finite(frame.body.headNod, 0))),
+      shoulderSway: Math.max(-0.025, Math.min(0.025, finite(frame.body.shoulderSway, 0)))
+    }),
+    sync: Object.freeze({
+      source: typeof frame.sync?.source === "string" ? frame.sync.source.slice(0, 64) : "unknown",
+      quality: typeof frame.sync?.quality === "string" ? frame.sync.quality.slice(0, 64) : "unknown",
+      confidence: typeof frame.sync?.confidence === "string" ? frame.sync.confidence.slice(0, 32) : "unknown",
+      exactPhonemeTiming: frame.sync?.exactPhonemeTiming === true
+    })
+  });
 }
 
 function signedArea(a, b, c) {
@@ -172,9 +222,14 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   // Very small, reversible head/neck sway; source-photo identity remains the texture.
   const seconds=elapsedMs/1000;
   const speechBoost=state.speechActive && !state.paused ? 1 : 0.55;
-  const headTilt=Math.sin(seconds*0.72)*0.012*speechBoost;
-  const headBob=Math.sin(seconds*1.35)*height*0.004*speechBoost;
-  const shoulderSway=Math.sin(seconds*0.48)*width*0.0035*speechBoost;
+  const brainFrame=state.brainFrame && state.brainFrame.active && !state.brainFrame.paused
+    ? state.brainFrame : null;
+  const brainBody=brainFrame ? brainFrame.body : null;
+  const headTilt=Math.sin(seconds*0.72)*0.012*speechBoost+(brainBody ? brainBody.headSway : 0);
+  const headBob=Math.sin(seconds*1.35)*height*0.004*speechBoost+
+    (brainBody ? brainBody.headNod*height : 0);
+  const shoulderSway=Math.sin(seconds*0.48)*width*0.0035*speechBoost+
+    (brainBody ? brainBody.shoulderSway*width*0.35 : 0);
   for (const point of points) {
     const dx=point.x-centerX;
     const dy=point.y-centerY;
@@ -189,9 +244,13 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   const mouthCenterX=(mouthLeft.x+mouthRight.x)/2;
   const mouthCenterY=(mouthTop.y+mouthBottom.y)/2;
   const mouthWidth=Math.max(1,Math.hypot(mouthRight.x-mouthLeft.x,mouthRight.y-mouthLeft.y));
-  const char = state.speechActive && !state.paused ? currentSpeechCharacter(state, state.speechElapsedMs) : "";
-  const targetOpen = state.speechActive && !state.paused ? characterMouthShape(char) : 0;
-  state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,state.speechActive ? 0.58 : 0.22);
+  const char = brainFrame && brainFrame.mouth.grapheme
+    ? brainFrame.mouth.grapheme
+    : state.speechActive && !state.paused ? currentSpeechCharacter(state, state.speechElapsedMs) : "";
+  const targetOpen = brainFrame
+    ? brainFrame.mouth.openness
+    : state.speechActive && !state.paused ? characterMouthShape(char) : 0;
+  state.mouthOpen=smoothToward(state.mouthOpen,targetOpen,brainFrame ? 0.72 : state.speechActive ? 0.58 : 0.22);
   const opening=state.mouthOpen;
   const gap=Math.min(height*0.055,opening*mouthWidth*0.19);
   if (gap>0.12) {
@@ -211,6 +270,16 @@ function makeAnimatedPoints(base, state, elapsedMs) {
         const weight=Math.exp(-dx*dx*2.1)*Math.max(0,1-dy);
         point.y+=gap*0.11*weight;
       }
+    }
+  }
+
+  // Apply very small, reversible expression cues to the existing photo mesh.
+  if (brainFrame) {
+    const expression=brainFrame.face.expression;
+    if (expression === "focused") {
+      for (const index of [105,334]) if (points[index]) points[index].y+=height*0.0025;
+    } else if (expression === "gentle" || expression === "reverent") {
+      for (const index of [61,291]) if (points[index]) points[index].y-=height*0.0012;
     }
   }
 
@@ -389,7 +458,8 @@ export async function mount(context) {
 
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
-    basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null, motionPulse:0,
+    basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null,
+    brainAdapter:null, brainFrame:null, motionPulse:0,
     voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
     boundaryCharacter:0, speechElapsedMs:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
@@ -469,9 +539,53 @@ export async function mount(context) {
     return state.voices.find(item=>item.key===voiceSelect.value) || null;
   }
 
+  function receiveBrainAvatarFrame(frame) {
+    if (state.destroyed) return false;
+    const safeFrame=normalizeBrainAvatarFrame(frame);
+    if (!safeFrame) return false;
+    state.brainFrame=safeFrame;
+    if (safeFrame.mode === "singing") {
+      state.speechActive=safeFrame.active && !safeFrame.paused;
+      state.paused=safeFrame.paused;
+    }
+    if (!safeFrame.active) state.mouthOpen=smoothToward(state.mouthOpen,0,0.35);
+    return true;
+  }
+
+  function createPageAvatarSurface() {
+    return Object.freeze({
+      renderFrame(frame) {
+        receiveBrainAvatarFrame(frame);
+      },
+      resetFrame() {
+        state.brainFrame=null;
+        state.mouthOpen=0;
+      },
+      setVisible(value) {
+        if (value === false) state.brainFrame=null;
+      }
+    });
+  }
+
   async function initializeSpeech() {
     if (state.engine) return;
     state.engine=createAvatarTtsEngine({target:win});
+    state.brainAdapter=createBrainAvatarAdapterPart2({
+      target:win,
+      avatarTtsEngine:state.engine,
+      singingAdapter:context.singingAdapter || context.brainSpeechSingingAdapter || null,
+      avatarSurface:createPageAvatarSurface()
+    });
+    state.unsubscribers.push(
+      state.brainAdapter.on("warning",detail=>{
+        if (detail && detail.code === "AVATAR_SURFACE_RENDER_FAILED") {
+          setStatus("अवतार Renderer Bridge में त्रुटि: "+(detail.message || "Frame render failed"),"error");
+        }
+      }),
+      state.brainAdapter.on("speecherror",detail=>{
+        if (detail && detail.error) setStatus("अवतार वाचन त्रुटि: "+(detail.error.message || detail.error.code),"error");
+      })
+    );
     state.unsubscribers.push(
       state.engine.on("voiceschanged",()=> {
         state.voiceInventory=state.engine.getInventory();
@@ -498,8 +612,9 @@ export async function mount(context) {
       state.engine.on("pause",()=>{ state.paused=true; updateButtons(); }),
       state.engine.on("resume",()=>{ state.paused=false; state.speechStartedAt=win.performance.now(); updateButtons(); })
     );
-    const initialized=await state.engine.initialize();
-    state.voiceInventory=initialized.inventory;
+    const avatarStatus=await state.brainAdapter.initialize();
+    state.voiceInventory=state.engine.getInventory();
+    const initialized={ready:Boolean(avatarStatus && avatarStatus.nativeTtsAvailable),inventory:state.voiceInventory};
     if (!initialized.ready) {
       setVoiceStatus("इस browser में Native SpeechSynthesis उपलब्ध नहीं है।","error");
       updateButtons();
@@ -630,6 +745,13 @@ export async function mount(context) {
   function render(elapsedMs) {
     if (!state.baseCanvas || !state.basePoints) return;
     updateIdle(elapsedMs);
+    const frame=state.brainFrame;
+    if (frame) {
+      state.gaze.x=frame.face.gaze.x;
+      state.gaze.y=frame.face.gaze.y;
+      state.blink=frame.face.blink;
+      state.gazeMode=frame.face.gaze.mode;
+    }
     const points=makeAnimatedPoints(state.basePoints,state,elapsedMs);
     drawFaceMesh(context2d,state.baseCanvas,state.basePoints,points,state.triangles,state);
     // Keep the portrait canvas fixed. The face mesh itself carries the expression,
@@ -681,7 +803,7 @@ export async function mount(context) {
     state.paused=false;
     updateButtons();
     try {
-      const result=await state.engine.speak(text,{
+      const result=await state.brainAdapter.speak(text,{
         voiceKey:voice.key,rate:state.rate,pitch:SOFT_YOUNG_FEMININE_PRESET.pitch,volume:SOFT_YOUNG_FEMININE_PRESET.volume,replace:true
       });
       if (result && result.status==="cancelled") state.speechActive=false;
@@ -697,7 +819,7 @@ export async function mount(context) {
 
   async function pause() {
     if (!state.engine || !state.speechActive) return;
-    const ok=await state.engine.pause();
+    const ok=state.brainAdapter ? await state.brainAdapter.pause() : await state.engine.pause();
     state.paused=Boolean(ok);
     updateButtons();
     if (ok) setStatus("वाचन और अवतार की होंठ-गति रोक दी गई है।");
@@ -705,7 +827,7 @@ export async function mount(context) {
 
   async function resume() {
     if (!state.engine || !state.paused) return;
-    const ok=await state.engine.resume();
+    const ok=state.brainAdapter ? await state.brainAdapter.resume() : await state.engine.resume();
     state.paused=!ok;
     if (ok) { state.speechStartedAt=win.performance.now(); state.speechElapsedMs=0; }
     updateButtons();
@@ -713,7 +835,10 @@ export async function mount(context) {
 
   async function stopSpeech() {
     if (!state.engine) return;
-    try { state.engine.cancel("user-stop"); } catch (_) {}
+    try {
+      if (state.brainAdapter) await state.brainAdapter.stop("user-stop");
+      else state.engine.cancel("user-stop");
+    } catch (_) {}
     state.speechActive=false;state.paused=false;state.mouthOpen=0;
     updateButtons();
   }
@@ -721,6 +846,7 @@ export async function mount(context) {
   function resetPhoto() {
     void stopSpeech();
     state.speechElapsedMs=0;
+    state.brainFrame=null;
     stopAnimation();
     state.faceLayer=null;
     state.faceLayerContext=null;
@@ -761,6 +887,9 @@ export async function mount(context) {
 
   function setGaze() {
     state.gazeMode=gazeSelect.value;
+    if (state.brainAdapter) {
+      try { state.brainAdapter.setGaze(state.gazeMode); } catch (_) {}
+    }
   }
 
   function onRate() {
@@ -802,13 +931,21 @@ export async function mount(context) {
     state.visible=false;
     stopAnimation();
     aborter.abort();
-    try { if (state.engine) state.engine.cancel("page-unmount"); } catch (_) {}
+    try {
+      if (state.brainAdapter && state.brainAdapter.getStatus().active) await state.brainAdapter.stop("page-unmount");
+      else if (state.engine) state.engine.cancel("page-unmount");
+    } catch (_) {}
     for (const unsubscribe of state.unsubscribers) {
       try { unsubscribe(); } catch (_) {}
+    }
+    if (state.brainAdapter) {
+      try { await state.brainAdapter.dispose(); } catch (_) {}
+      state.brainAdapter=null;
     }
     if (state.engine) {
       try { await state.engine.dispose(); } catch (_) {}
     }
+    state.brainFrame=null;
     if (state.faceLandmarker) {
       try { state.faceLandmarker.close(); } catch (_) {}
     }
@@ -820,10 +957,12 @@ export async function mount(context) {
   return {
     onShow() {
       state.visible=true;
+      if (state.brainAdapter) state.brainAdapter.setVisible(true);
       if (state.basePoints) startAnimation();
     },
     async onHide() {
       state.visible=false;
+      if (state.brainAdapter) state.brainAdapter.setVisible(false);
       stopAnimation();
       await stopSpeech();
     },
@@ -869,6 +1008,16 @@ export function selfTest() {
   const blinkPoints=makeAnimatedPoints(synthetic,blinkState,900);
   const mouthState={speechActive:true,paused:false,speechText:"आ",boundaryCharacter:0,speechElapsedMs:250,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
   const mouthPoints=makeAnimatedPoints(synthetic,mouthState,250);
+  const rendererFrame=normalizeBrainAvatarFrame({
+    version:BRAIN_AVATAR_ADAPTER_VERSION_PART2,active:true,paused:false,mode:"speech",timestamp:250,
+    mouth:{viseme:"open",openness:0.95,grapheme:"आ",phoneme:"a",charIndex:0},
+    face:{expression:"gentle",gaze:{x:0.9,y:0,mode:"right"},blink:0},
+    body:{headSway:0.006,headNod:0.004,shoulderSway:0.002},
+    sync:{source:"native-tts-boundary",quality:"native-boundary",confidence:"medium",exactPhonemeTiming:false}
+  });
+  const bridgeState={speechActive:false,paused:false,speechText:"",rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",brainFrame:rendererFrame};
+  const bridgePoints=makeAnimatedPoints(synthetic,bridgeState,250);
+  const rejectedRendererFrame=normalizeBrainAvatarFrame({version:"0.0.0",active:true});
   const closedState={speechActive:true,paused:true,speechText:"आ",boundaryCharacter:0,rate:1,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center"};
   const closedPoints=makeAnimatedPoints(synthetic,closedState,250);
   const maxPointDelta=(left,right)=>Math.max(...left.map((point,index)=>Math.hypot(point.x-right[index].x,point.y-right[index].y)));
@@ -885,6 +1034,10 @@ export function selfTest() {
     {id:"gaze-produces-visible-iris-displacement",passed:Math.abs(gazePoints[468].x-synthetic[468].x)>4},
     {id:"blink-closes-eye-landmarks",passed:Math.abs(blinkPoints[159].y-synthetic[159].y)>2 && Math.abs(blinkPoints[145].y-synthetic[145].y)>1},
     {id:"speech-opens-photo-mouth",passed:mouthGap(mouthPoints)>mouthGap(synthetic)+3 && mouthState.mouthOpen>0},
+    {id:"brain-renderer-frame-contract-validates",passed:Boolean(rendererFrame) && rejectedRendererFrame===null},
+    {id:"brain-frame-opens-photo-mouth",passed:mouthGap(bridgePoints)>mouthGap(synthetic)+3},
+    {id:"brain-frame-moves-photo-gaze",passed:Math.abs(bridgePoints[468].x-synthetic[468].x)>3},
+    {id:"brain-frame-includes-2-5d-head-motion",passed:maxPointDelta(bridgePoints,synthetic)>0.5},
     {id:"pause-closes-viseme-motion",passed:closedState.mouthOpen===0 && Math.abs(Math.hypot(closedPoints[14].x-closedPoints[13].x,closedPoints[14].y-closedPoints[13].y)-Math.hypot(synthetic[14].x-synthetic[13].x,synthetic[14].y-synthetic[13].y))<1e-6},
     {id:"face-point-animation-preserves-source-count",passed:makeAnimatedPoints(synthetic,{speechActive:false,paused:false,mouthOpen:0,blink:0,gaze:{x:0,y:0},gazeMode:"center",rate:1,speechElapsedMs:0},0).length===478},
     {id:"pinned-on-device-runtime",passed:MEDIAPIPE_VERSION==="0.10.21" && FACE_MODEL_URL.startsWith("https://storage.googleapis.com/mediapipe-models/")},
