@@ -1,5 +1,14 @@
 {
   "schemaVersion": 1,
   "appId": "swar-sadhika-android",
-  "modules": []
+  "modules": [
+    {
+      "id": "vocal-singing-engine-part2",
+      "title": "Model-Free Sanskrit Vocal Singing Engine (Part 2)",
+      "file": "modules/vocal-singing-engine-part2.js",
+      "description": "Local Web Audio DSP vocal synthesis for Sanskrit syllables; no AI model, network request, or instrumental accompaniment.",
+      "enabled": true,
+      "status": "active"
+    }
+  ]
 }
