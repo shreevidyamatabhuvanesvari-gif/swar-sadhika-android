@@ -30,8 +30,8 @@ import {
  * No network request or model download is performed by this engine.
  */
 
-export const TTS_ENGINE_VERSION = "1.6.1";
-export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-11";
+export const TTS_ENGINE_VERSION = "1.6.2";
+export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-12";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -398,6 +398,98 @@ function createNativeBackend(host, resumeConfirmationTimeoutMs) {
     return selected;
   }
 
+  const androidChromeRuntime = detectNativePlatform(host) === "Android Chrome";
+
+  function attachUtterance(current, text, textOffset = 0) {
+    const utterance = new Utterance(text);
+    if (current.voice) utterance.voice = current.voice;
+    utterance.lang = current.lang;
+    utterance.rate = current.rate;
+    utterance.pitch = current.pitch;
+    utterance.volume = current.volume;
+    current.utterance = utterance;
+    current.textOffset = textOffset;
+    current.suppressNativeEvents = false;
+
+    const isCurrentUtterance = () => pending === current && !current.settled &&
+      current.utterance === utterance && !current.suppressNativeEvents;
+
+    utterance.onstart = event => {
+      if (!isCurrentUtterance()) return;
+      if (current.resumeMode === "android-restart" && typeof current.resumeWaiter === "function") {
+        current.resumeWaiter(true);
+      }
+      emitEvent("utterancestart", {
+        backendId: "native",
+        charIndex: textOffset + (Number(event && event.charIndex) || 0)
+      });
+    };
+    utterance.onboundary = event => {
+      if (!isCurrentUtterance()) return;
+      const relativeIndex = Number(event && event.charIndex);
+      const absoluteIndex = textOffset + (Number.isFinite(relativeIndex) ? Math.max(0, relativeIndex) : 0);
+      if (Number.isFinite(relativeIndex)) {
+        current.lastBoundaryIndex = Math.max(
+          current.lastBoundaryIndex,
+          Math.min(current.fullText.length, absoluteIndex)
+        );
+      }
+      emitEvent("boundary", {
+        backendId: "native",
+        charIndex: absoluteIndex,
+        charLength: Number(event && event.charLength) || 0,
+        name: event && event.name ? String(event.name) : "",
+        elapsedTime: Number(event && event.elapsedTime) || 0
+      });
+    };
+    utterance.onpause = event => {
+      if (!isCurrentUtterance()) return;
+      emitEvent("utterancepause", {
+        backendId: "native",
+        elapsedTime: Number(event && event.elapsedTime) || 0
+      });
+    };
+    utterance.onresume = event => {
+      if (!isCurrentUtterance()) return;
+      if (current.resumeMode === "native" && typeof current.resumeWaiter === "function") {
+        current.resumeWaiter(true);
+      } else if (current.resumeTimedOut && typeof synthesis.pause === "function") {
+        current.resumeTimedOut = false;
+        try { synthesis.pause(); } catch (_) {}
+        emitEvent("warning", {
+          code: "NATIVE_LATE_RESUME_REPAUSED",
+          message: "Resume confirmation समय-सीमा के बाद मिला; वाचन को पुनः Pause करने का प्रयास किया गया।"
+        });
+      }
+      emitEvent("utteranceresume", {
+        backendId: "native",
+        elapsedTime: Number(event && event.elapsedTime) || 0
+      });
+    };
+    utterance.onend = event => {
+      if (!isCurrentUtterance()) return;
+      settlePending(current, {
+        status: "ended",
+        backendId: "native",
+        elapsedTime: Number(event && event.elapsedTime) || 0
+      });
+    };
+    utterance.onerror = event => {
+      if (!isCurrentUtterance()) return;
+      const nativeCode = event && event.error ? String(event.error) : "unknown";
+      if (nativeCode === "canceled" || nativeCode === "interrupted") {
+        settlePending(current, { status: "cancelled", reason: nativeCode, backendId: "native" });
+        return;
+      }
+      settlePending(current, null, new TtsEngineError(
+        "Native Speech Synthesis त्रुटि: " + nativeCode,
+        "NATIVE_SPEECH_ERROR",
+        { nativeCode }
+      ));
+    };
+    synthesis.speak(utterance);
+  }
+
   return {
     id: "native",
     type: "native",
@@ -454,97 +546,125 @@ function createNativeBackend(host, resumeConfirmationTimeoutMs) {
       }
 
       return new Promise((resolve, reject) => {
-        const utterance = new Utterance(text);
-        const voice = resolveVoice(options);
-        if (voice) utterance.voice = voice;
-        utterance.lang = String(options.lang || (voice && voice.lang) || "hi-IN");
-        utterance.rate = finiteNumber(options.rate, 1, 0.1, 10);
-        utterance.pitch = finiteNumber(options.pitch, 1, 0, 2);
-        utterance.volume = finiteNumber(options.volume, 1, 0, 1);
-
-        const current = { resolve, reject, utterance, settled: false };
-        pending = current;
-        const isCurrentUtterance = () => pending === current && !current.settled;
-        utterance.onstart = event => {
-          if (!isCurrentUtterance()) return;
-          emitEvent("utterancestart", {
-            backendId: "native", charIndex: Number(event && event.charIndex) || 0
-          });
-        };
-        utterance.onboundary = event => {
-          if (!isCurrentUtterance()) return;
-          emitEvent("boundary", {
-            backendId: "native",
-            charIndex: Number(event && event.charIndex) || 0,
-            charLength: Number(event && event.charLength) || 0,
-            name: event && event.name ? String(event.name) : "",
-            elapsedTime: Number(event && event.elapsedTime) || 0
-          });
-        };
-        utterance.onpause = event => {
-          if (!isCurrentUtterance()) return;
-          emitEvent("utterancepause", {
-            backendId: "native",
-            elapsedTime: Number(event && event.elapsedTime) || 0
-          });
-        };
-        utterance.onresume = event => {
-          if (!isCurrentUtterance()) return;
-          if (typeof current.resumeWaiter === "function") {
-            current.resumeWaiter(true);
-          } else if (current.resumeTimedOut && typeof synthesis.pause === "function") {
-            current.resumeTimedOut = false;
-            try { synthesis.pause(); } catch (_) {}
-            emitEvent("warning", {
-              code: "NATIVE_LATE_RESUME_REPAUSED",
-              message: "Resume confirmation समय-सीमा के बाद मिला; वाचन को पुनः Pause करने का प्रयास किया गया।"
-            });
-          }
-          emitEvent("utteranceresume", {
-            backendId: "native",
-            elapsedTime: Number(event && event.elapsedTime) || 0
-          });
-        };
-        utterance.onend = event => {
-          if (!isCurrentUtterance()) return;
-          settlePending(current, {
-            status: "ended",
-            backendId: "native",
-            elapsedTime: Number(event && event.elapsedTime) || 0
-          });
-        };
-        utterance.onerror = event => {
-          if (!isCurrentUtterance()) return;
-          const nativeCode = event && event.error ? String(event.error) : "unknown";
-          if (nativeCode === "canceled" || nativeCode === "interrupted") {
-            settlePending(current, { status: "cancelled", reason: nativeCode, backendId: "native" });
-            return;
-          }
-          settlePending(current, null, new TtsEngineError(
-            "Native Speech Synthesis त्रुटि: " + nativeCode,
-            "NATIVE_SPEECH_ERROR",
-            { nativeCode }
-          ));
-        };
-
-        try {
-          synthesis.speak(utterance);
-        } catch (error) {
-          settlePending(current, null, asError(error, "NATIVE_SPEAK_FAILED"));
+        let voice;
+        try { voice = resolveVoice(options); }
+        catch (error) {
+          reject(asError(error, "NATIVE_VOICE_RESOLUTION_FAILED"));
+          return;
         }
+        const current = {
+          resolve, reject, utterance: null, settled: false,
+          fullText: text, voice,
+          lang: String(options.lang || (voice && voice.lang) || "hi-IN"),
+          rate: finiteNumber(options.rate, 1, 0.1, 10),
+          pitch: finiteNumber(options.pitch, 1, 0, 2),
+          volume: finiteNumber(options.volume, 1, 0, 1),
+          lastBoundaryIndex: 0, textOffset: 0,
+          androidPauseOffset: 0, androidPaused: false,
+          suppressNativeEvents: false
+        };
+        pending = current;
+        try { attachUtterance(current, text, 0); }
+        catch (error) { settlePending(current, null, asError(error, "NATIVE_SPEAK_FAILED")); }
       });
     },
     pause() {
-      if (!synthesis || typeof synthesis.pause !== "function") return false;
+      if (!synthesis || !pending || pending.settled) return false;
+      const current = pending;
+      if (androidChromeRuntime) {
+        if (typeof synthesis.cancel !== "function") return false;
+        if (current.androidPaused) return true;
+        current.androidPauseOffset = Math.max(
+          0, Math.min(current.fullText.length, current.lastBoundaryIndex || 0)
+        );
+        current.androidPaused = true;
+        current.suppressNativeEvents = true;
+        try {
+          synthesis.cancel();
+        } catch (error) {
+          current.androidPaused = false;
+          current.suppressNativeEvents = false;
+          emitEvent("warning", {
+            code: "NATIVE_ANDROID_SOFT_PAUSE_FAILED",
+            message: asError(error, "NATIVE_ANDROID_SOFT_PAUSE_FAILED").message
+          });
+          return false;
+        }
+        emitEvent("utterancepause", {
+          backendId: "native", charIndex: current.androidPauseOffset, emulated: true
+        });
+        if (current.androidPauseOffset === 0) {
+          emitEvent("warning", {
+            code: "NATIVE_ANDROID_BOUNDARY_UNAVAILABLE",
+            message: "Voice ने शब्द-सीमा उपलब्ध नहीं कराई; Resume पर वर्तमान पंक्ति की शुरुआत दोबारा पढ़ी जा सकती है।"
+          });
+        }
+        return true;
+      }
+      if (typeof synthesis.pause !== "function") return false;
       synthesis.pause();
       return true;
     },
     resume() {
-      if (!synthesis || typeof synthesis.resume !== "function" || !pending || pending.settled) return false;
+      if (!synthesis || !pending || pending.settled) return false;
       const current = pending;
       if (current.resumePromise) return current.resumePromise;
       if (!scheduleTimeout) return false;
 
+      if (androidChromeRuntime && current.androidPaused) {
+        const offset = Math.max(0, Math.min(current.fullText.length, current.androidPauseOffset || 0));
+        const remainingText = current.fullText.slice(offset);
+        if (!remainingText.trim()) {
+          settlePending(current, { status: "ended", backendId: "native", resumedFromOffset: offset });
+          return true;
+        }
+        let resolveResume;
+        const resumePromise = new Promise(resolve => { resolveResume = resolve; });
+        current.resumePromise = resumePromise;
+        current.resumeMode = "android-restart";
+        let settled = false;
+        let timeoutId = null;
+        const finishAndroidResume = confirmed => {
+          if (settled) return;
+          settled = true;
+          if (timeoutId !== null && cancelTimeout) cancelTimeout(timeoutId);
+          if (current.resumeWaiter === finishAndroidResume) current.resumeWaiter = null;
+          current.resumePromise = null;
+          current.resumeMode = null;
+          if (confirmed) {
+            current.androidPaused = false;
+            current.suppressNativeEvents = false;
+            current.resumeTimedOut = false;
+          } else {
+            current.androidPaused = true;
+            current.suppressNativeEvents = true;
+          }
+          resolveResume(Boolean(confirmed));
+        };
+        current.resumeWaiter = finishAndroidResume;
+        try {
+          timeoutId = scheduleTimeout(() => {
+            current.suppressNativeEvents = true;
+            current.androidPaused = true;
+            try { synthesis.cancel(); } catch (_) {}
+            finishAndroidResume(false);
+            emitEvent("warning", {
+              code: "NATIVE_ANDROID_RESTART_TIMEOUT",
+              message: "Android Native TTS ने नया वाचन निर्धारित समय में शुरू नहीं किया।"
+            });
+          }, resumeConfirmationDelay);
+          attachUtterance(current, remainingText, offset);
+        } catch (error) {
+          finishAndroidResume(false);
+          emitEvent("warning", {
+            code: "NATIVE_ANDROID_RESTART_FAILED",
+            message: asError(error, "NATIVE_ANDROID_RESTART_FAILED").message
+          });
+        }
+        return resumePromise;
+      }
+
+      if (typeof synthesis.resume !== "function") return false;
       let resolveResume;
       let rejectResume;
       const resumePromise = new Promise((resolve, reject) => {
@@ -553,6 +673,7 @@ function createNativeBackend(host, resumeConfirmationTimeoutMs) {
       });
       current.resumePromise = resumePromise;
       current.resumeTimedOut = false;
+      current.resumeMode = "native";
       let settled = false;
       let timeoutId = null;
       const finishResume = (confirmed, error) => {
@@ -561,6 +682,7 @@ function createNativeBackend(host, resumeConfirmationTimeoutMs) {
         if (timeoutId !== null && cancelTimeout) cancelTimeout(timeoutId);
         if (current.resumeWaiter === finishResume) current.resumeWaiter = null;
         current.resumePromise = null;
+        current.resumeMode = null;
         if (confirmed === true) current.resumeTimedOut = false;
         else if (!error) current.resumeTimedOut = true;
         if (error) rejectResume(error);
@@ -697,7 +819,6 @@ export async function runIntegrationSelfTest() {
   let voiceDiscoveryTimer = null;
   let activeTestUtterance = null;
   let holdNextUtterance = false;
-  let resumeEventEnabled = true;
   const synthesisListeners = new Map();
   class TestSpeechSynthesisUtterance {
     constructor(text) { this.text = text; this.rate = 1; this.pitch = 1; this.volume = 1; }
@@ -731,6 +852,9 @@ export async function runIntegrationSelfTest() {
         if (typeof utterance.onstart === "function") utterance.onstart({ charIndex: 0 });
         if (typeof utterance.onboundary === "function") {
           utterance.onboundary({ charIndex: 0, charLength: 2, name: "word", elapsedTime: 0 });
+          if (utterance.text === "alpha beta gamma") {
+            utterance.onboundary({ charIndex: 6, charLength: 4, name: "word", elapsedTime: 1 });
+          }
         }
         if (!hold && typeof utterance.onend === "function") {
           utterance.onend({ elapsedTime: 1 });
@@ -738,17 +862,19 @@ export async function runIntegrationSelfTest() {
         }
       });
     },
-    cancel() { activeTestUtterance = null; },
+    cancel() {
+      const current = activeTestUtterance;
+      activeTestUtterance = null;
+      if (current && typeof current.onerror === "function") current.onerror({ error: "canceled" });
+    },
     pause() {
       const current = activeTestUtterance;
       if (current && typeof current.onpause === "function") current.onpause({ elapsedTime: 0 });
     },
     resume() {
       const current = activeTestUtterance;
-      if (resumeEventEnabled && current) Promise.resolve().then(() => {
-        if (activeTestUtterance === current && typeof current.onresume === "function") {
-          current.onresume({ elapsedTime: 1 });
-        }
+      if (current && typeof current.onresume === "function") Promise.resolve().then(() => {
+        if (activeTestUtterance === current) current.onresume({ elapsedTime: 1 });
       });
     }
   };
@@ -839,28 +965,19 @@ export async function runIntegrationSelfTest() {
         capturedBoundary.charLength === 2 && capturedBoundary.backendId === "native"));
 
     holdNextUtterance = true;
-    const confirmedResumeSpeech = engine.speak("Resume confirmation success test", { voice, language: "hi" });
+    const androidPauseSpeech = engine.speak("alpha beta gamma", { voice, language: "hi" });
     await new Promise(resolve => setTimeout(resolve, 0));
-    const confirmedPause = await engine.pause();
-    const confirmedResume = await engine.resume();
-    const confirmedPlayback = engine.getStatus().playback;
-    await engine.cancel();
-    await confirmedResumeSpeech;
-    add("native-resume-waits-for-onresume-event",
-      confirmedPause && confirmedResume && confirmedPlayback === "speaking");
-
-    resumeEventEnabled = false;
+    const androidPauseResult = await engine.pause();
+    const pausedStatus = engine.getStatus().playback;
     holdNextUtterance = true;
-    const unconfirmedResumeSpeech = engine.speak("Resume confirmation timeout test", { voice, language: "hi" });
-    await new Promise(resolve => setTimeout(resolve, 0));
-    const timeoutPause = await engine.pause();
-    const unconfirmedResume = await engine.resume();
-    const timeoutPlayback = engine.getStatus().playback;
+    const androidResumeResult = await engine.resume();
+    const resumedStatus = engine.getStatus().playback;
+    const resumedText = capturedSpeech[capturedSpeech.length - 1];
     await engine.cancel();
-    await unconfirmedResumeSpeech;
-    resumeEventEnabled = true;
-    add("native-resume-timeout-keeps-engine-paused",
-      timeoutPause && unconfirmedResume === false && timeoutPlayback === "paused");
+    await androidPauseSpeech;
+    add("android-pause-cancel-restarts-from-last-word-boundary",
+      androidPauseResult && pausedStatus === "paused" && androidResumeResult &&
+      resumedStatus === "speaking" && resumedText === "beta gamma");
 
     const mantra = "ॐ नमः शिवाय";
     const g2pPreparation = engine.prepareSpeech(mantra, {
