@@ -30,8 +30,8 @@ import {
  * No network request or model download is performed by this engine.
  */
 
-export const TTS_ENGINE_VERSION = "1.6.0";
-export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-10";
+export const TTS_ENGINE_VERSION = "1.6.1";
+export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-11";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -100,6 +100,7 @@ function freezeCopy(value, seen = new WeakMap()) {
 }
 
 const NATIVE_TTS_ENGINE_NAME = "Web Speech API SpeechSynthesis";
+const NATIVE_RESUME_CONFIRMATION_TIMEOUT_MS = 1800;
 
 function makeCompilerFallbackResult(originalText, code, message) {
   const codePointLength = Array.from(originalText).length;
@@ -250,7 +251,7 @@ function detectNativePlatform(host, suppliedPlatform) {
   return "";
 }
 
-function createNativeBackend(host) {
+function createNativeBackend(host, resumeConfirmationTimeoutMs) {
   const synthesis = host && host.speechSynthesis;
   const Utterance = host && host.SpeechSynthesisUtterance;
   const timerHost = host && typeof host.setTimeout === "function" ? host : globalThis;
@@ -262,6 +263,9 @@ function createNativeBackend(host) {
     ? timerHost.setInterval.bind(timerHost) : null;
   const cancelInterval = typeof timerHost.clearInterval === "function"
     ? timerHost.clearInterval.bind(timerHost) : null;
+  const resumeConfirmationDelay = finiteNumber(
+    resumeConfirmationTimeoutMs, NATIVE_RESUME_CONFIRMATION_TIMEOUT_MS, 10, 5000
+  );
   let pending = null;
   let emitEvent = () => {};
   let voiceListener = null;
@@ -346,6 +350,7 @@ function createNativeBackend(host) {
 
   function settlePending(expected, result, error) {
     if (!expected || pending !== expected || expected.settled) return;
+    if (typeof expected.resumeWaiter === "function") expected.resumeWaiter(false);
     expected.settled = true;
     pending = null;
     if (error) expected.reject(error);
@@ -485,6 +490,16 @@ function createNativeBackend(host) {
         };
         utterance.onresume = event => {
           if (!isCurrentUtterance()) return;
+          if (typeof current.resumeWaiter === "function") {
+            current.resumeWaiter(true);
+          } else if (current.resumeTimedOut && typeof synthesis.pause === "function") {
+            current.resumeTimedOut = false;
+            try { synthesis.pause(); } catch (_) {}
+            emitEvent("warning", {
+              code: "NATIVE_LATE_RESUME_REPAUSED",
+              message: "Resume confirmation समय-सीमा के बाद मिला; वाचन को पुनः Pause करने का प्रयास किया गया।"
+            });
+          }
           emitEvent("utteranceresume", {
             backendId: "native",
             elapsedTime: Number(event && event.elapsedTime) || 0
@@ -525,9 +540,40 @@ function createNativeBackend(host) {
       return true;
     },
     resume() {
-      if (!synthesis || typeof synthesis.resume !== "function") return false;
-      synthesis.resume();
-      return true;
+      if (!synthesis || typeof synthesis.resume !== "function" || !pending || pending.settled) return false;
+      const current = pending;
+      if (current.resumePromise) return current.resumePromise;
+      if (!scheduleTimeout) return false;
+
+      let resolveResume;
+      let rejectResume;
+      const resumePromise = new Promise((resolve, reject) => {
+        resolveResume = resolve;
+        rejectResume = reject;
+      });
+      current.resumePromise = resumePromise;
+      current.resumeTimedOut = false;
+      let settled = false;
+      let timeoutId = null;
+      const finishResume = (confirmed, error) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null && cancelTimeout) cancelTimeout(timeoutId);
+        if (current.resumeWaiter === finishResume) current.resumeWaiter = null;
+        current.resumePromise = null;
+        if (confirmed === true) current.resumeTimedOut = false;
+        else if (!error) current.resumeTimedOut = true;
+        if (error) rejectResume(error);
+        else resolveResume(confirmed === true);
+      };
+      current.resumeWaiter = finishResume;
+      try {
+        timeoutId = scheduleTimeout(() => finishResume(false), resumeConfirmationDelay);
+        synthesis.resume();
+      } catch (error) {
+        finishResume(false, asError(error, "NATIVE_RESUME_FAILED"));
+      }
+      return resumePromise;
     },
     cancel() {
       if (!synthesis || typeof synthesis.cancel !== "function") return false;
@@ -649,6 +695,9 @@ export async function runIntegrationSelfTest() {
   let capturedVoiceChange = null;
   let voicesReady = false;
   let voiceDiscoveryTimer = null;
+  let activeTestUtterance = null;
+  let holdNextUtterance = false;
+  let resumeEventEnabled = true;
   const synthesisListeners = new Map();
   class TestSpeechSynthesisUtterance {
     constructor(text) { this.text = text; this.rate = 1; this.pitch = 1; this.volume = 1; }
@@ -674,15 +723,34 @@ export async function runIntegrationSelfTest() {
     },
     speak(utterance) {
       capturedSpeech.push(utterance.text);
+      const hold = holdNextUtterance;
+      holdNextUtterance = false;
+      activeTestUtterance = utterance;
       Promise.resolve().then(() => {
+        if (activeTestUtterance !== utterance) return;
         if (typeof utterance.onstart === "function") utterance.onstart({ charIndex: 0 });
         if (typeof utterance.onboundary === "function") {
           utterance.onboundary({ charIndex: 0, charLength: 2, name: "word", elapsedTime: 0 });
         }
-        if (typeof utterance.onend === "function") utterance.onend({ elapsedTime: 1 });
+        if (!hold && typeof utterance.onend === "function") {
+          utterance.onend({ elapsedTime: 1 });
+          if (activeTestUtterance === utterance) activeTestUtterance = null;
+        }
       });
     },
-    cancel() {}, pause() {}, resume() {}
+    cancel() { activeTestUtterance = null; },
+    pause() {
+      const current = activeTestUtterance;
+      if (current && typeof current.onpause === "function") current.onpause({ elapsedTime: 0 });
+    },
+    resume() {
+      const current = activeTestUtterance;
+      if (resumeEventEnabled && current) Promise.resolve().then(() => {
+        if (activeTestUtterance === current && typeof current.onresume === "function") {
+          current.onresume({ elapsedTime: 1 });
+        }
+      });
+    }
   };
   const manifestEntry = Object.freeze({
     id: "swar-sadhika-engine-integration-rules",
@@ -725,7 +793,10 @@ export async function runIntegrationSelfTest() {
   let adapter = null, engine = null, failure = null;
   try {
     adapter = createNanoServerTtsKnowledgeAdapter({ knowledgeAPI });
-    engine = createTtsEngine({ target: host, knowledgeAdapter: adapter, autoLoadKnowledge: false, defaultLanguage: "hi" });
+    engine = createTtsEngine({
+      target: host, knowledgeAdapter: adapter, autoLoadKnowledge: false, defaultLanguage: "hi",
+      nativeResumeConfirmationTimeoutMs: 40
+    });
     engine.on("voiceschanged", detail => {
       capturedVoiceChange = detail || null;
     });
@@ -766,6 +837,30 @@ export async function runIntegrationSelfTest() {
     add("native-utterance-boundary-event-forwarded",
       Boolean(capturedBoundary && capturedBoundary.charIndex === 0 &&
         capturedBoundary.charLength === 2 && capturedBoundary.backendId === "native"));
+
+    holdNextUtterance = true;
+    const confirmedResumeSpeech = engine.speak("Resume confirmation success test", { voice, language: "hi" });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const confirmedPause = await engine.pause();
+    const confirmedResume = await engine.resume();
+    const confirmedPlayback = engine.getStatus().playback;
+    await engine.cancel();
+    await confirmedResumeSpeech;
+    add("native-resume-waits-for-onresume-event",
+      confirmedPause && confirmedResume && confirmedPlayback === "speaking");
+
+    resumeEventEnabled = false;
+    holdNextUtterance = true;
+    const unconfirmedResumeSpeech = engine.speak("Resume confirmation timeout test", { voice, language: "hi" });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const timeoutPause = await engine.pause();
+    const unconfirmedResume = await engine.resume();
+    const timeoutPlayback = engine.getStatus().playback;
+    await engine.cancel();
+    await unconfirmedResumeSpeech;
+    resumeEventEnabled = true;
+    add("native-resume-timeout-keeps-engine-paused",
+      timeoutPause && unconfirmedResume === false && timeoutPlayback === "paused");
 
     const mantra = "ॐ नमः शिवाय";
     const g2pPreparation = engine.prepareSpeech(mantra, {
@@ -1412,8 +1507,19 @@ export function createTtsEngine(options = {}) {
     const backend = activeBackend;
     try {
       const result = await backend.resume();
-      if (result === false || activeSpeech !== speech || activeBackend !== backend) return false;
+      if (result === false || activeSpeech !== speech || activeBackend !== backend) {
+        if (result === false && activeSpeech === speech && activeBackend === backend) {
+          lastError = new TtsEngineError(
+            "Native Speech Synthesis ने निर्धारित समय में Resume की पुष्टि नहीं की।",
+            "SPEECH_RESUME_UNCONFIRMED"
+          );
+          emit("speecherror", { backendId: activeBackendId, code: lastError.code, message: lastError.message });
+          emit("statuschange", getStatus());
+        }
+        return false;
+      }
       playback = "speaking";
+      lastError = null;
       emit("speechresumed", { backendId: activeBackendId });
       emit("statuschange", getStatus());
       return true;
@@ -1920,7 +2026,7 @@ export function createTtsEngine(options = {}) {
     return disposePromise;
   }
 
-  registerBackend(createNativeBackend(host));
+  registerBackend(createNativeBackend(host, options.nativeResumeConfirmationTimeoutMs));
 
   return Object.freeze({
     version: TTS_ENGINE_VERSION,
