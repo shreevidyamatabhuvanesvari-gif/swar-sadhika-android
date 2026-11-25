@@ -25,12 +25,13 @@ import {
 } from "./sanskrit-pronunciation-compiler.js";
 
 /* Swar-Sadhika Local TTS Engine Manager
- * Model-independent engine. This version uses only the browser's native
- * Speech Synthesis API; it performs no network requests and loads no model.
+ * Model-independent engine. Native Speech Synthesis is spoken output only:
+ * it does not create a melody, sing, or guarantee a feminine voice.
+ * No network request or model download is performed by this engine.
  */
 
-export const TTS_ENGINE_VERSION = "1.5.0";
-export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-09";
+export const TTS_ENGINE_VERSION = "1.6.0";
+export const SWR_TTS_ENGINE_IMPROVEMENT_ID = "SWR-TTS-ENGINE-10";
 
 export class TtsEngineError extends Error {
   constructor(message, code = "TTS_ENGINE_ERROR", details = null) {
@@ -241,17 +242,32 @@ function detectNativePlatform(host, suppliedPlatform) {
   if (typeof suppliedPlatform === "string" && suppliedPlatform.trim()) return suppliedPlatform.trim();
   let userAgent = "";
   try { userAgent = String(host && host.navigator && host.navigator.userAgent || ""); } catch (_) {}
-  if (/Android/i.test(userAgent) && /(?:Chrome|CriOS)\//i.test(userAgent)) return "Android Chrome";
+  const isAndroid = /Android/i.test(userAgent);
+  const hasChromeToken = /(?:Chrome|CriOS)\/[0-9.]+/i.test(userAgent);
+  const alternateBrowser = /(?:EdgA|EdgiOS|OPR|SamsungBrowser|UCBrowser|YaBrowser|Vivaldi|Brave|Firefox|FxiOS|DuckDuckGo|MiuiBrowser|HuaweiBrowser|HeyTapBrowser)\//i.test(userAgent);
+  const isWebView = /\bwv\b/i.test(userAgent);
+  if (isAndroid && hasChromeToken && !alternateBrowser && !isWebView) return "Android Chrome";
   return "";
 }
 
 function createNativeBackend(host) {
   const synthesis = host && host.speechSynthesis;
   const Utterance = host && host.SpeechSynthesisUtterance;
+  const timerHost = host && typeof host.setTimeout === "function" ? host : globalThis;
+  const scheduleTimeout = typeof timerHost.setTimeout === "function"
+    ? timerHost.setTimeout.bind(timerHost) : null;
+  const cancelTimeout = typeof timerHost.clearTimeout === "function"
+    ? timerHost.clearTimeout.bind(timerHost) : null;
+  const scheduleInterval = typeof timerHost.setInterval === "function"
+    ? timerHost.setInterval.bind(timerHost) : null;
+  const cancelInterval = typeof timerHost.clearInterval === "function"
+    ? timerHost.clearInterval.bind(timerHost) : null;
   let pending = null;
   let emitEvent = () => {};
   let voiceListener = null;
   let previousVoiceHandler = null;
+  let voiceDiscoveryAttempted = false;
+  const pendingVoiceWaits = new Set();
 
   function getVoices() {
     if (!synthesis || typeof synthesis.getVoices !== "function") return [];
@@ -259,6 +275,72 @@ function createNativeBackend(host) {
       return synthesis.getVoices().slice();
     } catch (error) {
       throw asError(error, "NATIVE_VOICE_ENUMERATION_FAILED");
+    }
+  }
+
+  function waitForVoices(timeoutMs) {
+    const initial = getVoices();
+    if (initial.length) return Promise.resolve(initial);
+    const delay = finiteNumber(timeoutMs, 1200, 0, 5000);
+    if (!delay || !scheduleTimeout || !scheduleInterval) return Promise.resolve(initial);
+
+    return new Promise(resolve => {
+      let settled = false;
+      let timeoutId = null;
+      let intervalId = null;
+
+      const finish = result => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null && cancelTimeout) cancelTimeout(timeoutId);
+        if (intervalId !== null && cancelInterval) cancelInterval(intervalId);
+        pendingVoiceWaits.delete(finish);
+        let finalVoices = result;
+        if (!Array.isArray(finalVoices)) {
+          try { finalVoices = getVoices(); } catch (_) { finalVoices = []; }
+        }
+        resolve(finalVoices);
+      };
+
+      const poll = () => {
+        try {
+          const current = getVoices();
+          if (current.length) finish(current);
+        } catch (error) {
+          emitEvent("warning", {
+            code: "NATIVE_VOICE_REFRESH_FAILED",
+            message: asError(error, "NATIVE_VOICE_ENUMERATION_FAILED").message
+          });
+          finish([]);
+        }
+      };
+
+      pendingVoiceWaits.add(finish);
+      intervalId = scheduleInterval(poll, 80);
+      timeoutId = scheduleTimeout(() => finish(), delay);
+      poll();
+    });
+  }
+
+  function notifyVoicesChanged() {
+    try {
+      const voices = getVoices();
+      const localVoices = voices.filter(voice => voice && voice.localService === true);
+      const remoteVoiceCount = voices.filter(voice => voice && voice.localService === false).length;
+      const unknownVoiceCount = voices.filter(voice => !voice || typeof voice.localService !== "boolean").length;
+      emitEvent("voiceschanged", {
+        voices: localVoices,
+        backendId: "native",
+        totalVoiceCount: voices.length,
+        localVoiceCount: localVoices.length,
+        remoteVoiceCount,
+        unknownVoiceCount
+      });
+    } catch (error) {
+      emitEvent("warning", {
+        code: "NATIVE_VOICE_REFRESH_FAILED",
+        message: asError(error, "NATIVE_VOICE_ENUMERATION_FAILED").message
+      });
     }
   }
 
@@ -328,10 +410,7 @@ function createNativeBackend(host) {
       }
       emitEvent = typeof emit === "function" ? emit : () => {};
       if (typeof synthesis.addEventListener === "function") {
-        voiceListener = () => {
-          try { emitEvent("voiceschanged", { voices: getVoices().filter(voice => voice && voice.localService === true), backendId: "native" }); }
-          catch (error) { emitEvent("warning", { code: "NATIVE_VOICE_REFRESH_FAILED", message: asError(error).message }); }
-        };
+        voiceListener = notifyVoicesChanged;
         synthesis.addEventListener("voiceschanged", voiceListener);
       } else if ("onvoiceschanged" in synthesis) {
         previousVoiceHandler = synthesis.onvoiceschanged;
@@ -339,15 +418,19 @@ function createNativeBackend(host) {
           try {
             if (typeof previousVoiceHandler === "function") previousVoiceHandler.call(synthesis, event);
           } catch (_) {}
-          try { emitEvent("voiceschanged", { voices: getVoices().filter(voice => voice && voice.localService === true), backendId: "native" }); }
-          catch (error) { emitEvent("warning", { code: "NATIVE_VOICE_REFRESH_FAILED", message: asError(error).message }); }
+          notifyVoicesChanged();
         };
         synthesis.onvoiceschanged = voiceListener;
       }
       return { ready: true };
     },
-    async getVoices() {
-      return getVoices();
+    async getVoices(voiceOptions = {}) {
+      const voices = getVoices();
+      if (voices.length || voiceDiscoveryAttempted) return voices;
+      voiceDiscoveryAttempted = true;
+      const timeoutMs = voiceOptions && typeof voiceOptions === "object"
+        ? voiceOptions.waitTimeoutMs : undefined;
+      return waitForVoices(timeoutMs);
     },
     getSelectedVoice(options = {}) {
       return resolveVoice(options);
@@ -376,22 +459,47 @@ function createNativeBackend(host) {
 
         const current = { resolve, reject, utterance, settled: false };
         pending = current;
-        utterance.onstart = event => emitEvent("utterancestart", {
-          backendId: "native", charIndex: Number(event && event.charIndex) || 0
-        });
-        utterance.onboundary = event => emitEvent("boundary", {
-          backendId: "native",
-          charIndex: Number(event && event.charIndex) || 0,
-          charLength: Number(event && event.charLength) || 0,
-          name: event && event.name ? String(event.name) : "",
-          elapsedTime: Number(event && event.elapsedTime) || 0
-        });
-        utterance.onend = event => settlePending(current, {
-          status: "ended",
-          backendId: "native",
-          elapsedTime: Number(event && event.elapsedTime) || 0
-        });
+        const isCurrentUtterance = () => pending === current && !current.settled;
+        utterance.onstart = event => {
+          if (!isCurrentUtterance()) return;
+          emitEvent("utterancestart", {
+            backendId: "native", charIndex: Number(event && event.charIndex) || 0
+          });
+        };
+        utterance.onboundary = event => {
+          if (!isCurrentUtterance()) return;
+          emitEvent("boundary", {
+            backendId: "native",
+            charIndex: Number(event && event.charIndex) || 0,
+            charLength: Number(event && event.charLength) || 0,
+            name: event && event.name ? String(event.name) : "",
+            elapsedTime: Number(event && event.elapsedTime) || 0
+          });
+        };
+        utterance.onpause = event => {
+          if (!isCurrentUtterance()) return;
+          emitEvent("utterancepause", {
+            backendId: "native",
+            elapsedTime: Number(event && event.elapsedTime) || 0
+          });
+        };
+        utterance.onresume = event => {
+          if (!isCurrentUtterance()) return;
+          emitEvent("utteranceresume", {
+            backendId: "native",
+            elapsedTime: Number(event && event.elapsedTime) || 0
+          });
+        };
+        utterance.onend = event => {
+          if (!isCurrentUtterance()) return;
+          settlePending(current, {
+            status: "ended",
+            backendId: "native",
+            elapsedTime: Number(event && event.elapsedTime) || 0
+          });
+        };
         utterance.onerror = event => {
+          if (!isCurrentUtterance()) return;
           const nativeCode = event && event.error ? String(event.error) : "unknown";
           if (nativeCode === "canceled" || nativeCode === "interrupted") {
             settlePending(current, { status: "cancelled", reason: nativeCode, backendId: "native" });
@@ -445,6 +553,8 @@ function createNativeBackend(host) {
           settlePending(current, { status: "cancelled", reason: "disposed", backendId: "native" });
         }
       }
+      pendingVoiceWaits.forEach(finish => finish([]));
+      pendingVoiceWaits.clear();
       emitEvent = () => {};
     }
   };
@@ -463,6 +573,15 @@ export function selfTest() {
   })());
   add("voice-language-identification", languageForVoice({ lang: "hi-IN" }).id === "hi");
   add("unsupported-voice-identification", languageForVoice({ lang: "en-US" }) === null);
+  add("android-chrome-runtime-detection", detectNativePlatform({
+    navigator: { userAgent: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36" }
+  }) === "Android Chrome");
+  add("android-alternate-browser-not-mislabeled-as-chrome", detectNativePlatform({
+    navigator: { userAgent: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36 SamsungBrowser/26.0" }
+  }) === "");
+  add("android-webview-not-mislabeled-as-chrome", detectNativePlatform({
+    navigator: { userAgent: "Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36" }
+  }) === "");
   let compilerTest = null;
   let g2pTest = null;
   try { compilerTest = runSanskritCompilerSelfTest(); } catch (_) {}
@@ -519,16 +638,47 @@ export async function runIntegrationSelfTest() {
     voiceURI: "local://swar-sadhika-integration/hi-IN",
     lang: "hi-IN", localService: true, default: true
   });
+  const remoteVoice = Object.freeze({
+    name: "Remote Integration Hindi Voice",
+    voiceURI: "remote://swar-sadhika-integration/hi-IN",
+    lang: "hi-IN", localService: false, default: false
+  });
   const capturedSpeech = [];
   let capturedPronunciationMetadata = null;
+  let capturedBoundary = null;
+  let capturedVoiceChange = null;
+  let voicesReady = false;
+  let voiceDiscoveryTimer = null;
+  const synthesisListeners = new Map();
   class TestSpeechSynthesisUtterance {
     constructor(text) { this.text = text; this.rate = 1; this.pitch = 1; this.volume = 1; }
   }
   const synthesis = {
-    getVoices() { return [voice]; },
+    getVoices() {
+      if (!voicesReady && voiceDiscoveryTimer === null) {
+        voiceDiscoveryTimer = setTimeout(() => {
+          voicesReady = true;
+          const callbacks = synthesisListeners.get("voiceschanged") || [];
+          callbacks.slice().forEach(callback => callback({ type: "voiceschanged" }));
+        }, 35);
+      }
+      return voicesReady ? [voice, remoteVoice] : [];
+    },
+    addEventListener(type, callback) {
+      if (!synthesisListeners.has(type)) synthesisListeners.set(type, []);
+      synthesisListeners.get(type).push(callback);
+    },
+    removeEventListener(type, callback) {
+      const listeners = synthesisListeners.get(type) || [];
+      synthesisListeners.set(type, listeners.filter(item => item !== callback));
+    },
     speak(utterance) {
       capturedSpeech.push(utterance.text);
       Promise.resolve().then(() => {
+        if (typeof utterance.onstart === "function") utterance.onstart({ charIndex: 0 });
+        if (typeof utterance.onboundary === "function") {
+          utterance.onboundary({ charIndex: 0, charLength: 2, name: "word", elapsedTime: 0 });
+        }
         if (typeof utterance.onend === "function") utterance.onend({ elapsedTime: 1 });
       });
     },
@@ -566,15 +716,31 @@ export async function runIntegrationSelfTest() {
       userAgent: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36",
       onLine: true
     },
-    isSecureContext: true, speechSynthesis: synthesis,
-    SpeechSynthesisUtterance: TestSpeechSynthesisUtterance, console: { error() {} }
+    isSecureContext: true,
+    speechSynthesis: synthesis,
+    SpeechSynthesisUtterance: TestSpeechSynthesisUtterance,
+    setTimeout, clearTimeout, setInterval, clearInterval,
+    console: { error() {} }
   };
   let adapter = null, engine = null, failure = null;
   try {
     adapter = createNanoServerTtsKnowledgeAdapter({ knowledgeAPI });
     engine = createTtsEngine({ target: host, knowledgeAdapter: adapter, autoLoadKnowledge: false, defaultLanguage: "hi" });
+    engine.on("voiceschanged", detail => {
+      capturedVoiceChange = detail || null;
+    });
+    engine.on("boundary", detail => {
+      capturedBoundary = detail || null;
+    });
     const initialized = await engine.initialize({ backendId: "native" });
     add("native-test-backend-initialized", initialized && initialized.ready === true);
+    const availableLocalVoices = await engine.getVoices({ backendId: "native", language: "hi" });
+    add("native-voice-list-waits-for-delayed-voiceschanged",
+      Boolean(capturedVoiceChange && capturedVoiceChange.localVoiceCount === 1 &&
+        capturedVoiceChange.totalVoiceCount === 2 && availableLocalVoices.length === 1));
+    add("remote-native-voice-is-excluded",
+      availableLocalVoices.length === 1 && availableLocalVoices.every(item => item.localService === true) &&
+        availableLocalVoices.every(item => item.voiceURI !== remoteVoice.voiceURI));
     engine.on("pronunciationmetadata", detail => {
       capturedPronunciationMetadata = detail || null;
     });
@@ -597,6 +763,9 @@ export async function runIntegrationSelfTest() {
     const outcome = await engine.speak("अग्निः", { voice, language: "hi" });
     add("native-tts-receives-compiled-speech-text",
       outcome && outcome.status === "ended" && capturedSpeech.length === 1 && capturedSpeech[0] === "अग्नि");
+    add("native-utterance-boundary-event-forwarded",
+      Boolean(capturedBoundary && capturedBoundary.charIndex === 0 &&
+        capturedBoundary.charLength === 2 && capturedBoundary.backendId === "native"));
 
     const mantra = "ॐ नमः शिवाय";
     const g2pPreparation = engine.prepareSpeech(mantra, {
@@ -741,6 +910,10 @@ export function createTtsEngine(options = {}) {
       ready: phase === "ready" && Boolean(backend),
       speaking: playback === "speaking",
       paused: playback === "paused",
+      runtimePlatform: detectNativePlatform(host) || "unconfirmed",
+      outputMode: "native-spoken-speech",
+      singingSupported: false,
+      melodyGenerated: false,
       backendId: activeBackendId,
       backendType: backend ? backend.type : null,
       backendLabel: backend ? backend.label : null,
@@ -917,7 +1090,9 @@ export function createTtsEngine(options = {}) {
           ensureNotDisposed();
         }
 
-        const voices = await requestedAdapter.getVoices();
+        const voices = await requestedAdapter.getVoices({
+          waitTimeoutMs: options.nativeVoiceDiscoveryTimeoutMs
+        });
         ensureNotDisposed();
         activeBackend = requestedAdapter;
         activeBackendId = backendId;
@@ -1007,7 +1182,9 @@ export function createTtsEngine(options = {}) {
     const backendId = String(voiceOptions.backendId || activeBackendId || defaultBackend);
     const adapter = backends.get(backendId);
     if (!adapter) throw new TtsEngineError("Backend पंजीकृत नहीं है: " + backendId, "BACKEND_NOT_REGISTERED");
-    const voices = await adapter.getVoices();
+    const voices = await adapter.getVoices({
+      waitTimeoutMs: voiceOptions.waitTimeoutMs
+    });
     ensureNotDisposed();
     const requestedLanguage = voiceOptions.language == null ? null : normalizeTtsLanguage(voiceOptions.language);
     return Object.freeze((Array.isArray(voices) ? voices.slice() : []).filter(voice => {
@@ -1324,7 +1501,7 @@ export function createTtsEngine(options = {}) {
           local: nativeVoices.filter(voice => voice && voice.localService === true).length,
           remote: nativeVoices.filter(voice => voice && voice.localService === false).length,
           unknown: nativeVoices.filter(voice => !voice || typeof voice.localService !== "boolean").length,
-          note: "Native Voice का localService metadata स्थानीय और remote synthesizer में अंतर बताता है।"
+          note: "ऐप केवल localService=true वाली Voice को वाचन के लिए स्वीकार करता है; यह संख्या या नाम स्त्री-स्वर/मधुरता की पुष्टि नहीं करता।"
         });
       } catch (error) {
         ensureNotDisposed();
@@ -1342,11 +1519,15 @@ export function createTtsEngine(options = {}) {
       phase,
       playback,
       selectedBackend: activeBackendId,
+      runtimePlatform: detectNativePlatform(host) || "unconfirmed",
+      outputMode: "native-spoken-speech",
+      singingSupported: false,
+      melodyGenerated: false,
       capabilities: currentCapabilities,
       voiceLocality,
       backends: Object.freeze(results),
       pronunciationKnowledgeBase,
-      note: "यह API/Backend/Pronunciation Knowledge Base जाँच है; यह स्वयं ऑडियो गुणवत्ता या शुद्ध वैदिक उच्चारण प्रमाणित नहीं करती।"
+      note: "यह API/Backend/Pronunciation Knowledge Base जाँच है; यह स्वयं वास्तविक ध्वनि गुणवत्ता, स्त्री-स्वर, गायन या शुद्ध वैदिक उच्चारण प्रमाणित नहीं करती।"
     });
     emit("diagnostics", lastDiagnostics);
     return lastDiagnostics;
