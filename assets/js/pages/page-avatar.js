@@ -283,8 +283,8 @@ function makeAnimatedPoints(base, state, elapsedMs) {
     }
   }
 
-  // Move only the detected iris landmarks to simulate attentive eye direction.
-  const gaze=state.gaze;
+  // Prefer the validated Brain frame directly; retain page gaze as the fallback.
+  const gaze=brainFrame ? brainFrame.face.gaze : state.gaze;
   for (const group of EYE_GROUPS) {
     const eyeWidth=Math.max(1,Math.hypot(points[group.center[1]].x-points[group.center[0]].x,points[group.center[1]].y-points[group.center[0]].y));
     const eyeHeight=Math.max(1,Math.abs(
@@ -300,7 +300,7 @@ function makeAnimatedPoints(base, state, elapsedMs) {
     const topY=group.upper.reduce((sum,index)=>sum+(points[index]?.y||0),0)/group.upper.length;
     const lowY=group.lower.reduce((sum,index)=>sum+(points[index]?.y||0),0)/group.lower.length;
     const eyeCenter=(topY+lowY)/2;
-    const close=state.blink;
+    const close=brainFrame ? brainFrame.face.blink : state.blink;
     for (const index of group.upper) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.99);
     for (const index of group.lower) if (points[index]) points[index].y=smoothToward(points[index].y,eyeCenter,close*0.78);
   }
