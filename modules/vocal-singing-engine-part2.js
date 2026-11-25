@@ -1,11 +1,11 @@
 /* Swar-Sadhika — model-free Sanskrit Vocal Singing Engine (Part 2)
- * Version 0.2.0: glottal-source shaping, dynamic vowel formants, smoother
- * phonetic transitions, restrained pitch motion, and controlled output gain.
+ * Version 0.3.0: one continuous voiced source per phrase, shared formant
+ * filter bank, smooth pitch/formant motion, and consonant-aware gain articulation.
  * Local Web Audio DSP only: no model, remote API, instrument track, or network fetch.
- * This improves vocal character; it does not claim indistinguishable human speech.
+ * This remains synthetic DSP, not a claim of indistinguishable human voice.
  */
 
-export const VOCAL_SINGING_ENGINE_VERSION = "0.2.0";
+export const VOCAL_SINGING_ENGINE_VERSION = "0.3.0";
 export const SWR_VOCAL_SINGING_ENGINE_ID = "SWR-VOCAL-SINGING-ENGINE-P2-01";
 
 const VOWEL_PROFILES = Object.freeze({
@@ -286,6 +286,8 @@ export function createVocalSingingEngine(options = {}) {
       totalDuration: duration,
       baseFrequency,
       tempo,
+      synthesisMode: "continuous-glottal-formant",
+      sourceOscillators: 1,
       accompaniment: false,
       modelLoaded: false
     });
@@ -325,113 +327,166 @@ export function createVocalSingingEngine(options = {}) {
     active = run;
     setState("speaking", { syllableCount: plan.syllableCount, estimatedSeconds: plan.totalDuration });
 
+    // One sustained source avoids restarting a fresh oscillator for every syllable.
+    const glottalWave = makeGlottalWave(audio);
+    const oscillator = audio.createOscillator();
+    oscillator.setPeriodicWave(glottalWave);
+    oscillator.frequency.setValueAtTime(plan.baseFrequency, run.startTime);
+
+    // One shared filter bank carries all vowel changes for the complete phrase.
+    const highPass = audio.createBiquadFilter();
+    highPass.type = "highpass";
+    highPass.frequency.setValueAtTime(85, run.startTime);
+    highPass.Q.setValueAtTime(0.72, run.startTime);
+
+    const formantFilters = [0, 1, 2].map(index => {
+      const filter = audio.createBiquadFilter();
+      filter.type = "peaking";
+      filter.frequency.setValueAtTime(600 + index * 500, run.startTime);
+      filter.Q.setValueAtTime(2.8, run.startTime);
+      filter.gain.setValueAtTime([4.8, 5.5, 3.7][index], run.startTime);
+      return filter;
+    });
+
+    const lowPass = audio.createBiquadFilter();
+    lowPass.type = "lowpass";
+    lowPass.frequency.setValueAtTime(7600, run.startTime);
+    lowPass.Q.setValueAtTime(0.72, run.startTime);
+
+    const voiceEnvelope = audio.createGain();
+    voiceEnvelope.gain.setValueAtTime(0.0001, run.startTime);
+    oscillator.connect(highPass);
+    let voiceChain = highPass;
+    formantFilters.forEach(filter => {
+      voiceChain.connect(filter);
+      voiceChain = filter;
+    });
+    voiceChain.connect(lowPass).connect(voiceEnvelope).connect(compressor);
+
+    // A single low-frequency oscillator supplies phrase-wide vibrato.
+    const vibrato = audio.createOscillator();
+    const vibratoDepth = audio.createGain();
+    vibrato.frequency.setValueAtTime(4.7, run.startTime);
+    vibratoDepth.gain.setValueAtTime(0.0001, run.startTime);
+    vibrato.connect(vibratoDepth).connect(oscillator.detune);
+
     let cursor = run.startTime;
     let syllableCounter = 0;
-    let lastAudibleEnd = cursor;
-    let glottalWave = null;
-    plan.events.forEach(event => {
+    let previousProfile = null;
+    let previousFrequency = plan.baseFrequency;
+    const defaultVibratoCents = safeNumber(inputOptions.vibratoCents, 4.2, 0, 12);
+
+    plan.events.forEach((event, eventIndex) => {
       if (event.type === "pause") {
+        voiceEnvelope.gain.setTargetAtTime(0.0001, cursor, 0.012);
+        vibratoDepth.gain.setTargetAtTime(0.0001, cursor, 0.018);
         cursor += event.duration;
         return;
       }
+
+      const nextEvent = plan.events[eventIndex + 1] || null;
+      const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
+      const priorProfile = previousProfile || profile;
+      const noteEnd = cursor + event.duration;
       const noise = event.onsetNoise;
+      const onsetDelay = noise
+        ? Math.min(0.042, event.duration * 0.16)
+        : (event.onset ? Math.min(0.020, event.duration * 0.075) : 0.004);
+      const vowelStart = cursor + onsetDelay;
+
       if (noise) {
-        const noiseDuration = Math.min(noise.duration, event.duration * 0.35);
+        const noiseDuration = Math.min(noise.duration, event.duration * 0.30);
         const noiseNodes = scheduleNoise(cursor, noiseDuration, noise);
         if (noiseNodes) run.nodes.push(...noiseNodes);
       }
-      const vowelStart = cursor + (noise ? Math.min(0.042, event.duration * 0.18) : 0.008);
-      const noteEnd = cursor + event.duration;
-      if (!glottalWave) glottalWave = makeGlottalWave(audio);
 
-      const oscillator = audio.createOscillator();
-      const envelope = audio.createGain();
-      oscillator.setPeriodicWave(glottalWave);
-      const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
-      const previousProfile = VOWEL_PROFILES[event.fromVowel] || profile;
-      const formantTransition = Math.min(0.105, Math.max(0.035, event.duration * 0.24));
-      const highPass = audio.createBiquadFilter();
-      highPass.type = "highpass";
-      highPass.frequency.setValueAtTime(85, vowelStart);
-      highPass.Q.setValueAtTime(0.72, vowelStart);
-      const formantFilters = profile.formants.map((center, formantIndex) => {
-        const filter = audio.createBiquadFilter();
-        filter.type = "peaking";
-        filter.frequency.setValueAtTime(previousProfile.formants[formantIndex], vowelStart);
-        filter.frequency.linearRampToValueAtTime(center, vowelStart + formantTransition);
+      // Coarticulation: formant centres glide from the previous vowel into this one.
+      const formantGlide = Math.min(0.115, Math.max(0.038, event.duration * 0.25));
+      formantFilters.forEach((filter, formantIndex) => {
+        const from = priorProfile.formants[formantIndex];
+        const to = profile.formants[formantIndex];
+        filter.frequency.setValueAtTime(from, vowelStart);
+        if (Math.abs(to - from) > 1) {
+          filter.frequency.linearRampToValueAtTime(to, vowelStart + formantGlide);
+        }
         filter.Q.setValueAtTime(
-          safeNumber(center / (profile.bandwidths[formantIndex] * 2), 2.4, 1.0, 6.5),
+          safeNumber(to / (profile.bandwidths[formantIndex] * 2), 2.6, 1.0, 6.5),
           vowelStart
         );
-        filter.gain.setValueAtTime([5.0, 5.8, 4.0][formantIndex], vowelStart);
-        return filter;
+        filter.gain.setValueAtTime([4.8, 5.5, 3.7][formantIndex], vowelStart);
       });
-      const lowPass = audio.createBiquadFilter();
-      lowPass.type = "lowpass";
-      lowPass.frequency.setValueAtTime(7600, vowelStart);
-      lowPass.Q.setValueAtTime(0.72, vowelStart);
-      envelope.gain.setValueAtTime(0.0001, vowelStart);
-      const attack = Math.min(0.048, event.duration * 0.18);
-      const release = Math.min(0.095, event.duration * 0.24);
-      const peak = event.amplitude;
-      const pitchSettle = vowelStart + Math.min(0.058, event.duration * 0.22);
-      oscillator.frequency.setValueAtTime(event.frequency * 0.984, vowelStart);
-      oscillator.frequency.linearRampToValueAtTime(event.frequency, pitchSettle);
-      oscillator.frequency.setValueAtTime(event.frequency, Math.max(pitchSettle, noteEnd - release));
-      oscillator.frequency.linearRampToValueAtTime(event.frequency * 0.996, noteEnd);
-      envelope.gain.linearRampToValueAtTime(peak, vowelStart + attack);
-      envelope.gain.setValueAtTime(peak, Math.max(vowelStart + attack, noteEnd - release));
-      envelope.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
-      oscillator.connect(highPass);
-      let voiceChain = highPass;
-      formantFilters.forEach(filter => {
-        voiceChain.connect(filter);
-        voiceChain = filter;
-      });
-      voiceChain.connect(lowPass).connect(envelope).connect(compressor);
+      // Pitch is joined by a short glide instead of restarting at a new fixed tone.
+      const pitchGlide = Math.min(0.060, Math.max(0.025, event.duration * 0.14));
+      oscillator.frequency.setValueAtTime(previousFrequency, cursor);
+      oscillator.frequency.linearRampToValueAtTime(event.frequency, vowelStart + pitchGlide);
 
-      const vibrato = audio.createOscillator();
-      const vibratoDepth = audio.createGain();
-      const vibratoStart = vowelStart + event.duration * 0.32;
-      const vibratoEnd = Math.max(vibratoStart, noteEnd - release * 0.35);
-      const vibratoCents = safeNumber(inputOptions.vibratoCents, 4.2, 0, 12);
-      vibrato.frequency.setValueAtTime(4.65 + Math.sin((event.index + 1) * 1.37) * 0.22, vowelStart);
+      // Reduce voiced energy during consonant onset, then smoothly restore the vowel.
+      if (event.onset) {
+        voiceEnvelope.gain.setTargetAtTime(Math.max(0.025, event.amplitude * 0.22), cursor, 0.005);
+      }
+      voiceEnvelope.gain.setTargetAtTime(event.amplitude, vowelStart, 0.014);
+
+      const vibratoStart = vowelStart + event.duration * 0.30;
+      const release = Math.min(0.075, event.duration * 0.18);
+      const vibratoEnd = Math.max(vibratoStart, noteEnd - release);
       vibratoDepth.gain.setValueAtTime(0.0001, vowelStart);
-      vibratoDepth.gain.linearRampToValueAtTime(vibratoCents, vibratoStart);
-      vibratoDepth.gain.setValueAtTime(vibratoCents, vibratoEnd);
+      vibratoDepth.gain.linearRampToValueAtTime(defaultVibratoCents, vibratoStart);
+      vibratoDepth.gain.setValueAtTime(defaultVibratoCents, vibratoEnd);
       vibratoDepth.gain.linearRampToValueAtTime(0.0001, noteEnd);
-      vibrato.connect(vibratoDepth).connect(oscillator.detune);
-      vibrato.start(vowelStart);
-      vibrato.stop(noteEnd);
-      oscillator.start(vowelStart);
-      oscillator.stop(noteEnd + 0.006);
-      run.nodes.push(oscillator, envelope, highPass, ...formantFilters, lowPass, vibrato, vibratoDepth);
+
+      // Phrase and danda endings receive a controlled release; adjacent syllables remain connected.
+      if (!nextEvent || nextEvent.type === "pause") {
+        const releaseStart = Math.max(vowelStart, noteEnd - release);
+        voiceEnvelope.gain.setTargetAtTime(0.0001, releaseStart, 0.018);
+      }
+
       if (event.visarga) {
-        const visargaProfile = { frequency: 1450, duration: Math.min(0.065, event.duration * 0.2), gain: 0.045, type: "bandpass" };
-        const breath = scheduleNoise(Math.max(vowelStart, noteEnd - visargaProfile.duration), visargaProfile.duration, visargaProfile);
+        const visargaProfile = {
+          frequency: 1450,
+          duration: Math.min(0.065, event.duration * 0.18),
+          gain: 0.045,
+          type: "bandpass"
+        };
+        const breath = scheduleNoise(
+          Math.max(vowelStart, noteEnd - visargaProfile.duration),
+          visargaProfile.duration,
+          visargaProfile
+        );
         if (breath) run.nodes.push(...breath);
       }
+
+      previousProfile = profile;
+      previousFrequency = event.frequency;
       cursor = noteEnd;
-      lastAudibleEnd = noteEnd;
       syllableCounter += 1;
     });
 
-    // A silent scheduled clock allows phrase-ending punctuation to complete while paused.
-    const clock = audio.createOscillator();
-    const silence = audio.createGain();
-    silence.gain.value = 0;
-    clock.frequency.value = 20;
-    clock.connect(silence).connect(compressor);
-    clock.onended = () => {
+    const endTime = Math.max(cursor, run.startTime + plan.totalDuration) + 0.04;
+    oscillator.onended = () => {
       if (active === run && !run.finished) completeRun(run, {
-        status: "ended", syllables: syllableCounter, durationSeconds: plan.totalDuration,
-        modelLoaded: false, accompaniment: false
+        status: "ended",
+        syllables: syllableCounter,
+        durationSeconds: plan.totalDuration,
+        sourceOscillators: 1,
+        modelLoaded: false,
+        accompaniment: false
       });
     };
-    clock.start(run.startTime);
-    clock.stop(Math.max(cursor, lastAudibleEnd) + 0.025);
-    run.nodes.push(clock, silence);
+
+    oscillator.start(run.startTime);
+    vibrato.start(run.startTime);
+    oscillator.stop(endTime);
+    vibrato.stop(endTime);
+    run.nodes.push(
+      oscillator,
+      highPass,
+      ...formantFilters,
+      lowPass,
+      voiceEnvelope,
+      vibrato,
+      vibratoDepth
+    );
 
     return promise;
   }
@@ -477,7 +532,8 @@ export function createVocalSingingEngine(options = {}) {
       engineId: SWR_VOCAL_SINGING_ENGINE_ID,
       state,
       ready: !disposed,
-      outputMode: "model-free-glottal-formant-synthesis",
+      outputMode: "model-free-continuous-glottal-formant-synthesis",
+      sourceOscillatorsPerPhrase: 1,
       modelLoaded: false,
       externalNetworkRequests: 0,
       accompaniment: false,
@@ -523,8 +579,16 @@ export function selfTest() {
   add("omkara-vowel-support", simple.some(event => event.type === "syllable" && event.source === "ॐ" && event.vowel === "o"));
   add("visarga-preserved-as-vocal-breath", simple.some(event => event.type === "syllable" && event.visarga));
   add("danda-phrase-pause", simple.some(event => event.type === "pause" && event.reason === "sentence"));
-  add("model-free-and-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.2.0" &&
+  add("model-free-and-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.3.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
+  const planningEngine = createVocalSingingEngine({ target: {} });
+  const continuityPlan = planningEngine.prepareText("नमः शिवाय।");
+  add("continuous-single-source-plan",
+    continuityPlan.synthesisMode === "continuous-glottal-formant" &&
+    continuityPlan.sourceOscillators === 1 &&
+    continuityPlan.syllableCount >= 4);
+  add("voice-only-no-instrument-contract",
+    continuityPlan.accompaniment === false && continuityPlan.modelLoaded === false);
   add("three-formant-vowel-profiles", Object.values(VOWEL_PROFILES).every(profile =>
     profile.formants.length === 3 && profile.bandwidths.length === 3 &&
     profile.formants.every(value => Number.isFinite(value) && value > 0)));
