@@ -1,26 +1,26 @@
 /* Swar-Sadhika — model-free Sanskrit Vocal Singing Engine (Part 2)
- * Version 0.3.0: one continuous voiced source per phrase, shared formant
- * filter bank, smooth pitch/formant motion, and consonant-aware gain articulation.
+ * Version 0.4.0: adaptive glottal spectrum, four-resonance vowel shaping,
+ * refined Sanskrit consonant articulation, subtle note humanization and vibrato.
  * Local Web Audio DSP only: no model, remote API, instrument track, or network fetch.
- * This remains synthetic DSP, not a claim of indistinguishable human voice.
+ * This remains synthetic DSP; naturalness must be judged from recorded listening tests.
  */
 
-export const VOCAL_SINGING_ENGINE_VERSION = "0.3.0";
+export const VOCAL_SINGING_ENGINE_VERSION = "0.4.0";
 export const SWR_VOCAL_SINGING_ENGINE_ID = "SWR-VOCAL-SINGING-ENGINE-P2-01";
 
 const VOWEL_PROFILES = Object.freeze({
-  a:  Object.freeze({ formants: [800, 1350, 2800], bandwidths: [120, 170, 250], long: false }),
-  aa: Object.freeze({ formants: [850, 1320, 2750], bandwidths: [130, 180, 260], long: true }),
-  i:  Object.freeze({ formants: [360, 2250, 3000], bandwidths: [80, 190, 260], long: false }),
-  ii: Object.freeze({ formants: [320, 2550, 3200], bandwidths: [75, 200, 270], long: true }),
-  u:  Object.freeze({ formants: [420, 950, 2450], bandwidths: [90, 140, 240], long: false }),
-  uu: Object.freeze({ formants: [370, 900, 2500], bandwidths: [85, 135, 250], long: true }),
-  vocalicR: Object.freeze({ formants: [520, 1600, 2750], bandwidths: [110, 190, 260], long: false }),
-  vocalicRR: Object.freeze({ formants: [500, 1650, 2800], bandwidths: [110, 190, 270], long: true }),
-  e:  Object.freeze({ formants: [520, 1950, 2850], bandwidths: [100, 190, 260], long: true }),
-  ai: Object.freeze({ formants: [690, 1850, 2750], bandwidths: [130, 210, 270], long: true }),
-  o:  Object.freeze({ formants: [520, 1050, 2700], bandwidths: [110, 150, 260], long: true }),
-  au: Object.freeze({ formants: [700, 1200, 2700], bandwidths: [140, 170, 270], long: true })
+  a:  Object.freeze({ formants: [800, 1350, 2800, 3600], bandwidths: [120, 170, 250, 350], long: false }),
+  aa: Object.freeze({ formants: [850, 1320, 2750, 3550], bandwidths: [130, 180, 260, 350], long: true }),
+  i:  Object.freeze({ formants: [360, 2250, 3000, 3900], bandwidths: [80, 190, 260, 400], long: false }),
+  ii: Object.freeze({ formants: [320, 2550, 3200, 4100], bandwidths: [75, 200, 270, 420], long: true }),
+  u:  Object.freeze({ formants: [420, 950, 2450, 3550], bandwidths: [90, 140, 240, 360], long: false }),
+  uu: Object.freeze({ formants: [370, 900, 2500, 3600], bandwidths: [85, 135, 250, 370], long: true }),
+  vocalicR: Object.freeze({ formants: [520, 1600, 2750, 3700], bandwidths: [110, 190, 260, 380], long: false }),
+  vocalicRR: Object.freeze({ formants: [500, 1650, 2800, 3750], bandwidths: [110, 190, 270, 390], long: true }),
+  e:  Object.freeze({ formants: [520, 1950, 2850, 3850], bandwidths: [100, 190, 260, 400], long: true }),
+  ai: Object.freeze({ formants: [690, 1850, 2750, 3800], bandwidths: [130, 210, 270, 400], long: true }),
+  o:  Object.freeze({ formants: [520, 1050, 2700, 3550], bandwidths: [110, 150, 260, 360], long: true }),
+  au: Object.freeze({ formants: [700, 1200, 2700, 3650], bandwidths: [140, 170, 270, 380], long: true })
 });
 
 const INDEPENDENT_VOWELS = Object.freeze({
@@ -52,9 +52,22 @@ function isPlosive(value) { return /[कगचजटडतदपब]/u.test(valu
 
 function consonantNoiseProfile(onset) {
   if (!onset) return null;
-  if (isSibilant(onset)) return { frequency: /श/u.test(onset) ? 3600 : /ष/u.test(onset) ? 3200 : 4800, duration: 0.075, gain: 0.11, type: "highpass" };
-  if (isAspirated(onset)) return { frequency: /ह/u.test(onset) ? 1250 : 2100, duration: 0.060, gain: 0.075, type: "bandpass" };
-  if (isPlosive(onset)) return { frequency: 1900, duration: 0.026, gain: 0.055, type: "bandpass" };
+  const first = Array.from(String(onset))[0] || "";
+  if (isSibilant(first)) {
+    const frequency = first === "श" ? 3600 : first === "ष" ? 3200 : 4800;
+    return { frequency, duration: 0.072, gain: 0.095, type: "highpass" };
+  }
+  const placeFrequency = /[कखगघङ]/u.test(first) ? 1450
+    : /[चछजझञ]/u.test(first) ? 2550
+    : /[टठडढण]/u.test(first) ? 1850
+    : /[तथदधन]/u.test(first) ? 2250
+    : /[पफबभम]/u.test(first) ? 1250 : 1900;
+  if (isAspirated(first)) {
+    return { frequency: first === "ह" ? 1250 : placeFrequency, duration: 0.054, gain: 0.068, type: "bandpass" };
+  }
+  if (isPlosive(first)) {
+    return { frequency: placeFrequency, duration: 0.022, gain: 0.048, type: "bandpass" };
+  }
   return null;
 }
 
@@ -118,12 +131,14 @@ export function tokenizeSanskritForSinging(input) {
       }
 
       let vowel = "a";
+      let consonantOnly = false;
       if (cursor < chars.length && isMatra(chars[cursor])) {
         vowel = MATRA_VOWELS[chars[cursor]] || "a";
         cursor += 1;
       } else if (cursor < chars.length && chars[cursor] === VIRAMA) {
-        // A terminal halant consonant is retained as a very short inherent-vowel release.
-        vowel = "a";
+        // Preserve the grapheme for G2P alignment, but do not invent an inherent "a".
+        consonantOnly = true;
+        vowel = null;
         cursor += 1;
       }
 
@@ -135,7 +150,7 @@ export function tokenizeSanskritForSinging(input) {
         cursor += 1;
       }
       const onsetText = onset.join("");
-      events.push({ type: "syllable", onset: onsetText, vowel, nasal, visarga, source: chars.slice(index, cursor).join("") });
+      events.push({ type: "syllable", onset: onsetText, vowel, consonantOnly, nasal, visarga, source: chars.slice(index, cursor).join("") });
       index = cursor;
       continue;
     }
@@ -150,16 +165,19 @@ function noteFrequency(baseFrequency, semitones) {
   return baseFrequency * Math.pow(2, semitones / 12);
 }
 
-function makeGlottalWave(context) {
+function makeGlottalWave(context, settings = {}) {
   const harmonicCount = 64;
+  const spectralTiltExponent = safeNumber(settings.spectralTilt, 1.16, 0.90, 1.55);
+  const openQuotient = safeNumber(settings.openQuotient, 0.62, 0.45, 0.78);
   const real = new Float32Array(harmonicCount + 1);
   const imag = new Float32Array(harmonicCount + 1);
   for (let harmonic = 1; harmonic <= harmonicCount; harmonic += 1) {
-    // A gently tilted, phase-shaped harmonic spectrum approximates a glottal source.
-    const spectralTilt = 1 / Math.pow(harmonic, 1.16);
-    const highFrequencyDamping = Math.exp(-harmonic / 92);
-    const amplitude = spectralTilt * highFrequencyDamping;
-    const phase = -Math.PI * (0.10 + harmonic * 0.0018);
+    // Adjustable spectral tilt and open quotient shape the synthetic glottal spectrum.
+    const spectralTilt = 1 / Math.pow(harmonic, spectralTiltExponent);
+    const highFrequencyDamping = Math.exp(-harmonic / (70 + openQuotient * 36));
+    const pulseShape = 0.94 + (openQuotient - 0.62) * 0.42;
+    const amplitude = spectralTilt * highFrequencyDamping * pulseShape;
+    const phase = -Math.PI * (0.10 + harmonic * (0.0011 + (1 - openQuotient) * 0.0022));
     real[harmonic] = amplitude * Math.cos(phase);
     imag[harmonic] = amplitude * Math.sin(phase);
   }
@@ -249,6 +267,10 @@ export function createVocalSingingEngine(options = {}) {
     const baseFrequency = safeNumber(inputOptions.baseFrequency, 246.94, 170, 390);
     const tempo = safeNumber(inputOptions.tempo, 1, 0.55, 1.7);
     const baseDuration = safeNumber(inputOptions.noteDurationMs, 390, 180, 900) / 1000 / tempo;
+    const humanizeCents = safeNumber(inputOptions.humanizeCents, 1.4, 0, 4);
+    const consonantDuration = safeNumber(inputOptions.finalConsonantDurationMs, 70, 35, 140) / 1000;
+    const spectralTilt = safeNumber(inputOptions.spectralTilt, 1.16, 0.90, 1.55);
+    const openQuotient = safeNumber(inputOptions.openQuotient, 0.62, 0.45, 0.78);
     let syllableIndex = 0;
     let duration = 0;
     let previousVowel = null;
@@ -258,13 +280,33 @@ export function createVocalSingingEngine(options = {}) {
         previousVowel = null;
         return Object.freeze({ ...event });
       }
-      const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
       const noteOffset = melody[syllableIndex % melody.length];
-      const frequency = noteFrequency(baseFrequency, noteOffset);
+      const noise = consonantNoiseProfile(event.onset);
+      if (event.consonantOnly) {
+        const item = Object.freeze({
+          ...event,
+          index: syllableIndex,
+          fromVowel: previousVowel,
+          frequency: noteFrequency(baseFrequency, noteOffset),
+          duration: consonantDuration,
+          onsetNoise: noise,
+          amplitude: 0
+        });
+        duration += consonantDuration;
+        previousVowel = null;
+        syllableIndex += 1;
+        return item;
+      }
+      const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
+      const microCents = humanizeCents * (
+        Math.sin((syllableIndex + 1) * 1.618) * 0.65 +
+        Math.sin((syllableIndex + 1) * 0.73) * 0.35
+      );
+      const frequency = noteFrequency(baseFrequency, noteOffset + microCents / 100);
       const lengthFactor = profile.long ? 1.55 : 1;
       const clusterFactor = Array.from(event.onset || "").length > 1 ? 1.08 : 1;
       const syllableDuration = baseDuration * lengthFactor * clusterFactor;
-      const noise = consonantNoiseProfile(event.onset);
+      const emphasis = 1 + 0.035 * Math.sin((syllableIndex + 1) * 1.11);
       const item = Object.freeze({
         ...event,
         index: syllableIndex,
@@ -272,7 +314,7 @@ export function createVocalSingingEngine(options = {}) {
         frequency,
         duration: syllableDuration,
         onsetNoise: noise,
-        amplitude: event.nasal ? 0.52 : 0.60
+        amplitude: (event.nasal ? 0.52 : 0.60) * emphasis
       });
       previousVowel = event.vowel;
       duration += syllableDuration;
@@ -286,7 +328,8 @@ export function createVocalSingingEngine(options = {}) {
       totalDuration: duration,
       baseFrequency,
       tempo,
-      synthesisMode: "continuous-glottal-formant",
+      synthesisMode: "adaptive-glottal-formant-dsp",
+      voiceQuality: Object.freeze({ spectralTilt, openQuotient, humanizeCents }),
       sourceOscillators: 1,
       accompaniment: false,
       modelLoaded: false
@@ -328,7 +371,7 @@ export function createVocalSingingEngine(options = {}) {
     setState("speaking", { syllableCount: plan.syllableCount, estimatedSeconds: plan.totalDuration });
 
     // One sustained source avoids restarting a fresh oscillator for every syllable.
-    const glottalWave = makeGlottalWave(audio);
+    const glottalWave = makeGlottalWave(audio, plan.voiceQuality);
     const oscillator = audio.createOscillator();
     oscillator.setPeriodicWave(glottalWave);
     oscillator.frequency.setValueAtTime(plan.baseFrequency, run.startTime);
@@ -339,12 +382,13 @@ export function createVocalSingingEngine(options = {}) {
     highPass.frequency.setValueAtTime(85, run.startTime);
     highPass.Q.setValueAtTime(0.72, run.startTime);
 
-    const formantFilters = [0, 1, 2].map(index => {
+    const formantGains = [4.4, 5.0, 3.0, 1.5];
+    const formantFilters = [0, 1, 2, 3].map(index => {
       const filter = audio.createBiquadFilter();
       filter.type = "peaking";
-      filter.frequency.setValueAtTime(600 + index * 500, run.startTime);
-      filter.Q.setValueAtTime(2.8, run.startTime);
-      filter.gain.setValueAtTime([4.8, 5.5, 3.7][index], run.startTime);
+      filter.frequency.setValueAtTime([600, 1100, 1900, 3400][index], run.startTime);
+      filter.Q.setValueAtTime([2.6, 2.7, 2.5, 2.2][index], run.startTime);
+      filter.gain.setValueAtTime(formantGains[index], run.startTime);
       return filter;
     });
 
@@ -374,7 +418,8 @@ export function createVocalSingingEngine(options = {}) {
     let syllableCounter = 0;
     let previousProfile = null;
     let previousFrequency = plan.baseFrequency;
-    const defaultVibratoCents = safeNumber(inputOptions.vibratoCents, 4.2, 0, 12);
+    const defaultVibratoCents = safeNumber(inputOptions.vibratoCents, 3.8, 0, 10);
+    const defaultVibratoRateHz = safeNumber(inputOptions.vibratoRateHz, 4.8, 3.5, 6.5);
 
     plan.events.forEach((event, eventIndex) => {
       if (event.type === "pause") {
@@ -384,6 +429,17 @@ export function createVocalSingingEngine(options = {}) {
         return;
       }
 
+      if (event.consonantOnly) {
+        if (event.onsetNoise) {
+          const releaseNoise = scheduleNoise(cursor, Math.min(event.duration, event.onsetNoise.duration), event.onsetNoise);
+          if (releaseNoise) run.nodes.push(...releaseNoise);
+        }
+        cursor += event.duration;
+        previousProfile = null;
+        previousFrequency = event.frequency;
+        syllableCounter += 1;
+        return;
+      }
       const nextEvent = plan.events[eventIndex + 1] || null;
       const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
       const priorProfile = previousProfile || profile;
@@ -413,7 +469,7 @@ export function createVocalSingingEngine(options = {}) {
           safeNumber(to / (profile.bandwidths[formantIndex] * 2), 2.6, 1.0, 6.5),
           vowelStart
         );
-        filter.gain.setValueAtTime([4.8, 5.5, 3.7][formantIndex], vowelStart);
+        filter.gain.setValueAtTime(formantGains[formantIndex], vowelStart);
       });
 
       // Pitch is joined by a short glide instead of restarting at a new fixed tone.
@@ -430,9 +486,15 @@ export function createVocalSingingEngine(options = {}) {
       const vibratoStart = vowelStart + event.duration * 0.30;
       const release = Math.min(0.075, event.duration * 0.18);
       const vibratoEnd = Math.max(vibratoStart, noteEnd - release);
+      const noteVibratoDepth = defaultVibratoCents * (profile.long ? 1 : 0.72);
+      const noteVibratoRate = safeNumber(
+        defaultVibratoRateHz + ((event.index % 3) - 1) * 0.06,
+        defaultVibratoRateHz, 3.5, 6.5
+      );
+      vibrato.frequency.setValueAtTime(noteVibratoRate, vowelStart);
       vibratoDepth.gain.setValueAtTime(0.0001, vowelStart);
-      vibratoDepth.gain.linearRampToValueAtTime(defaultVibratoCents, vibratoStart);
-      vibratoDepth.gain.setValueAtTime(defaultVibratoCents, vibratoEnd);
+      vibratoDepth.gain.linearRampToValueAtTime(noteVibratoDepth, vibratoStart);
+      vibratoDepth.gain.setValueAtTime(noteVibratoDepth, vibratoEnd);
       vibratoDepth.gain.linearRampToValueAtTime(0.0001, noteEnd);
 
       // Phrase and danda endings receive a controlled release; adjacent syllables remain connected.
@@ -532,7 +594,7 @@ export function createVocalSingingEngine(options = {}) {
       engineId: SWR_VOCAL_SINGING_ENGINE_ID,
       state,
       ready: !disposed,
-      outputMode: "model-free-continuous-glottal-formant-synthesis",
+      outputMode: "model-free-adaptive-glottal-formant-dsp",
       sourceOscillatorsPerPhrase: 1,
       modelLoaded: false,
       externalNetworkRequests: 0,
@@ -579,18 +641,22 @@ export function selfTest() {
   add("omkara-vowel-support", simple.some(event => event.type === "syllable" && event.source === "ॐ" && event.vowel === "o"));
   add("visarga-preserved-as-vocal-breath", simple.some(event => event.type === "syllable" && event.visarga));
   add("danda-phrase-pause", simple.some(event => event.type === "pause" && event.reason === "sentence"));
-  add("model-free-and-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.3.0" &&
+  add("model-free-and-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.4.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
+  const terminalHalant = tokenizeSanskritForSinging("त्");
+  add("terminal-halant-keeps-grapheme-without-invented-vowel",
+    terminalHalant.length === 1 && terminalHalant[0].type === "syllable" &&
+    terminalHalant[0].consonantOnly === true && terminalHalant[0].vowel === null);
   const planningEngine = createVocalSingingEngine({ target: {} });
   const continuityPlan = planningEngine.prepareText("नमः शिवाय।");
   add("continuous-single-source-plan",
-    continuityPlan.synthesisMode === "continuous-glottal-formant" &&
+    continuityPlan.synthesisMode === "adaptive-glottal-formant-dsp" &&
     continuityPlan.sourceOscillators === 1 &&
     continuityPlan.syllableCount >= 4);
   add("voice-only-no-instrument-contract",
     continuityPlan.accompaniment === false && continuityPlan.modelLoaded === false);
-  add("three-formant-vowel-profiles", Object.values(VOWEL_PROFILES).every(profile =>
-    profile.formants.length === 3 && profile.bandwidths.length === 3 &&
+  add("four-formant-vowel-profiles", Object.values(VOWEL_PROFILES).every(profile =>
+    profile.formants.length === 4 && profile.bandwidths.length === 4 &&
     profile.formants.every(value => Number.isFinite(value) && value > 0)));
   const longVowelPlan = tokenizeSanskritForSinging("आ इ");
   add("long-and-short-vowel-tokenization", longVowelPlan.length >= 2 &&
