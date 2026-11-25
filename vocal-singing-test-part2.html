@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17152d">
+  <meta name="description" content="Swar-Sadhika model-free vocal singing engine Android Chrome audio test.">
+  <title>Swar-Sadhika · वास्तविक गायन परीक्षण</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;background:#11101b;color:#f4f0ff}
+    *{box-sizing:border-box}
+    body{margin:0;padding:20px 14px 40px;background:radial-gradient(ellipse at top,#292044 0,#11101b 58%);min-height:100vh}
+    main{width:min(720px,100%);margin:0 auto}
+    h1{font-size:1.55rem;margin:0 0 8px}
+    h2{font-size:1.08rem;margin:0 0 10px}
+    p{line-height:1.55}
+    .sub{color:#c5bddc;font-size:.92rem}
+    .card{background:#201d31;border:1px solid #4b4264;border-radius:18px;padding:17px;margin:14px 0}
+    .status{padding:12px;border-radius:12px;background:#151324;border:1px solid #4b4264;line-height:1.5;overflow-wrap:anywhere}
+    .ok{border-color:#348b68;color:#baf3d7}
+    .warn{border-color:#a77b35;color:#ffe0a6}
+    label{display:block;font-weight:650;margin:12px 0 7px}
+    textarea{display:block;width:100%;min-height:105px;resize:vertical;border-radius:12px;border:1px solid #63587f;background:#141222;color:#fff;padding:13px;font:1.12rem/1.7 inherit}
+    .controls{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+    button{border:1px solid #746691;border-radius:12px;background:#302844;color:white;padding:12px 16px;font-size:1rem;font-weight:700;min-height:46px;flex:1 1 125px;touch-action:manipulation}
+    button.primary{background:#7451bd;border-color:#9b80dc}
+    button.stop{background:#552c45;border-color:#a65d7c}
+    button:disabled{opacity:.42}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+    .metric{background:#171525;border-radius:12px;padding:10px}
+    .metric small{display:block;color:#bdb3d4;margin-bottom:3px}
+    .metric strong{font-size:1.02rem;overflow-wrap:anywhere}
+    ul{padding-left:20px;line-height:1.65}
+    code{overflow-wrap:anywhere;color:#ded0ff}
+    .foot{font-size:.83rem;color:#bcb4cd}
+    @media(max-width:420px){body{padding:15px 10px 32px}.card{padding:14px}.grid{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>स्वर-साधिका — वास्तविक गायन परीक्षण</h1>
+  <p class="sub">यह पृष्ठ Android Chrome पर बिना AI मॉडल, बिना इंटरनेट Voice सेवा और बिना वाद्य-यंत्र के स्थानीय Web Audio गायन Engine का परीक्षण करता है। ध्वनि-संश्लेषण अभी प्रारंभिक है; प्राकृतिक मानव-स्वर जैसी गुणवत्ता का दावा नहीं है।</p>
+
+  <section class="card">
+    <h2>1. परीक्षण पाठ</h2>
+    <label for="chantText">संस्कृत पाठ</label>
+    <textarea id="chantText" spellcheck="false">ॐ नमः शिवाय।</textarea>
+    <div class="controls">
+      <button id="playBtn" class="primary" type="button">▶ गायन शुरू करें</button>
+      <button id="pauseBtn" type="button" disabled>Ⅱ विराम</button>
+      <button id="resumeBtn" type="button" disabled>▶ फिर शुरू करें</button>
+      <button id="stopBtn" class="stop" type="button" disabled>■ समाप्त करें</button>
+    </div>
+    <p id="liveStatus" class="status" role="status" aria-live="polite">Engine लोड हो रहा है…</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Engine की स्थिति</h2>
+    <div class="grid">
+      <div class="metric"><small>Engine</small><strong id="engineVersion">—</strong></div>
+      <div class="metric"><small>AudioContext</small><strong id="audioState">—</strong></div>
+      <div class="metric"><small>अक्षर / syllables</small><strong id="syllableCount">—</strong></div>
+      <div class="metric"><small>अनुमानित अवधि</small><strong id="duration">—</strong></div>
+      <div class="metric"><small>AI मॉडल</small><strong id="modelState">—</strong></div>
+      <div class="metric"><small>वाद्य-संगत</small><strong id="instrumentState">—</strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. स्वचालित संरचनात्मक परीक्षण</h2>
+    <p id="selfTestStatus" class="status">परीक्षण चल रहा है…</p>
+    <ul id="selfTestList"></ul>
+  </section>
+
+  <section class="card">
+    <h2>4. Android पर वास्तविक सुनने की जाँच</h2>
+    <ol>
+      <li>फ़ोन का Media Volume कम-से-मध्यम स्तर पर रखें और Silent / Do Not Disturb स्थिति जाँचें।</li>
+      <li>ऊपर “गायन शुरू करें” दबाएँ। Android Chrome में Audio शुरू करने के लिए उपयोगकर्ता का बटन दबाना आवश्यक है।</li>
+      <li>क्या “ॐ नमः शिवाय” की स्पष्ट, लगातार सुरबद्ध आवाज़ सुनाई देती है? ध्वनि एक अकेली सीटी/बीप जैसी हो तो उसे सफल गायन न मानें।</li>
+      <li>चलते समय “विराम”, फिर “फिर शुरू करें” और अंत में “समाप्त करें” जाँचें।</li>
+    </ol>
+    <p class="foot">यह पृष्ठ ध्वनि को सुनने योग्य होने का स्वचालित दावा नहीं करता। वास्तविक सुनाई देना, स्वर की स्पष्टता और गायन-जैसी गुणवत्ता आपके डिवाइस पर ही सत्यापित होगी।</p>
+  </section>
+  <p class="foot">Swar-Sadhika · Model-free Formant Vocal Synthesis · No instrumental accompaniment</p>
+</main>
+
+<script type="module">
+  import {
+    createVocalSingingEngine,
+    selfTest
+  } from "./modules/vocal-singing-engine-part2.js";
+
+  const byId = id => document.getElementById(id);
+  const engine = createVocalSingingEngine({ target: window });
+  const playBtn = byId("playBtn");
+  const pauseBtn = byId("pauseBtn");
+  const resumeBtn = byId("resumeBtn");
+  const stopBtn = byId("stopBtn");
+  const textInput = byId("chantText");
+  let activePromise = null;
+
+  function setStatus(message, kind) {
+    const node = byId("liveStatus");
+    node.textContent = message;
+    node.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function updateMetrics() {
+    const plan = engine.prepareText(textInput.value);
+    const info = engine.getStatus();
+    byId("engineVersion").textContent = info.version;
+    byId("audioState").textContent = info.audioContextState;
+    byId("syllableCount").textContent = String(plan.syllableCount);
+    byId("duration").textContent = plan.totalDuration.toFixed(1) + " sec";
+    byId("modelState").textContent = info.modelLoaded ? "Loaded" : "लोड नहीं";
+    byId("instrumentState").textContent = info.accompaniment ? "चालू" : "शून्य";
+  }
+
+  function updateControls(state) {
+    const speaking = state === "speaking";
+    const paused = state === "paused";
+    playBtn.disabled = speaking || paused;
+    pauseBtn.disabled = !speaking;
+    resumeBtn.disabled = !paused;
+    stopBtn.disabled = !(speaking || paused);
+    updateMetrics();
+  }
+
+  engine.on("statechange", event => {
+    updateControls(event.state);
+    if (event.state === "speaking") setStatus("गायन चल रहा है। कृपया ध्वनि ध्यान से सुनें।");
+    if (event.state === "paused") setStatus("गायन विराम पर है।");
+    if (event.state === "idle" && event.result) {
+      setStatus(event.result.status === "ended"
+        ? "गायन क्रम पूरा हुआ। अब वास्तविक ध्वनि और स्पष्टता का मूल्यांकन करें।"
+        : "गायन समाप्त कर दिया गया।");
+    }
+  });
+
+  textInput.addEventListener("input", updateMetrics);
+
+  const checks = selfTest();
+  byId("selfTestStatus").textContent =
+    checks.passed + "/" + checks.total + " संरचनात्मक परीक्षण सफल · " + checks.status;
+  byId("selfTestStatus").className = "status " + (checks.failed === 0 ? "ok" : "warn");
+  checks.checks.forEach(check => {
+    const item = document.createElement("li");
+    item.textContent = (check.passed ? "✓ " : "✕ ") + check.name;
+    byId("selfTestList").appendChild(item);
+  });
+
+  playBtn.addEventListener("click", async () => {
+    if (activePromise) return;
+    const text = textInput.value.trim();
+    if (!text) {
+      setStatus("पहले संस्कृत पाठ लिखें।", "warn");
+      return;
+    }
+    try {
+      updateMetrics();
+      setStatus("AudioContext शुरू किया जा रहा है…");
+      activePromise = engine.sing(text, {
+        baseFrequency: 246.94,
+        tempo: 0.92,
+        noteDurationMs: 420,
+        vibratoCents: 5,
+        volume: 0.62
+      });
+      updateControls("speaking");
+      const result = await activePromise;
+      setStatus(result.status === "ended"
+        ? "गायन क्रम पूरा हुआ। कृपया सुनाई दी ध्वनि की गुणवत्ता दर्ज करें।"
+        : "गायन रद्द हुआ।");
+    } catch (error) {
+      setStatus("गायन शुरू नहीं हो सका: " + (error && error.message ? error.message : String(error)), "warn");
+    } finally {
+      activePromise = null;
+      updateControls(engine.getStatus().state);
+    }
+  });
+
+  pauseBtn.addEventListener("click", async () => {
+    try {
+      const paused = await engine.pause();
+      setStatus(paused ? "विराम सफल।" : "विराम नहीं हो सका।", paused ? "" : "warn");
+    } catch (error) {
+      setStatus("विराम त्रुटि: " + error.message, "warn");
+    }
+  });
+
+  resumeBtn.addEventListener("click", async () => {
+    try {
+      const resumed = await engine.resume();
+      setStatus(resumed ? "गायन फिर से शुरू हुआ।" : "गायन Resume नहीं हुआ।", resumed ? "" : "warn");
+    } catch (error) {
+      setStatus("Resume त्रुटि: " + error.message, "warn");
+    }
+  });
+
+  stopBtn.addEventListener("click", async () => {
+    await engine.stop();
+    setStatus("गायन रोक दिया गया।");
+  });
+
+  window.addEventListener("pagehide", () => { void engine.dispose(); }, { once: true });
+  updateMetrics();
+  updateControls("idle");
+  setStatus("Engine तैयार है। वास्तविक ध्वनि सुनने के लिए Play दबाएँ।");
+</script>
+</body>
+</html>
