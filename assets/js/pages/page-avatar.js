@@ -418,7 +418,9 @@ export async function mount(context) {
     '   <div id="photo-avatar-status" class="avatar-status" role="status" aria-live="polite">पहले सामने से ली गई स्पष्ट, अच्छी रोशनी वाली फोटो चुनें।</div>',
     '   <div class="avatar-actions"><button id="photo-avatar-build" class="btn primary" type="button" disabled>फोटो पहचानें और अवतार बनाएँ</button><button id="photo-avatar-reset" class="btn" type="button" disabled>फोटो हटाएँ</button></div>',
     '   <label class="avatar-field">वाचन के लिए संस्कृत पाठ<textarea id="photo-avatar-text" maxlength="5000" placeholder="यहाँ श्लोक या मंत्र लिखें…"></textarea></label>',
-    '   <label class="avatar-field">स्थानीय Hindi/Sanskrit आवाज़<select id="photo-avatar-voice"><option value="">आवाज़ सूची पढ़ी जा रही है…</option></select></label>',
+    '   <label class="avatar-field">वाचन इंजन<select id="photo-avatar-engine"><option value="native">Android की स्थानीय आवाज़ (Native)</option><option value="ninada">Ninada · संस्कृत neural स्त्री-स्वर (लगभग 36 MB पहली डाउनलोड)</option></select></label>',
+    '   <label class="avatar-field">स्थानीय आवाज़<select id="photo-avatar-voice"><option value="">आवाज़ सूची पढ़ी जा रही है…</option></select></label>',
+    '   <div class="avatar-note">Ninada पहली बार ONNX Runtime और संस्कृत महिला मॉडल डाउनलोड करता है। दोनों स्थानीय cache में रखे जाते हैं; सफल डाउनलोड के बाद inference फोन पर होता है। यह neural वाचन है, गायन मॉडल नहीं।</div>',
     '   <div class="avatar-actions"><button id="photo-avatar-refresh-voices" class="btn" type="button">↻ आवाज़ सूची ताज़ा करें</button><button id="photo-avatar-test-voice" class="btn" type="button" disabled>♪ आवाज़ का नमूना सुनें</button></div>',
     '   <div id="photo-avatar-voice-status" class="avatar-status" role="status" aria-live="polite">Android की वास्तविक आवाज़ सूची जाँची जा रही है…</div>',
     '   <div class="avatar-note">स्वर-प्रीसेट: कोमल युवा स्त्री-शैली · अल्पविराम और पूर्ण विराम पर स्वाभाविक ठहराव।</div>',
@@ -448,6 +450,7 @@ export async function mount(context) {
   const stopButton=byId("photo-avatar-stop");
   const textInput=byId("photo-avatar-text");
   const voiceSelect=byId("photo-avatar-voice");
+  const engineSelect=byId("photo-avatar-engine");
   const refreshVoicesButton=byId("photo-avatar-refresh-voices");
   const testVoiceButton=byId("photo-avatar-test-voice");
   const voiceStatus=byId("photo-avatar-voice-status");
@@ -459,7 +462,7 @@ export async function mount(context) {
   const state={
     destroyed:false, visible:true, photoUrl:"", image:null, baseCanvas:null,
     basePoints:null, triangles:[], faceLayer:null, faceLayerContext:null, faceLandmarker:null, engine:null,
-    brainAdapter:null, brainFrame:null, motionPulse:0,
+    brainAdapter:null, brainFrame:null, motionPulse:0, engineKind:"native",
     voices:[], voiceInventory:null, speechText:"", speechActive:false, speechStartedAt:0,
     boundaryCharacter:0, speechElapsedMs:0, rate:0.88, mouthOpen:0, blink:0, paused:false,
     nextBlink:2.8, blinkStart:-10, gaze:{x:0,y:0}, gazeMode:"auto",
@@ -569,7 +572,11 @@ export async function mount(context) {
 
   async function initializeSpeech() {
     if (state.engine) return;
-    state.engine=createAvatarTtsEngine({target:win});
+    state.engineKind=engineSelect.value==="ninada"?"ninada":"native";
+    if (state.engineKind==="ninada") {
+      const module=await import("../tts/ninada-avatar-tts-engine-part2.js");
+      state.engine=module.createNinadaAvatarTtsEnginePart2({target:win});
+    } else state.engine=createAvatarTtsEngine({target:win});
     state.brainAdapter=createBrainAvatarAdapterPart2({
       target:win,
       avatarTtsEngine:state.engine,
@@ -614,9 +621,9 @@ export async function mount(context) {
     );
     const avatarStatus=await state.brainAdapter.initialize();
     state.voiceInventory=state.engine.getInventory();
-    const initialized={ready:Boolean(avatarStatus && avatarStatus.nativeTtsAvailable),inventory:state.voiceInventory};
+    const initialized={ready:Boolean(avatarStatus && (state.engineKind==="ninada"?avatarStatus.ready:avatarStatus.nativeTtsAvailable)),inventory:state.voiceInventory};
     if (!initialized.ready) {
-      setVoiceStatus("इस browser में Native SpeechSynthesis उपलब्ध नहीं है।","error");
+      setVoiceStatus(state.engineKind==="ninada"?"Ninada स्थानीय neural इंजन तैयार नहीं हुआ।":"इस browser में Native SpeechSynthesis उपलब्ध नहीं है।","error");
       updateButtons();
       return;
     }
@@ -641,7 +648,7 @@ export async function mount(context) {
     }
     try {
       const result=await state.engine.playSample(selected.key,{...SOFT_YOUNG_FEMININE_PRESET,rate:finite(rateInput.value,SOFT_YOUNG_FEMININE_PRESET.rate)});
-      if (result.status==="ended") setVoiceStatus("नमूना पूरा हुआ: कोमल युवा स्त्री-शैली और विराम-चिह्नों पर स्वाभाविक ठहराव। स्वर की गुणवत्ता सुनकर पुष्टि करें।","success");
+      if (result.status==="ended") setVoiceStatus(state.engineKind==="ninada"?"Ninada neural संस्कृत स्त्री-स्वर का नमूना पूरा हुआ। वास्तविक गुणवत्ता सुनकर जाँचें।":"नमूना पूरा हुआ: कोमल युवा स्त्री-शैली और विराम-चिह्नों पर स्वाभाविक ठहराव। स्वर की गुणवत्ता सुनकर पुष्टि करें।","success");
     } catch (error) {
       setVoiceStatus("आवाज़ का नमूना नहीं चल सका: "+(error && error.message || "Native TTS त्रुटि"),"error");
     }
@@ -843,6 +850,26 @@ export async function mount(context) {
     updateButtons();
   }
 
+  async function switchSpeechEngine() {
+    if (state.speechActive) { engineSelect.value=state.engineKind; return; }
+    speakButton.disabled=true;testVoiceButton.disabled=true;setVoiceStatus("चुना हुआ वाचन इंजन तैयार हो रहा है…");
+    try {
+      if (state.brainAdapter) { try { await state.brainAdapter.stop("engine-switch"); } catch (_) {} }
+      for (const unsubscribe of state.unsubscribers) { try { unsubscribe(); } catch (_) {} }
+      state.unsubscribers=[];
+      if (state.brainAdapter) { try { await state.brainAdapter.dispose(); } catch (_) {} state.brainAdapter=null; }
+      if (state.engine) { try { await state.engine.dispose(); } catch (_) {} state.engine=null; }
+      state.voiceInventory=null;state.voices=[];
+      await initializeSpeech();
+      if (state.voiceInventory && state.voiceInventory.selectable.length) setStatus(state.engineKind==="ninada"?"Ninada neural संस्कृत स्त्री-स्वर तैयार है। पहली डाउनलोड के बाद मॉडल स्थानीय cache में रहेगा।":"स्थानीय Native TTS तैयार है। फोटो चुनकर अवतार बनाएँ।","success");
+      else setStatus("चुना हुआ इंजन आवाज़ उपलब्ध नहीं करा सका।","error");
+    } catch (error) {
+      setVoiceStatus("वाचन इंजन तैयार नहीं हुआ: "+(error && error.message || "अज्ञात त्रुटि"),"error");
+      setStatus("वाचन इंजन तैयार नहीं हुआ।","error");
+    }
+    updateButtons();
+  }
+
   function resetPhoto() {
     void stopSpeech();
     state.speechElapsedMs=0;
@@ -904,6 +931,7 @@ export async function mount(context) {
   refreshVoicesButton.addEventListener("click",()=>void refreshVoices(),{signal:aborter.signal});
   testVoiceButton.addEventListener("click",()=>void testSelectedVoice(),{signal:aborter.signal});
   voiceSelect.addEventListener("change",updateButtons,{signal:aborter.signal});
+  engineSelect.addEventListener("change",()=>void switchSpeechEngine(),{signal:aborter.signal});
   pauseButton.addEventListener("click",()=>void pause(),{signal:aborter.signal});
   resumeButton.addEventListener("click",()=>void resume(),{signal:aborter.signal});
   stopButton.addEventListener("click",()=>void stopSpeech(),{signal:aborter.signal});
@@ -918,7 +946,7 @@ export async function mount(context) {
     if (state.voiceInventory && state.voiceInventory.selectable.length) {
       setStatus("स्थानीय Native TTS तैयार है। फोटो चुनकर अवतार बनाएँ।","success");
     } else {
-      setStatus("अवतार तैयार है, लेकिन इस डिवाइस में स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं है। आवाज़ सेटिंग जाँचें।","error");
+      setStatus(state.engineKind==="ninada"?"Ninada मॉडल तैयार नहीं हुआ। आवाज़ स्थिति पढ़ें।":"अवतार तैयार है, लेकिन इस डिवाइस में स्थानीय Hindi/Sanskrit आवाज़ उपलब्ध नहीं है। आवाज़ सेटिंग जाँचें।","error");
     }
   } catch (error) {
     setStatus("स्थानीय आवाज़ तैयार नहीं हुई: "+(error && error.message || "TTS initialization error"),"error");
