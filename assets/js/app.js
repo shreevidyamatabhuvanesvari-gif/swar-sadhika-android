@@ -1,16 +1,13 @@
 /* Swar-Sadhika Android — main application controller.
- * Implemented page modules are routed through PAGE_MODULES:
- *   assets/js/pages/page-tts.js
- *   assets/js/pages/page-nano-server.js
- *   assets/js/pages/page-avatar.js
- *
- * Nano Brain Part 2 is routed through the existing Page Loader; File Check remains disabled.
+ * Existing page modules use the lazy Page Loader; Diagnostics is a built-in route.
+ * Additional modules are discovered only through modules/registry.json.
  */
 (() => {
   "use strict";
 
-  const APP_VERSION = "2.2.1";
+  const APP_VERSION = "2.2.2";
   const PAGE_BASE = "./assets/js/pages/";
+  const BUILTIN_ROUTES = new Set(["index", "diagnostics"]);
   const PAGE_MODULES = Object.freeze({
     "jump-text": { id: "tts", file: "page-tts.js", root: "text-section", view: "view-index" },
     "nano-server": { id: "nano-server", file: "page-nano-server.js", root: "view-nano-server", view: "view-nano-server" },
@@ -24,7 +21,8 @@
     "nano-server": "view-nano-server",
     "avatar": "view-avatar",
     "video": "view-video",
-    "nano-brain": "view-nano-brain"
+    "nano-brain": "view-nano-brain",
+    "diagnostics": "view-diagnostics"
   });
 
   const state = {
@@ -35,7 +33,15 @@
     navigationSequence: 0,
     pageInstances: new Map(),
     pagePromises: new Map(),
-    registry: { loaded: false, error: "", entries: new Map() },
+    registry: {
+      loaded: false,
+      loading: null,
+      error: "",
+      entries: new Map(),
+      declared: [],
+      invalid: []
+    },
+    diagnosticsPromise: null,
     shared: new Map()
   };
 
@@ -231,7 +237,7 @@
     const pageToActivate = page || (key === "index" ? PAGE_MODULES["jump-text"] : null);
     const viewId = key === "jump-text" ? "view-index" : views[key];
 
-    if (key !== "index" && key !== "jump-text" && !page) {
+    if (!BUILTIN_ROUTES.has(key) && key !== "jump-text" && !page) {
       console.warn("[Swar-Sadhika] Route is disabled because its page module is not present: " + key);
       return false;
     }
@@ -263,7 +269,9 @@
       }
     } else {
       setCurrentNavigation(key);
+      if (key === "diagnostics") await runDiagnostics();
     }
+    return true;
   }
 
   function createMediaCard(item) {
@@ -464,46 +472,122 @@
       !path.split("/").includes("..");
   }
 
-  async function loadRegistry() {
-    const status = byId("registry-status");
+  async function loadRegistry(options) {
+    const force = Boolean(options && options.force === true);
+    if (state.registry.loading) return state.registry.loading;
+    if (state.registry.loaded && !force) return state.registry;
+
+    const task = (async () => {
+      const status = byId("registry-status");
+      state.registry.loaded = false;
+      state.registry.error = "";
+      state.registry.entries.clear();
+      state.registry.declared = [];
+      state.registry.invalid = [];
+
+      try {
+        const response = await fetch(
+          new URL("./modules/registry.json", document.baseURI),
+          { cache: "no-store" }
+        );
+        if (!response.ok) {
+          throw new Error(response.status === 404
+            ? "modules/registry.json GitHub Pages पर नहीं मिला (HTTP 404)।"
+            : "Registry HTTP " + response.status + " त्रुटि।");
+        }
+
+        const data = await response.json();
+        const entries = Array.isArray(data) ? data : data && data.modules;
+        if (!Array.isArray(entries)) {
+          throw new TypeError("Registry JSON में modules array नहीं मिली।");
+        }
+        if (!Array.isArray(data) && data.schemaVersion !== undefined &&
+            Number(data.schemaVersion) !== 1) {
+          throw new TypeError("असमर्थित Registry schemaVersion: " + data.schemaVersion);
+        }
+        if (!Array.isArray(data) && data.appId &&
+            data.appId !== "swar-sadhika-android") {
+          throw new TypeError("Registry appId इस ऐप से मेल नहीं खाता।");
+        }
+
+        entries.forEach((entry, index) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            state.registry.invalid.push("Entry " + (index + 1) + ": object अपेक्षित है।");
+            return;
+          }
+
+          const id = String(entry.id || "").trim();
+          const title = String(entry.title || entry.name || "").trim();
+          const file = entry.file || entry.path;
+          const statusValue = String(entry.status || "").trim().toLowerCase();
+          if (!id || !/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
+            state.registry.invalid.push("Entry " + (index + 1) + ": अमान्य या रिक्त id।");
+            return;
+          }
+          if (!title) {
+            state.registry.invalid.push(id + ": title/name आवश्यक है।");
+            return;
+          }
+          if (!safeRegistryPath(file)) {
+            state.registry.invalid.push(id + ": file को सुरक्षित modules/*.js पथ होना चाहिए।");
+            return;
+          }
+          if (state.registry.entries.has(id) ||
+              state.registry.declared.some(item => item.id === id)) {
+            state.registry.invalid.push(id + ": duplicate module id।");
+            return;
+          }
+
+          const enabled = entry.enabled !== false &&
+            statusValue !== "placeholder" && statusValue !== "disabled";
+          const record = {
+            id,
+            title,
+            file,
+            description: String(entry.description || ""),
+            enabled,
+            status: statusValue || (enabled ? "active" : "disabled")
+          };
+          state.registry.declared.push(record);
+          if (enabled) state.registry.entries.set(id, record);
+        });
+
+        state.registry.loaded = true;
+        if (status) {
+          status.className = state.registry.invalid.length ? "status warn" : "status";
+          status.textContent =
+            "Registry सफलतापूर्वक पढ़ी गई: " + state.registry.entries.size +
+            " सक्रिय मॉड्यूल, " +
+            (state.registry.declared.length - state.registry.entries.size) +
+            " निष्क्रिय/placeholder, " + state.registry.invalid.length + " अमान्य प्रविष्टियाँ।";
+        }
+      } catch (error) {
+        state.registry.error = error && error.message
+          ? error.message
+          : "Registry उपलब्ध नहीं है।";
+        state.registry.entries.clear();
+        if (status) {
+          status.className = "status warn";
+          status.textContent = state.registry.error +
+            " मुख्य इंडेक्स और TTS नियंत्रण Registry से स्वतंत्र हैं।";
+        }
+      }
+      return state.registry;
+    })();
+
+    state.registry.loading = task;
     try {
-      const response = await fetch(new URL("./modules/registry.json", document.baseURI), { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(response.status === 404
-          ? "modules/registry.json अभी Repository में उपलब्ध नहीं है।"
-          : "Registry HTTP " + response.status + " त्रुटि।");
-      }
-
-      const data = await response.json();
-      const entries = Array.isArray(data) ? data : data && data.modules;
-      if (!Array.isArray(entries)) throw new TypeError("Registry JSON में modules array नहीं मिली।");
-
-      entries.forEach(entry => {
-        const id = entry && String(entry.id || "").trim();
-        const title = entry && String(entry.title || entry.name || "").trim();
-        const file = entry && (entry.file || entry.path);
-        if (!id || !/^[a-z0-9][a-z0-9_-]*$/i.test(id) || !title || !safeRegistryPath(file)) return;
-        if (entry.enabled === false || String(entry.status || "").toLowerCase() === "placeholder") return;
-        state.registry.entries.set(id, { id, title, file, description: String(entry.description || "") });
-      });
-
-      state.registry.loaded = true;
-      if (status) {
-        status.className = "status";
-        status.textContent = state.registry.entries.size + " अतिरिक्त पेज मॉड्यूल Registry में मिले।";
-      }
-    } catch (error) {
-      state.registry.error = error && error.message ? error.message : "Registry उपलब्ध नहीं है।";
-      if (status) {
-        status.className = "status warn";
-        status.textContent = state.registry.error +
-          " मुख्य इंडेक्स के मीडिया नियंत्रण इससे स्वतंत्र हैं।";
-      }
+      return await task;
+    } finally {
+      if (state.registry.loading === task) state.registry.loading = null;
     }
   }
 
   async function loadRegisteredModule(id, root, extraContext) {
     if (!state.registry.loaded) await loadRegistry();
+    if (!state.registry.loaded) {
+      throw new Error(state.registry.error || "Module Registry लोड नहीं हो सकी।");
+    }
     const entry = state.registry.entries.get(id);
     if (!entry) throw new Error("यह मॉड्यूल सक्रिय Registry में उपलब्ध नहीं है: " + id);
 
@@ -517,6 +601,192 @@
       root: root || document,
       module: entry
     }, extraContext || {}));
+  }
+
+  function appendAuditLine(container, passed, title, detail) {
+    const line = document.createElement("div");
+    line.className = passed ? "status" : "status warn";
+    line.textContent = (passed ? "✓ " : "✕ ") + title +
+      (detail ? " — " + detail : "");
+    container.appendChild(line);
+  }
+
+  function isSelfTestSuccessful(result) {
+    if (result === true) return true;
+    if (!result || typeof result !== "object") return false;
+    if (result.status === "PASSED" || result.status === "PASS") {
+      return Number(result.failed || 0) === 0;
+    }
+    return result.ok === true;
+  }
+
+  async function runDiagnostics() {
+    if (state.diagnosticsPromise) return state.diagnosticsPromise;
+
+    const task = (async () => {
+      const auditList = byId("audit-list");
+      const moduleAudit = byId("module-audit");
+      if (!auditList || !moduleAudit) return null;
+
+      auditList.replaceChildren();
+      moduleAudit.replaceChildren();
+      let checks = 0;
+      let failures = 0;
+
+      const record = (container, passed, title, detail) => {
+        checks += 1;
+        if (!passed) failures += 1;
+        appendAuditLine(container, passed, title, detail);
+      };
+
+      const requiredIds = [
+        "view-index", "media-input", "gallery", "media-stage",
+        "text-input", "speak-btn", "pause-btn", "resume-btn", "stop-btn",
+        "view-diagnostics", "run-audit", "registry-status", "module-audit"
+      ];
+      const missingIds = requiredIds.filter(id => !byId(id));
+      record(
+        auditList,
+        missingIds.length === 0,
+        "मुख्य HTML नियंत्रण",
+        missingIds.length ? "लापता ID: " + missingIds.join(", ") : requiredIds.length + " आवश्यक तत्व उपलब्ध"
+      );
+      record(
+        auditList,
+        typeof window.SwarSadhikaApp === "object",
+        "मुख्य App Controller",
+        "SwarSadhikaApp API"
+      );
+
+      for (const [route, page] of Object.entries(PAGE_MODULES)) {
+        try {
+          const moduleUrl = new URL(PAGE_BASE + page.file, document.baseURI);
+          const pageModule = await import(moduleUrl.href);
+          const mountReady = typeof pageModule.mount === "function";
+          const containerReady = Boolean(byId(page.root));
+          const passed = mountReady && containerReady;
+          record(
+            auditList,
+            passed,
+            "पेज मॉड्यूल: " + route,
+            !containerReady
+              ? "HTML container अनुपस्थित: " + page.root
+              : !mountReady
+                ? "mount(context) export अनुपस्थित"
+                : page.file + " · mount(context) उपलब्ध"
+          );
+        } catch (error) {
+          record(
+            auditList,
+            false,
+            "पेज मॉड्यूल: " + route,
+            error && error.message ? error.message : String(error)
+          );
+        }
+      }
+
+      await loadRegistry({ force: true });
+      record(
+        auditList,
+        state.registry.loaded,
+        "Module Registry",
+        state.registry.loaded
+          ? state.registry.entries.size + " सक्रिय मॉड्यूल पढ़े गए"
+          : state.registry.error || "Registry load विफल"
+      );
+
+      if (state.registry.loaded) {
+        for (const entry of state.registry.entries.values()) {
+          try {
+            const registeredModule = await import(
+              new URL(entry.file, document.baseURI).href
+            );
+            const hasMount = typeof registeredModule.mount === "function";
+            if (!hasMount) {
+              record(moduleAudit, false, entry.title, "mount(context) export अनुपस्थित");
+              continue;
+            }
+
+            if (typeof registeredModule.selfTest === "function") {
+              const testResult = await registeredModule.selfTest();
+              const selfTestPassed = isSelfTestSuccessful(testResult);
+              record(
+                moduleAudit,
+                selfTestPassed,
+                entry.title,
+                selfTestPassed
+                  ? "mount(context) और selfTest() सफल"
+                  : "selfTest() असफल या असमर्थित परिणाम"
+              );
+            } else {
+              record(
+                moduleAudit,
+                true,
+                entry.title,
+                "mount(context) उपलब्ध; वैकल्पिक selfTest() उपलब्ध नहीं"
+              );
+            }
+          } catch (error) {
+            record(
+              moduleAudit,
+              false,
+              entry.title,
+              error && error.message ? error.message : String(error)
+            );
+          }
+        }
+
+        state.registry.declared
+          .filter(entry => !entry.enabled)
+          .forEach(entry => appendAuditLine(
+            moduleAudit,
+            true,
+            entry.title + " (placeholder/disabled)",
+            entry.file + " · निष्क्रिय, इसलिए import/mount नहीं किया गया"
+          ));
+
+        state.registry.invalid.forEach(message => {
+          record(moduleAudit, false, "Registry प्रविष्टि", message);
+        });
+
+        if (!state.registry.declared.length && !state.registry.invalid.length) {
+          appendAuditLine(
+            moduleAudit,
+            true,
+            "Registry खाली है",
+            "यह वैध प्रारंभिक स्थिति है; अभी कोई अतिरिक्त module घोषित नहीं है"
+          );
+        }
+      } else {
+        appendAuditLine(
+          moduleAudit,
+          false,
+          "Registry modules",
+          state.registry.error || "Registry पढ़ी नहीं जा सकी"
+        );
+      }
+
+      const summary = document.createElement("div");
+      summary.className = failures ? "status warn" : "status";
+      summary.textContent = failures
+        ? "जाँच पूर्ण: " + (checks - failures) + "/" + checks +
+          " सफल; " + failures + " समस्या मिली।"
+        : "जाँच पूर्ण: सभी " + checks + " जाँचें सफल रहीं।";
+      auditList.prepend(summary);
+      return { status: failures ? "FAILED" : "PASSED", total: checks, failed: failures };
+    })();
+
+    state.diagnosticsPromise = task;
+    try {
+      return await task;
+    } finally {
+      if (state.diagnosticsPromise === task) state.diagnosticsPromise = null;
+    }
+  }
+
+  function bindDiagnosticsControls() {
+    const auditButton = byId("run-audit");
+    if (auditButton) auditButton.addEventListener("click", runDiagnostics);
   }
 
   function emit(eventName, detail) {
@@ -557,7 +827,7 @@
 
     nav.querySelectorAll("button[data-route]").forEach(button => {
       const route = button.dataset.route;
-      if (route !== "index" && !PAGE_MODULES[route]) {
+      if (route !== "index" && !BUILTIN_ROUTES.has(route) && !PAGE_MODULES[route]) {
         button.disabled = true;
         button.setAttribute("aria-disabled", "true");
         button.title = "यह पेज सक्रिय नहीं है क्योंकि इसका वास्तविक JavaScript मॉड्यूल Repository में उपलब्ध नहीं है।";
@@ -579,6 +849,7 @@
   async function start() {
     bindNavigation();
     bindIndexControls();
+    bindDiagnosticsControls();
     loadRegistry();
     // navigate("index") also mounts/activates the TTS module because its
     // controls live inside the Index view. This keeps startup and return-to-Index
