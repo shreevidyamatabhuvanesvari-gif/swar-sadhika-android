@@ -307,6 +307,15 @@ function makeAnimatedPoints(base, state, elapsedMs) {
   return points;
 }
 
+function stripVerseNumberMarkers(text) {
+  return String(text || "").normalize("NFC")
+    .replace(/([।॥])\\s*[०-९0-9]+\\s*([।॥])/gu, (_, left, right) =>
+      left === "॥" || right === "॥" ? "॥" : "।"
+    )
+    .replace(/[ \\t]+\\n/gu, "\\n")
+    .trim();
+}
+
 function currentSpeechCharacter(state, elapsedMs) {
   const chars=Array.from(state.speechText || "");
   if (!chars.length) return "";
@@ -807,7 +816,8 @@ export async function mount(context) {
   }
 
   async function speak() {
-    const text=textInput.value.trim();
+    const enteredText=textInput.value.trim();
+    const text=stripVerseNumberMarkers(enteredText);
     if (!text) { setStatus("पहले वाचन के लिए पाठ लिखें।","error"); return; }
     if (!state.engine || !state.basePoints) { setStatus("पहले फोटो से अवतार बनाएँ।","error"); return; }
     const voice=selectedVoice();
@@ -1062,6 +1072,9 @@ export function selfTest() {
   const maxPointDelta=(left,right)=>Math.max(...left.map((point,index)=>Math.hypot(point.x-right[index].x,point.y-right[index].y)));
   const mouthGap=(points)=>Math.abs(points[14].y-points[13].y);
   const checks=[
+    {id:"tts-omits-verse-numbers-but-keeps-pause-markers",passed:
+      stripVerseNumberMarkers("नमः शिवाय॥१॥\\nशान्तिः॥ २ ॥") === "नमः शिवाय॥\\nशान्तिः॥" &&
+      stripVerseNumberMarkers("मन्त्र॥3॥") === "मन्त्र॥"},
     {id:"normalized-landmarks-map-to-photo-pixels",passed:Math.abs(mappedLandmark.x-225)<1e-6 && Math.abs(mappedLandmark.y-400)<1e-6},
     {id:"landmark-fit-retains-source-image-dimensions",passed:testFit.sourceWidth===1000 && testFit.sourceHeight===1000},
     {id:"delaunay-mesh-builds",passed:triangles.length>=4},
