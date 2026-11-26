@@ -593,6 +593,17 @@ export async function mount(context) {
         if (detail && detail.error) setStatus("अवतार वाचन त्रुटि: "+(detail.error.message || detail.error.code),"error");
       })
     );
+    if (state.engineKind==="ninada") state.unsubscribers.push(
+      state.engine.on("progress",detail=>{
+        if (detail && detail.total>0 && Number.isFinite(Number(detail.loaded))) {
+          const loaded=(Number(detail.loaded)/1048576).toFixed(1);
+          const total=(Number(detail.total)/1048576).toFixed(1);
+          const percent=Math.min(100,Math.round(Number(detail.loaded)/Number(detail.total)*100));
+          setVoiceStatus((detail.stage==="model-download"?"संस्कृत महिला मॉडल": "ONNX Runtime WASM")+" डाउनलोड: "+loaded+" / "+total+" MiB ("+percent+"%)");
+        } else if (detail && detail.stage==="model") setVoiceStatus("संस्कृत महिला neural मॉडल लोड हो रहा है…");
+        else if (detail && detail.message) setVoiceStatus(detail.message);
+      })
+    );
     state.unsubscribers.push(
       state.engine.on("voiceschanged",()=> {
         state.voiceInventory=state.engine.getInventory();
