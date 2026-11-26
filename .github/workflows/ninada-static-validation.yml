@@ -6,13 +6,25 @@ on:
     paths:
       - "assets/js/vendors/ninada/**"
       - "assets/js/tts/ninada-*-part2.js"
+      - "modules/voice-studio-part2.js"
+      - "modules/registry.json"
+      - "assets/js/app.js"
       - "assets/js/pages/page-avatar.js"
+      - "assets/js/pages/page-sanskrit-display-studio-part2.js"
+      - "vocal-singing-test-part2.html"
+      - "assets/js/brain/brain-browser-test-part2.html"
       - ".github/workflows/ninada-static-validation.yml"
   pull_request:
     paths:
       - "assets/js/vendors/ninada/**"
       - "assets/js/tts/ninada-*-part2.js"
+      - "modules/voice-studio-part2.js"
+      - "modules/registry.json"
+      - "assets/js/app.js"
       - "assets/js/pages/page-avatar.js"
+      - "assets/js/pages/page-sanskrit-display-studio-part2.js"
+      - "vocal-singing-test-part2.html"
+      - "assets/js/brain/brain-browser-test-part2.html"
       - ".github/workflows/ninada-static-validation.yml"
 
 permissions:
@@ -31,6 +43,10 @@ jobs:
           node --check assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs
           node --check assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs
           node --check assets/js/vendors/ninada/ort-wasm-simd-threaded-1.31.1-part2.mjs
+      - name: Check shared voice studio syntax
+        run: node --input-type=module --check < modules/voice-studio-part2.js
+      - name: Check app controller syntax
+        run: node --check assets/js/app.js
       - name: Check Ninada worker syntax
         run: node --input-type=module --check < assets/js/tts/ninada-neural-worker-part2.js
       - name: Check Ninada avatar engine syntax
@@ -45,11 +61,16 @@ jobs:
             'assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs',
             'assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs',
             'assets/js/vendors/ninada/ort-wasm-simd-threaded-1.31.1-part2.mjs',
+            'modules/voice-studio-part2.js',
             'assets/js/tts/ninada-neural-worker-part2.js',
             'assets/js/tts/ninada-avatar-tts-engine-part2.js',
             'assets/js/pages/page-avatar.js'
           ];
           for (const path of paths) await access(path);
+          const studio = await import('./modules/voice-studio-part2.js');
+          if (typeof studio.mountSharedVoiceStudioPart2 !== 'function' || typeof studio.mount !== 'function') {
+            throw new Error('Shared Voice Studio exports are incomplete');
+          }
           const ninada = await import('./assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs');
           if (typeof ninada.default !== 'function' || ninada.SAMPLE_RATE !== 24000) {
             throw new Error('Ninada exports/version contract failed');
