@@ -423,7 +423,7 @@ export async function mount(context) {
     '   <div class="avatar-note">Ninada पहली बार ONNX Runtime और संस्कृत महिला मॉडल डाउनलोड करता है। दोनों स्थानीय cache में रखे जाते हैं; सफल डाउनलोड के बाद inference फोन पर होता है। यह neural वाचन है, गायन मॉडल नहीं।</div>',
     '   <div class="avatar-actions"><button id="photo-avatar-refresh-voices" class="btn" type="button">↻ आवाज़ सूची ताज़ा करें</button><button id="photo-avatar-test-voice" class="btn" type="button" disabled>♪ आवाज़ का नमूना सुनें</button></div>',
     '   <div id="photo-avatar-voice-status" class="avatar-status" role="status" aria-live="polite">Android की वास्तविक आवाज़ सूची जाँची जा रही है…</div>',
-    '   <div class="avatar-note">स्वर-प्रीसेट: कोमल युवा स्त्री-शैली · अल्पविराम और पूर्ण विराम पर स्वाभाविक ठहराव।</div>',
+    '   <div class="avatar-note">Native इंजन में कोमल स्वर-प्रीसेट लागू होता है; Ninada अपने प्रशिक्षित संस्कृत स्त्री-स्वर और मॉडल की prosody का उपयोग करता है।</div>',
     '   <div class="avatar-tuning">',
     '    <label class="avatar-field">वाचन गति <span id="photo-avatar-rate-value">0.88×</span><input id="photo-avatar-rate" type="range" min="0.65" max="1.15" step="0.05" value="0.88"></label>',
     '    <label class="avatar-field">दृष्टि <select id="photo-avatar-gaze"><option value="auto">स्वाभाविक स्वतः</option><option value="left">बाईं ओर</option><option value="center">सामने</option><option value="right">दाईं ओर</option></select></label>',
