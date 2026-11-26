@@ -1,4 +1,4 @@
-import { createTtsEngine } from "../tts/tts-engine.js";
+import { createAvatarTtsEngine, SOFT_YOUNG_FEMININE_PRESET } from "../tts/avatar-tts-engine.js";
 import { mountSharedVoiceStudioPart2 } from "../../../modules/voice-studio-part2.js";
 
 /*
@@ -135,6 +135,15 @@ function voiceIdentity(voice) {
   ].join("|");
 }
 
+function avatarTtsVoiceKey(voice) {
+  const uri = String(voice && voice.voiceURI || "").trim();
+  const name = String(voice && voice.name || "").trim();
+  const lang = String(voice && voice.lang || "").trim();
+  const locality = voice && voice.localService === true ? "local"
+    : voice && voice.localService === false ? "remote" : "unknown";
+  return uri || [name, lang, locality].join("\u241f");
+}
+
 function setVoiceUiStatus(message, kind = "info") {
   const target = byId("studio-voice-status");
   if (!target) return;
@@ -203,7 +212,12 @@ function renderVoiceOptions() {
   const select = byId("studio-voice");
   const previousIdentity = state.selectedVoice ? voiceIdentity(state.selectedVoice) : "";
   const discovered = Array.isArray(state.systemVoices) ? state.systemVoices.slice() : [];
-  const usable = discovered.filter(isSelectableLocalVoice).sort((a, b) => scoreVoice(b) - scoreVoice(a));
+  const avatarOrder = state.engine ? state.engine.getInventory().selectable.map(item => voiceIdentity(item.voice)) : [];
+  const avatarRank = new Map(avatarOrder.map((key, index) => [key, index]));
+  const usable = discovered.filter(isSelectableLocalVoice).sort((a, b) =>
+    (avatarRank.get(voiceIdentity(a)) ?? Number.MAX_SAFE_INTEGER) -
+    (avatarRank.get(voiceIdentity(b)) ?? Number.MAX_SAFE_INTEGER)
+  );
   const unavailable = discovered.filter(voice => !isSelectableLocalVoice(voice));
   state.voices = usable;
 
@@ -253,7 +267,8 @@ function renderVoiceOptions() {
     state.selectedVoice = null;
   } else {
     const previousIndex = usable.findIndex(voice => voiceIdentity(voice) === previousIdentity);
-    const chosenIndex = previousIndex >= 0 ? previousIndex : 0;
+    const defaultIndex = usable.findIndex(voice => voice.default === true);
+    const chosenIndex = previousIndex >= 0 ? previousIndex : defaultIndex >= 0 ? defaultIndex : 0;
     select.value = String(chosenIndex);
     state.selectedVoice = usable[chosenIndex];
   }
@@ -314,6 +329,7 @@ async function refreshVoices(userInitiated = false) {
       if (discovered.some(isSelectableLocalVoice)) break;
     }
     if (state.destroyed || token !== state.voiceRefreshToken) return;
+    if (state.engine) await state.engine.refreshVoices();
 
     const unique = new Map();
     discovered.forEach(voice => {
@@ -346,7 +362,7 @@ async function refreshVoices(userInitiated = false) {
 }
 
 async function initializeEngine() {
-  state.engine = createTtsEngine({ target: window, defaultBackend: "native" });
+  state.engine = createAvatarTtsEngine({ target: window });
   state.unsubscribeBoundary = state.engine.on("boundary", detail => {
     if (!state.speaking || state.paused || !state.currentPrepared || !detail) return;
     state.boundarySeen = true;
@@ -356,16 +372,23 @@ async function initializeEngine() {
     if (state.revealedCount > 0) drawStage();
   });
   state.unsubscribeVoices = state.engine.on("voiceschanged", () => {
-    if (!state.destroyed) void refreshVoices();
+    if (state.destroyed) return;
+    const inventory = state.engine.getInventory();
+    state.systemVoices = inventory.all.map(item => item.voice);
+    renderVoiceOptions();
+    if (state.engineReady) setPlayerButtons();
   });
-  state.engine.on("error", detail => {
-    if (detail && detail.message) setStatus("TTS Engine: " + detail.message, "error");
+  state.engine.on("warning", detail => {
+    if (detail && detail.message) setStatus("Avatar TTS Engine: " + detail.message, "warn");
   });
-  const status = await state.engine.initialize({ backendId: "native" });
+  const status = await state.engine.initialize();
   if (!status || status.ready !== true) {
-    throw new Error("Native TTS Engine इस ब्राउज़र में तैयार नहीं हुआ।");
+    throw new Error("अवतार का बिना-मॉडल Native TTS Engine इस ब्राउज़र में तैयार नहीं हुआ।");
   }
   state.engineReady = true;
+  const inventory = state.engine.getInventory();
+  state.systemVoices = inventory.all.map(item => item.voice);
+  renderVoiceOptions();
   await refreshVoices();
   setPlayerButtons();
 }
@@ -687,7 +710,7 @@ function startCharacterFallback(line) {
   state.boundarySeen = false;
   state.lineStartedAt = performance.now();
   const count = graphemes(line).length;
-  const rate = Number(byId("studio-rate").value) || 1;
+  const rate = Number(byId("studio-rate").value) || SOFT_YOUNG_FEMININE_PRESET.rate;
   state.lineFallbackDuration = Math.max(1400, count * 105 / rate);
   state.fallbackTimer = window.setInterval(() => {
     if (!state.speaking || state.paused) return;
@@ -786,7 +809,7 @@ function getPlaybackItemsFromLines(lines) {
 
 
 async function beginPlayback(options = {}) {
-  if (!state.engineReady) throw new Error("Native TTS Engine अभी तैयार नहीं है।");
+  if (!state.engineReady) throw new Error("अवतार का बिना-मॉडल Native TTS Engine अभी तैयार नहीं है।");
   if (state.speaking) return;
   const items = getPlaybackItems();
   if (!items.length) throw new Error("वाचन योग्य पाठ उपलब्ध नहीं है। श्लोक संख्या के अतिरिक्त संस्कृत पाठ लिखें।");
@@ -794,7 +817,7 @@ async function beginPlayback(options = {}) {
     throw new Error("पाठ अधिकतम " + MAX_TEXT_LENGTH + " अक्षरों तक सीमित है।");
   }
   const voice = currentVoice();
-  if (!voice || voice.localService !== true) throw new Error("कोई स्थानीय महिला-प्राथमिकता वाली Voice उपलब्ध नहीं है।");
+  if (!voice || voice.localService !== true || !avatarTtsVoiceKey(voice)) throw new Error("अवतार के समान स्थानीय हिन्दी/संस्कृत Voice उपलब्ध नहीं है। Android की स्थानीय Voice जाँचें।");
 
   const generation = ++state.generation;
   state.speaking = true;
@@ -828,19 +851,15 @@ async function beginPlayback(options = {}) {
       state.revealedCount = 0;
       state.boundarySeen = false;
       const lang = voice.lang || "hi-IN";
-      state.currentPrepared = state.engine.prepareSpeech(speechLine, {
-        backendType: "native",
-        voice
-      });
+      state.currentPrepared = { originalText: speechLine };
       drawStage();
       setStatus("पंक्ति " + (index + 1) + " / " + items.length + " · " + voice.name + " · " + lang);
       startCharacterFallback(speechLine);
       const result = await state.engine.speak(speechLine, {
-        voice,
-        lang,
-        rate: Number(byId("studio-rate").value) || 1,
-        pitch: 1,
-        volume: 1,
+        voiceKey: avatarTtsVoiceKey(voice),
+        rate: Number(byId("studio-rate").value) || SOFT_YOUNG_FEMININE_PRESET.rate,
+        pitch: SOFT_YOUNG_FEMININE_PRESET.pitch,
+        volume: SOFT_YOUNG_FEMININE_PRESET.volume,
         replace: false
       });
       clearCharacterFallback();
@@ -939,7 +958,7 @@ function ensureRecordingPreview() {
 
 async function playSelectedVoiceSample() {
   if (!state.engineReady) {
-    setVoiceUiStatus("Native TTS Engine अभी तैयार नहीं है।", "warn");
+    setVoiceUiStatus("अवतार का बिना-मॉडल Native TTS Engine अभी तैयार नहीं है।", "warn");
     return;
   }
   if (state.speaking) {
@@ -961,18 +980,17 @@ async function playSelectedVoiceSample() {
   state.speaking = true;
   state.paused = false;
   state.currentLine = sample;
-  state.currentPrepared = state.engine.prepareSpeech(sample, { backendType: "native", voice });
+  state.currentPrepared = { originalText: sample };
   state.revealedCount = 0;
   setPlayerButtons();
   startCharacterFallback(sample);
   drawStage();
   try {
     const result = await state.engine.speak(sample, {
-      voice,
-      lang: voice.lang || (language === "sa" ? "sa-IN" : "hi-IN"),
-      rate: Number(byId("studio-rate").value) || 1,
-      pitch: 1,
-      volume: 1,
+      voiceKey: avatarTtsVoiceKey(voice),
+      rate: Number(byId("studio-rate").value) || SOFT_YOUNG_FEMININE_PRESET.rate,
+      pitch: SOFT_YOUNG_FEMININE_PRESET.pitch,
+      volume: SOFT_YOUNG_FEMININE_PRESET.volume,
       replace: false
     });
     if (generation === state.generation && result && result.status === "ended") {
@@ -1273,7 +1291,9 @@ export function selfTest() {
   const sample = graphemes("क्षि");
   const checks = [
     { id: "9x16-canvas", passed: canvas.width / canvas.height === 9 / 16 },
-    { id: "native-engine", passed: typeof createTtsEngine === "function" },
+    { id: "avatar-native-model-free-engine", passed: typeof createAvatarTtsEngine === "function" &&
+      SOFT_YOUNG_FEMININE_PRESET.rate === 0.88 && SOFT_YOUNG_FEMININE_PRESET.pitch === 1.14 &&
+      SOFT_YOUNG_FEMININE_PRESET.volume === 0.98 },
     { id: "grapheme-segmentation", passed: sample.length > 0 && sample.map(item => item.text).join("") === "क्षि" },
     { id: "text-limit", passed: MAX_TEXT_LENGTH === 12000 },
     { id: "hyphenated-compound-line-join", passed:
