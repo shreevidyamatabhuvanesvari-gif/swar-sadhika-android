@@ -1,0 +1,59 @@
+name: Ninada static validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/js/vendors/ninada/**"
+      - "assets/js/tts/ninada-*-part2.js"
+      - "assets/js/pages/page-avatar.js"
+      - ".github/workflows/ninada-static-validation.yml"
+  pull_request:
+    paths:
+      - "assets/js/vendors/ninada/**"
+      - "assets/js/tts/ninada-*-part2.js"
+      - "assets/js/pages/page-avatar.js"
+      - ".github/workflows/ninada-static-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-module-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check ESM vendor bundles
+        run: |
+          node --check assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs
+          node --check assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs
+      - name: Check application modules
+        run: |
+          node --input-type=module --check < assets/js/tts/ninada-neural-worker-part2.js
+          node --input-type=module --check < assets/js/tts/ninada-avatar-tts-engine-part2.js
+          node --input-type=module --check < assets/js/pages/page-avatar.js
+      - name: Verify local module imports
+        run: |
+          node --input-type=module <<'NODE'
+          import { access } from 'node:fs/promises';
+          const paths = [
+            'assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs',
+            'assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs',
+            'assets/js/tts/ninada-neural-worker-part2.js',
+            'assets/js/tts/ninada-avatar-tts-engine-part2.js',
+            'assets/js/pages/page-avatar.js'
+          ];
+          for (const path of paths) await access(path);
+          const ninada = await import('./assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs');
+          if (typeof ninada.default !== 'function' || ninada.SAMPLE_RATE !== 24000) {
+            throw new Error('Ninada exports/version contract failed');
+          }
+          const ort = await import('./assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs');
+          if (!ort.env?.wasm || typeof ort.InferenceSession?.create !== 'function') {
+            throw new Error('ONNX Runtime Web exports are incomplete');
+          }
+          console.log('Ninada and ONNX Runtime module exports verified.');
+          NODE
