@@ -30,11 +30,12 @@ jobs:
         run: |
           node --check assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs
           node --check assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs
-      - name: Check application modules
-        run: |
-          node --input-type=module --check < assets/js/tts/ninada-neural-worker-part2.js
-          node --input-type=module --check < assets/js/tts/ninada-avatar-tts-engine-part2.js
-          node --input-type=module --check < assets/js/pages/page-avatar.js
+      - name: Check Ninada worker syntax
+        run: node --input-type=module --check < assets/js/tts/ninada-neural-worker-part2.js
+      - name: Check Ninada avatar engine syntax
+        run: node --input-type=module --check < assets/js/tts/ninada-avatar-tts-engine-part2.js
+      - name: Check avatar page syntax
+        run: node --input-type=module --check < assets/js/pages/page-avatar.js
       - name: Verify local module imports
         run: |
           node --input-type=module <<'NODE'
