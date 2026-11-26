@@ -1,7 +1,7 @@
 /* Swar-Sadhika Ninada worker · local Sanskrit female neural TTS · model weights CC-BY-4.0 */
 import ninada from "../vendors/ninada/ninada-engine-5.1.2-part2.mjs";
 import * as ort from "../vendors/ninada/ort-wasm-1.31.1-part2.mjs";
-const MODEL_URL="https://huggingface.co/gnumanth/ninada/resolve/main/onnx_mobile/sa_female.onnx";
+const MODEL_URL="https://huggingface.co/gnumanth/ninada/resolve/25143ee/onnx_mobile/sa_female.onnx";
 const WASM_URL="https://raw.githubusercontent.com/hemanth/ninada/745b55633615cfacc636af81ac08450fd3ff35d3/docs/ort/ort-wasm-simd-threaded.wasm";
 const RUNTIME_CACHE="swar-sadhika-ninada-runtime-v1";
 let engine=null,initPromise=null,active=null,sequence=0;
