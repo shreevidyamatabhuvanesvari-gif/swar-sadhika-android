@@ -18,6 +18,7 @@ async function speak(text,settings={}){if(disposed)throw new Error("Ninada TTS �
 async function pause(){if(!active||!context)return false;if(context.state==="running")await context.suspend();paused=context.state==="suspended";emit("pause",{});return paused;}
 async function resume(){if(!active||!context)return false;if(context.state==="suspended")await context.resume();paused=context.state!=="running";if(!paused)emit("resume",{});return !paused;}
 async function cancel(){if(!active)return false;const run=active;worker?.postMessage({type:"cancel"});stopSources();active=null;paused=false;status="ready";emit("speechcancel",{reason:"cancelled"});run.resolve({status:"cancelled"});return true;}
-async function playSample(voiceKey=VOICE.key,settings={}){if(voiceKey!==VOICE.key)throw new Error("Ninada voice key अमान्य है।");return speak("ॐ नमः शिवाय। शान्तिः, शान्तिः, शान्तिः।",settings);}\nasync function refreshVoices(){return inventory();}
+async function playSample(voiceKey=VOICE.key,settings={}){if(voiceKey!==VOICE.key)throw new Error("Ninada voice key अमान्य है।");return speak("ॐ नमः शिवाय। शान्तिः, शान्तिः, शान्तिः।",settings);}
+async function refreshVoices(){return inventory();}
 async function dispose(){if(disposed)return;await cancel();disposed=true;try{worker?.postMessage({type:"dispose"});worker?.terminate();}catch(_){}worker=null;if(context&&context.state!=="closed")try{await context.close();}catch(_){}context=null;master=null;listeners.clear();status="disposed";}
 return Object.freeze({version:NINADA_AVATAR_TTS_VERSION_PART2,initialize,refreshVoices,getInventory:inventory,getStatus,speak,playSample,on,cancel,pause,resume,dispose});}
