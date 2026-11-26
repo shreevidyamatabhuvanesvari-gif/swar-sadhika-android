@@ -309,10 +309,10 @@ function makeAnimatedPoints(base, state, elapsedMs) {
 
 function stripVerseNumberMarkers(text) {
   return String(text || "").normalize("NFC")
-    .replace(/([।॥])\\s*[०-९0-9]+\\s*([।॥])/gu, (_, left, right) =>
+    .replace(/([।॥])\s*[०-९0-9]+\s*([।॥])/gu, (_, left, right) =>
       left === "॥" || right === "॥" ? "॥" : "।"
     )
-    .replace(/[ \\t]+\\n/gu, "\\n")
+    .replace(/[ \t]+\n/gu, "\n")
     .trim();
 }
 
