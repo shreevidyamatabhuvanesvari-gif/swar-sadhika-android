@@ -90,6 +90,8 @@
     createVocalSingingEngine,
     selfTest
   } from "./modules/vocal-singing-engine-part2.js";
+  import { mountSharedVoiceStudioPart2 } from "./modules/voice-studio-part2.js";
+  mountSharedVoiceStudioPart2({ document, target: window });
 
   const byId = id => document.getElementById(id);
   const engine = createVocalSingingEngine({ target: window });
