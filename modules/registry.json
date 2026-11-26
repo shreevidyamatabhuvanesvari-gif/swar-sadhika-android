@@ -9,6 +9,14 @@
       "description": "Local Web Audio DSP vocal synthesis for Sanskrit syllables; no AI model, network request, or instrumental accompaniment.",
       "enabled": true,
       "status": "active"
+    },
+    {
+      "id": "voice-studio-part2",
+      "title": "Universal Sanskrit Voice Studio (Ninada + Vocal Singing)",
+      "file": "modules/voice-studio-part2.js",
+      "description": "Shared local Sanskrit speech and melodic singing panel for all HTML entry pages; Ninada neural female speech and model-free Vocal Singing DSP.",
+      "enabled": true,
+      "status": "active"
     }
   ]
 }
