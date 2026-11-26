@@ -5,7 +5,7 @@
 import { createVocalSingingEngine } from "./vocal-singing-engine-part2.js";
 import { createNinadaAvatarTtsEnginePart2 } from "../assets/js/tts/ninada-avatar-tts-engine-part2.js";
 
-export const VOICE_STUDIO_PART2_VERSION = "1.0.0";
+export const VOICE_STUDIO_PART2_VERSION = "1.1.0";
 const GLOBAL_KEY = "__SwarSadhikaUniversalVoiceStudioPart2";
 const PANEL_ID = "swar-sadhika-universal-voice-studio-part2";
 
@@ -104,6 +104,8 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   let activeKind = "";
   let paused = false;
   let busy = false;
+  let starting = false;
+  let playbackToken = 0;
   let disposed = false;
   const unsubscribers = [];
 
@@ -127,21 +129,32 @@ export function mountSharedVoiceStudioPart2(options = {}) {
     rateValue.textContent = Number(rateInput.value).toFixed(2) + "×";
   }
   function updateControls() {
-    const running = Boolean(activeKind) && !paused;
-    const stopped = !activeKind;
-    playButton.disabled = busy || !stopped;
-    prepareButton.disabled = busy || activeKind !== "";
-    pauseButton.disabled = !running || busy;
-    resumeButton.disabled = !paused || busy;
-    stopButton.disabled = stopped && !busy;
+    const hasPlayback = Boolean(activeKind);
+    const running = hasPlayback && !starting && !paused;
+    playButton.disabled = busy || hasPlayback;
+    prepareButton.disabled = busy || hasPlayback;
+    pauseButton.disabled = busy || !running;
+    resumeButton.disabled = busy || !hasPlayback || !paused;
+    stopButton.disabled = busy || !hasPlayback || starting;
+    modeSelect.disabled = busy || hasPlayback;
+    textInput.disabled = busy || hasPlayback;
+    rateInput.disabled = busy || hasPlayback;
+  }
+  function markPlaybackStarted(kind) {
+    if (activeKind !== kind || !starting) return;
+    starting = false;
+    busy = false;
+    updateControls();
   }
   function getVocalEngine() {
     if (!vocalEngine) {
       vocalEngine = createVocalSingingEngine({ target: win });
       unsubscribers.push(vocalEngine.on("statechange", event => {
         if (disposed || modeSelect.value !== "singing") return;
-        if (event.state === "speaking") setStatus("सुरबद्ध संस्कृत गायन चल रहा है…");
-        else if (event.state === "paused") setStatus("गायन विराम पर है।");
+        if (event.state === "speaking") {
+          markPlaybackStarted("singing");
+          setStatus("सुरबद्ध संस्कृत गायन चल रहा है…");
+        } else if (event.state === "paused") setStatus("गायन विराम पर है।");
         else if (event.state === "idle" && event.result) {
           setStatus(event.result.status === "ended" ? "गायन पूरा हुआ।" : "गायन रोक दिया गया।", "good");
         }
@@ -169,6 +182,7 @@ export function mountSharedVoiceStudioPart2(options = {}) {
         }
       }));
       unsubscribers.push(ninadaEngine.on("speechstart", () => {
+        markPlaybackStarted("ninada");
         if (modeSelect.value === "ninada") setStatus("Ninada संस्कृत वाचन चल रहा है…");
       }));
       unsubscribers.push(ninadaEngine.on("speechend", () => {
@@ -204,23 +218,25 @@ export function mountSharedVoiceStudioPart2(options = {}) {
     if (busy || activeKind) return;
     const text = textInput.value.trim();
     if (!text) { setStatus("पहले संस्कृत पाठ लिखें।", "warn"); return; }
-    busy = true;
-    activeKind = modeSelect.value;
+    const kind = modeSelect.value;
+    const token = ++playbackToken;
+    activeKind = kind;
+    starting = true;
     paused = false;
+    busy = true;
     updateControls();
+    let completion;
     try {
-      if (activeKind === "ninada") {
+      if (kind === "ninada") {
         const engine = getNinadaEngine();
         if (!engine.getStatus().ready) {
-          activeKind = "";
-          setStatus("पहले ‘Ninada मॉडल तैयार करें’ दबाएँ। डाउनलोड पूरा होने पर वाचन शुरू करें।", "warn");
-          return;
+          throw new Error("पहले ‘Ninada मॉडल तैयार करें’ दबाएँ। डाउनलोड पूरा होने पर वाचन शुरू करें।");
         }
-        await engine.speak(text, { rate: Number(rateInput.value) || 0.92 });
+        completion = engine.speak(text, { rate: Number(rateInput.value) || 0.92 });
       } else {
         const engine = getVocalEngine();
         const rate = Number(rateInput.value) || 0.92;
-        await engine.sing(text, {
+        completion = engine.sing(text, {
           baseFrequency: 246.94,
           tempo: Math.min(1.7, Math.max(0.55, rate)),
           noteDurationMs: 420,
@@ -228,51 +244,81 @@ export function mountSharedVoiceStudioPart2(options = {}) {
           volume: 0.62
         });
       }
-      setStatus(activeKind === "ninada" ? "Ninada वाचन पूरा हुआ।" : "सुरबद्ध गायन पूरा हुआ।", "good");
+      const result = await completion;
+      if (token !== playbackToken) return;
+      if (result && result.status === "cancelled") {
+        setStatus("वाचन / गायन रोक दिया गया।", "good");
+      } else {
+        setStatus(kind === "ninada" ? "Ninada वाचन पूरा हुआ।" : "सुरबद्ध गायन पूरा हुआ।", "good");
+      }
     } catch (error) {
-      setStatus((activeKind === "ninada" ? "Ninada वाचन" : "गायन") +
-        " शुरू नहीं हो सका: " + (error && error.message || "अज्ञात त्रुटि"), "error");
+      if (token === playbackToken) {
+        setStatus((kind === "ninada" ? "Ninada वाचन" : "गायन") +
+          " शुरू नहीं हो सका: " + (error && error.message || "अज्ञात त्रुटि"), "error");
+      }
     } finally {
-      activeKind = "";
-      paused = false;
-      busy = false;
-      updateControls();
+      if (token === playbackToken) {
+        activeKind = "";
+        starting = false;
+        paused = false;
+        busy = false;
+        updateControls();
+      }
     }
   }
 
   async function pause() {
-    if (busy || !activeKind || paused) return;
-    busy = true; updateControls();
+    if (busy || !activeKind || starting || paused) return;
+    const kind = activeKind;
+    busy = true;
+    updateControls();
     try {
-      const ok = activeKind === "ninada" ? await ninadaEngine.pause() : await vocalEngine.pause();
+      const ok = kind === "ninada" ? await ninadaEngine.pause() : await vocalEngine.pause();
       paused = Boolean(ok);
       setStatus(paused ? "ऑडियो विराम पर है।" : "विराम लागू नहीं हो सका।", paused ? "good" : "warn");
     } catch (error) {
       setStatus("विराम त्रुटि: " + (error && error.message || "अज्ञात त्रुटि"), "error");
-    } finally { busy = false; updateControls(); }
+    } finally {
+      busy = false;
+      updateControls();
+    }
   }
   async function resume() {
-    if (busy || !activeKind || !paused) return;
-    busy = true; updateControls();
+    if (busy || !activeKind || starting || !paused) return;
+    const kind = activeKind;
+    busy = true;
+    updateControls();
     try {
-      const ok = activeKind === "ninada" ? await ninadaEngine.resume() : await vocalEngine.resume();
+      const ok = kind === "ninada" ? await ninadaEngine.resume() : await vocalEngine.resume();
       paused = !ok;
       setStatus(ok ? "ऑडियो फिर शुरू हुआ।" : "ऑडियो फिर शुरू नहीं हो सका।", ok ? "good" : "warn");
     } catch (error) {
       setStatus("Resume त्रुटि: " + (error && error.message || "अज्ञात त्रुटि"), "error");
-    } finally { busy = false; updateControls(); }
+    } finally {
+      busy = false;
+      updateControls();
+    }
   }
   async function stop() {
-    if (busy || !activeKind) return;
-    busy = true; updateControls();
+    if (busy || !activeKind || starting) return;
+    const kind = activeKind;
+    const previousToken = playbackToken;
+    playbackToken += 1;
+    busy = true;
+    updateControls();
     try {
-      if (activeKind === "ninada") await ninadaEngine.cancel();
+      if (kind === "ninada") await ninadaEngine.cancel();
       else await vocalEngine.stop();
+      activeKind = "";
+      paused = false;
+      starting = false;
       setStatus("वाचन / गायन रोक दिया गया।", "good");
     } catch (error) {
+      playbackToken = previousToken;
       setStatus("रोकने में त्रुटि: " + (error && error.message || "अज्ञात त्रुटि"), "error");
     } finally {
-      activeKind = ""; paused = false; busy = false; updateControls();
+      busy = false;
+      updateControls();
     }
   }
 
