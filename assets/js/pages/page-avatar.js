@@ -621,7 +621,7 @@ export async function mount(context) {
     );
     const avatarStatus=await state.brainAdapter.initialize();
     state.voiceInventory=state.engine.getInventory();
-    const initialized={ready:Boolean(avatarStatus && (state.engineKind==="ninada"?avatarStatus.ready:avatarStatus.nativeTtsAvailable)),inventory:state.voiceInventory};
+    const initialized={ready:Boolean(avatarStatus && avatarStatus.initialized && avatarStatus.nativeTtsAvailable),inventory:state.voiceInventory};
     if (!initialized.ready) {
       setVoiceStatus(state.engineKind==="ninada"?"Ninada स्थानीय neural इंजन तैयार नहीं हुआ।":"इस browser में Native SpeechSynthesis उपलब्ध नहीं है।","error");
       updateButtons();
