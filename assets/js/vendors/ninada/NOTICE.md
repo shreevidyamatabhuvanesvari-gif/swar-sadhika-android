@@ -16,7 +16,7 @@
 
 ## Sanskrit female mobile model
 - Model repository: https://huggingface.co/gnumanth/ninada
-- Model file: `onnx_mobile/sa_female.onnx`
+- Model file: `onnx_mobile/sa_female.onnx`\n- Pinned model revision: `25143ee` (Ninada v5.1.2 release)
 - Model release: Ninada 5.1.2
 - Declared model and training-corpus license: CC-BY-4.0.
 - Sanskrit training-corpus attribution: AI4Bharat Rasa (CC-BY-4.0).
