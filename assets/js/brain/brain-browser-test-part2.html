@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://huggingface.co https://raw.githubusercontent.com; worker-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Swar-Sadhika Nano Brain — Browser Storage Audit</title>
   <style>
     :root{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;color-scheme:light dark}
@@ -70,6 +70,8 @@
 
   <script type="module">
     import { createBrainStoragePart2, createOpfsAssetStorePart2 } from "./brain-storage-part2.js";
+    import { mountSharedVoiceStudioPart2 } from "../../../modules/voice-studio-part2.js";
+    mountSharedVoiceStudioPart2({ document, target: window });
 
     const DB_COLDSTART = "swar-sadhika-brain-browser-coldstart-part2";
     const DB_PREFIX = "swar-sadhika-brain-browser-audit-part2-";
