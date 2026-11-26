@@ -30,6 +30,7 @@ jobs:
         run: |
           node --check assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs
           node --check assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs
+          node --check assets/js/vendors/ninada/ort-wasm-simd-threaded-1.31.1-part2.mjs
       - name: Check Ninada worker syntax
         run: node --input-type=module --check < assets/js/tts/ninada-neural-worker-part2.js
       - name: Check Ninada avatar engine syntax
@@ -43,6 +44,7 @@ jobs:
           const paths = [
             'assets/js/vendors/ninada/ninada-engine-5.1.2-part2.mjs',
             'assets/js/vendors/ninada/ort-wasm-1.31.1-part2.mjs',
+            'assets/js/vendors/ninada/ort-wasm-simd-threaded-1.31.1-part2.mjs',
             'assets/js/tts/ninada-neural-worker-part2.js',
             'assets/js/tts/ninada-avatar-tts-engine-part2.js',
             'assets/js/pages/page-avatar.js'
