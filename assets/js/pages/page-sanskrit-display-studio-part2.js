@@ -1,4 +1,5 @@
 import { createTtsEngine } from "../tts/tts-engine.js";
+import { mountSharedVoiceStudioPart2 } from "../../../modules/voice-studio-part2.js";
 
 /*
  * SWR-AI-BRAIN-LOCK-V1 extension — 2026-11-10:
@@ -1185,6 +1186,7 @@ function goToMainIndex() {
 }
 
 function bind() {
+  mountSharedVoiceStudioPart2({ document, target: window });
   installPlayerStyles();
   byId("studio-text-mode").value = "character";
   byId("studio-avatar-file").addEventListener("change", handleAvatarChange);
