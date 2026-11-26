@@ -856,6 +856,23 @@
     // behavior on the same Page Loader and lifecycle path.
     await navigate("index");
 
+    // Shared Sanskrit Voice Studio: mount once at the document level so it
+    // remains available while the SPA changes between its internal pages.
+    try {
+      await loadRegisteredModule("voice-studio-part2", document, {
+        document,
+        target: window
+      });
+    } catch (error) {
+      console.error("[Swar-Sadhika] Universal Voice Studio mount failed", error);
+      const status = byId("registry-status");
+      if (status) {
+        status.className = "status warn";
+        status.textContent = "साझा Voice Studio उपलब्ध नहीं हुआ: " +
+          (error && error.message ? error.message : "अज्ञात त्रुटि");
+      }
+    }
+
     window.addEventListener("pagehide", () => {
       state.media.forEach(releaseMediaUrl);
       state.pageInstances.forEach(instance => {
