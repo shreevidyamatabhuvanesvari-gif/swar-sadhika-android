@@ -459,7 +459,7 @@ async function runVoiceStudioBrowserAudit({ profileDirectory, origin }) {
     const reloadedHost = page.locator(hostSelector);
     await reloadedHost.locator(".launch").click();
     await reloadedHost.locator(".panel:not([hidden])").waitFor({ state: "visible" });
-    await waitForBankText("1 निजी रिकॉर्डिंग · 1 चिह्नित अक्षर-नमूने");
+    await waitForBankText("1 निजी रिकॉर्डिंग · 1 चिह्नित अक्षर-नमूने इस उपकरण में सुरक्षित हैं।");
     milestones.push("recording-and-annotation-restored-after-page-reload");
 
     await reloadedHost.locator(".bank-sing").click();
