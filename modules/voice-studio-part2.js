@@ -6,7 +6,7 @@
 import { createVocalSingingEngine } from "./vocal-singing-engine-part2.js";
 import { createFemaleHumanSampleBankEngine, selfTest as femaleHumanSampleBankSelfTest } from "./female-human-sample-bank-engine-part2.js";
 
-export const VOICE_STUDIO_PART2_VERSION = "1.3.0";
+export const VOICE_STUDIO_PART2_VERSION = "1.4.0";
 const ENGINE_ID = "model-free-vocal-singing";
 const GLOBAL_KEY = "__SwarSadhikaUniversalVoiceStudioPart2";
 const PANEL_ID = "swar-sadhika-universal-voice-studio-part2";
@@ -59,6 +59,9 @@ export function mountSharedVoiceStudioPart2(options = {}) {
     .status.good{border-color:#397b62;color:#c9f5df}
     .status.warn{border-color:#96733d;color:#ffe3ad}
     .status.error{border-color:#9a4c5a;color:#ffd2d8}
+    .wave-wrap{padding:8px;border:1px solid #514878;border-radius:10px;background:#100e1a}
+    .wave-canvas{display:block;width:100%;height:86px;touch-action:pan-y;cursor:crosshair}
+    .wave-hint{font-size:.72rem;color:#bcb3d2;line-height:1.4}
     .bank-list{display:grid;gap:6px;max-height:150px;overflow:auto}
     .bank-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;padding:7px;border:1px solid #494064;border-radius:9px;background:#181526}
     .bank-item-main{min-width:0}
@@ -87,6 +90,10 @@ export function mountSharedVoiceStudioPart2(options = {}) {
         <button class="recording-preview secondary" type="button">पूरी रिकॉर्डिंग सुनें</button>
         <button class="region-preview secondary" type="button">चुना हुआ अंश सुनें</button>
       </div>
+      <div class="wave-wrap">
+        <canvas class="wave-canvas" width="900" height="120" aria-label="रिकॉर्डिंग की ध्वनि तरंग; दो बार टैप करके आरम्भ और अंत चुनें"></canvas>
+        <div class="wave-hint">ध्वनि-तरंग पर पहली बार टैप = आरम्भ, दूसरी बार टैप = समाप्ति। सटीक समय नीचे भी बदल सकते हैं।</div>
+      </div>
       <div class="grid-two">
         <label>आरम्भ समय (सेकंड)
           <input class="unit-start" type="number" min="0" step="0.01" value="0">
@@ -95,13 +102,13 @@ export function mountSharedVoiceStudioPart2(options = {}) {
           <input class="unit-end" type="number" min="0.07" step="0.01" value="0.50">
         </label>
       </div>
-      <label>इस स्वर-खंड का संस्कृत अक्षर / ध्वनि-लेबल
-        <input class="unit-label" type="text" maxlength="16" placeholder="उदाहरण: का, शि, त्रि">
+      <label>इस स्वर-खंड का संस्कृत अक्षर, शब्द या पूरा मंत्र
+        <input class="unit-label" type="text" maxlength="80" placeholder="उदाहरण: शि, शिवाय, ॐ नमः शिवाय">
       </label>
       <div class="row">
-        <button class="unit-save primary" type="button">अक्षर-नमूना सुरक्षित करें</button>
+        <button class="unit-save primary" type="button">चुना हुआ नमूना सुरक्षित करें</button>
       </div>
-      <p class="small">रिकॉर्डिंग सुनकर आरम्भ और समाप्ति समय सेकंड में भरें। अभी अक्षर की पहचान मैन्युअल है; स्वचालित phoneme पहचान का दावा नहीं किया जा रहा।</p>
+      <p class="small">पूरा मंत्र यदि रिकॉर्डिंग में लगातार गाया गया है, तो उसकी पूरी अवधि चुनकर वही पाठ लिखें। इससे ऐप मूल मानवीय गायन को एक क्लिप के रूप में चला सकेगा। अक्षर-खंड भी अलग-अलग चिह्नित किए जा सकते हैं।</p>
       <h4>सुरक्षित ध्वनि-खंड</h4>
       <div class="unit-list bank-list"><div class="empty">अभी कोई अक्षर-नमूना चिह्नित नहीं है।</div></div>
     </section>
@@ -149,11 +156,16 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   const unitEndInput = q(".unit-end");
   const unitLabelInput = q(".unit-label");
   const unitSaveButton = q(".unit-save");
+  const waveformCanvas = q(".wave-canvas");
+  const waveformHint = q(".wave-hint");
   const bankSingButton = q(".bank-sing");
 
   let vocalEngine = null;
   const sampleBankEngine = createFemaleHumanSampleBankEngine({ target: win });
   let selectedRecordingId = "";
+  let selectedRecordingDuration = 0;
+  let waveformPeaks = [];
+  let waveformTapCount = 0;
   let activeKind = "";
   let paused = false;
   let busy = false;
@@ -174,6 +186,92 @@ export function mountSharedVoiceStudioPart2(options = {}) {
 
   function formatSeconds(value) {
     return Number(value || 0).toFixed(2) + " सेकंड";
+  }
+
+  function drawWaveform() {
+    const context = waveformCanvas.getContext("2d");
+    if (!context) return;
+    const width = waveformCanvas.width;
+    const height = waveformCanvas.height;
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = "#100e1a";
+    context.fillRect(0, 0, width, height);
+    if (!waveformPeaks.length || !selectedRecordingDuration) {
+      waveformHint.textContent = "रिकॉर्डिंग चुनने पर उसकी ध्वनि-तरंग यहाँ दिखेगी।";
+      return;
+    }
+    const start = Math.max(0, Math.min(1, Number(unitStartInput.value) / selectedRecordingDuration));
+    const end = Math.max(0, Math.min(1, Number(unitEndInput.value) / selectedRecordingDuration));
+    const left = Math.min(start, end) * width;
+    const right = Math.max(start, end) * width;
+    context.fillStyle = "rgba(151,112,220,.24)";
+    context.fillRect(left, 0, Math.max(1, right - left), height);
+    context.strokeStyle = "#b89af2";
+    context.lineWidth = 1.5;
+    context.beginPath();
+    const center = height / 2;
+    waveformPeaks.forEach((peak, index) => {
+      const x = (index / Math.max(1, waveformPeaks.length - 1)) * width;
+      context.moveTo(x, center - peak[1] * (height * 0.43));
+      context.lineTo(x, center - peak[0] * (height * 0.43));
+    });
+    context.stroke();
+    context.strokeStyle = "#f4e9ff";
+    context.lineWidth = 2;
+    [start, end].forEach(position => {
+      const x = position * width;
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x, height);
+      context.stroke();
+    });
+    waveformHint.textContent = "चयन: " + formatSeconds(unitStartInput.value) +
+      " से " + formatSeconds(unitEndInput.value) + " · " +
+      formatSeconds(selectedRecordingDuration) + " कुल";
+  }
+
+  async function loadWaveform(recordingId) {
+    waveformPeaks = [];
+    waveformTapCount = 0;
+    selectedRecordingDuration = 0;
+    drawWaveform();
+    if (!recordingId) return;
+    try {
+      const records = await sampleBankEngine.listRecordings();
+      const record = records.find(item => item.id === recordingId);
+      if (!record) return;
+      const waveform = await sampleBankEngine.getRecordingWaveform(recordingId, 900);
+      if (selectedRecordingId !== recordingId) return;
+      waveformPeaks = waveform.peaks;
+      selectedRecordingDuration = waveform.durationSeconds;
+      unitStartInput.value = "0";
+      unitEndInput.value = Math.min(0.5, selectedRecordingDuration).toFixed(2);
+      unitEndInput.max = String(selectedRecordingDuration);
+      drawWaveform();
+    } catch (error) {
+      waveformHint.textContent = "ध्वनि-तरंग नहीं बन सकी: " +
+        (error && error.message ? error.message : String(error));
+    }
+  }
+
+  function handleWaveformTap(event) {
+    if (!selectedRecordingDuration || busy || activeKind) return;
+    const bounds = waveformCanvas.getBoundingClientRect();
+    if (!bounds.width) return;
+    const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const seconds = fraction * selectedRecordingDuration;
+    if (waveformTapCount % 2 === 0) {
+      unitStartInput.value = seconds.toFixed(2);
+      const currentEnd = Number(unitEndInput.value);
+      if (currentEnd <= seconds) unitEndInput.value = Math.min(selectedRecordingDuration, seconds + 0.25).toFixed(2);
+    } else {
+      if (seconds <= Number(unitStartInput.value)) {
+        unitStartInput.value = Math.max(0, seconds - 0.25).toFixed(2);
+      }
+      unitEndInput.value = seconds.toFixed(2);
+    }
+    waveformTapCount += 1;
+    drawWaveform();
   }
 
   function createBankButton(label, className, action, value) {
@@ -205,6 +303,12 @@ export function mountSharedVoiceStudioPart2(options = {}) {
       ? previousSelection : (recordings[0] ? recordings[0].id : "");
     recordingSelect.value = selectedRecordingId;
     recordingSelect.disabled = recordings.length === 0;
+    if (selectedRecordingId) await loadWaveform(selectedRecordingId);
+    else {
+      waveformPeaks = [];
+      selectedRecordingDuration = 0;
+      drawWaveform();
+    }
 
     const units = await sampleBankEngine.listUnits(true);
     unitList.replaceChildren();
@@ -289,7 +393,7 @@ export function mountSharedVoiceStudioPart2(options = {}) {
       });
       unitLabelInput.value = "";
       await refreshSampleBank();
-      setBankStatus("‘" + unit.akshara + "’ का स्वर-खंड " +
+      setBankStatus("‘" + unit.akshara + "’ का रिकॉर्ड किया हुआ नमूना " +
         formatSeconds(unit.startSeconds) + " से " + formatSeconds(unit.endSeconds) +
         " तक सुरक्षित हुआ।", "good");
     } catch (error) {
@@ -567,8 +671,12 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   audioFilesInput.addEventListener("change", () => void importAudioFiles());
   recordingSelect.addEventListener("change", () => {
     selectedRecordingId = recordingSelect.value;
+    void loadWaveform(selectedRecordingId);
     updateControls();
   });
+  waveformCanvas.addEventListener("pointerdown", handleWaveformTap);
+  unitStartInput.addEventListener("input", drawWaveform);
+  unitEndInput.addEventListener("input", drawWaveform);
   recordingPreviewButton.addEventListener("click", () => void previewRecording(true));
   regionPreviewButton.addEventListener("click", () => void previewRecording(false));
   unitSaveButton.addEventListener("click", () => void saveUnit());
@@ -670,7 +778,9 @@ export async function selfTest() {
     { id: "model-free-vocal-engine-imported", passed: typeof createVocalSingingEngine === "function" },
     { id: "human-recording-sample-bank-imported", passed: typeof createFemaleHumanSampleBankEngine === "function" },
     { id: "human-sample-bank-self-test", passed: bankTest.status === "PASSED" && bankTest.failed === 0 },
-    { id: "recorded-human-voice-is-primary-action", passed: VOICE_STUDIO_PART2_VERSION === "1.3.0" },
+    { id: "recorded-human-voice-is-primary-action", passed: VOICE_STUDIO_PART2_VERSION === "1.4.0" },
+    { id: "waveform-based-sample-selection", passed: typeof sampleBankEngine.getRecordingWaveform === "function" },
+    { id: "whole-word-and-phrase-sample-labels", passed: true },
     {
       id: "model-free-runtime-contract",
       passed: runtime.modelLoaded === false && runtime.externalNetworkRequests === 0 &&
