@@ -123,6 +123,10 @@ const WORKLET_SOURCE = [
 '      nextRight = swapRight;',
 '      nextLeft = swapLeft;',
 '    }',
+'    this.right = right;',
+'    this.left = left;',
+'    this.nextRight = nextRight;',
+'    this.nextLeft = nextLeft;',
 '    return true;',
 '  }',
 '}',
@@ -251,6 +255,11 @@ export function selfTest() {
   try { createVocalTractReflectionCoefficients([1, 2, 3]); }
   catch (_) { invalidProfileRejected = true; }
   add("invalid-area-profile-rejected", invalidProfileRejected);
+  add("waveguide-state-persists-across-audio-blocks",
+    WORKLET_SOURCE.includes("this.right = right;") &&
+    WORKLET_SOURCE.includes("this.left = left;") &&
+    WORKLET_SOURCE.includes("this.nextRight = nextRight;") &&
+    WORKLET_SOURCE.includes("this.nextLeft = nextLeft;"));
   add("local-worklet-source-contract",
     WORKLET_SOURCE.includes("registerProcessor") &&
     WORKLET_SOURCE.includes("this.reflections") &&
