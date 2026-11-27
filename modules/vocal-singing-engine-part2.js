@@ -1,16 +1,18 @@
 /* Swar-Sadhika — Human Vocal Source-Filter Singing Engine (Part 2)
- * Version 0.5.0: LF-parameterized differentiated glottal source, mixed aspiration,
- * dynamic parallel vocal-tract resonators, Sanskrit articulation and melodic prosody.
+ * Version 0.6.0: LF source-filter plus cycle-level jitter, expressive vibrato,
+ * amplitude motion, formant-linked modulation and Sanskrit singing prosody.
  * Entirely local Web Audio DSP. No neural model, remote API, server, fetch, or model download.
  * The source is an LF-based physical approximation, not a recording or a guarantee of human indistinguishability.
  */
 
-export const VOCAL_SINGING_ENGINE_VERSION = "0.5.0";
+export const VOCAL_SINGING_ENGINE_VERSION = "0.6.0";
 export const SWR_VOCAL_SINGING_ENGINE_ID = "SWR-VOCAL-SINGING-ENGINE-P2-01";
 
 const ENGINE_ARCHITECTURE = "human-vocal-source-filter";
 const OUTPUT_MODE_COMPAT = "model-free-adaptive-glottal-formant-dsp";
 const WORKLET_PROCESSOR_NAME = "swar-sadhika-lf-source-filter-source";
+const VIBRATO_WAVEFORM = "triangle";
+const PERFORMANCE_MODULATION = "cycle-jitter-vibrato-amplitude-formant-motion";
 const DEFAULT_MELODY = Object.freeze([0, 2, 4, 5, 7, 5, 4, 2]);
 
 // Approximate feminine-register Sanskrit vowel targets. These are adjustable
@@ -256,7 +258,8 @@ class SwarSadhikaLFSource extends AudioWorkletProcessor {
     return [
       { name: "frequency", defaultValue: 246.94, minValue: 55, maxValue: 900, automationRate: "a-rate" },
       { name: "detune", defaultValue: 0, minValue: -80, maxValue: 80, automationRate: "a-rate" },
-      { name: "breathiness", defaultValue: 0.035, minValue: 0, maxValue: 0.16, automationRate: "a-rate" }
+      { name: "breathiness", defaultValue: 0.035, minValue: 0, maxValue: 0.16, automationRate: "a-rate" },
+      { name: "jitter", defaultValue: 1.1, minValue: 0, maxValue: 3, automationRate: "a-rate" }
     ];
   }
   constructor(options) {
@@ -264,6 +267,7 @@ class SwarSadhikaLFSource extends AudioWorkletProcessor {
     const supplied = options && options.processorOptions && options.processorOptions.waveform;
     this.waveform = supplied && supplied.length > 16 ? supplied : new Float32Array([0]);
     this.phase = 0;
+    this.jitter = 0;
     this.seed = 0x43a91f27;
     this.stopFrame = Infinity;
     this.finished = false;
@@ -279,6 +283,7 @@ class SwarSadhikaLFSource extends AudioWorkletProcessor {
     const frequency = parameters.frequency;
     const detune = parameters.detune;
     const breathiness = parameters.breathiness;
+    const jitter = parameters.jitter;
     const table = this.waveform;
     const tableLength = table.length;
     for (let i = 0; i < voice.length; i += 1) {
@@ -298,22 +303,25 @@ class SwarSadhikaLFSource extends AudioWorkletProcessor {
       const hz = frequency.length > 1 ? frequency[i] : frequency[0];
       const cents = detune.length > 1 ? detune[i] : detune[0];
       const airAmount = breathiness.length > 1 ? breathiness[i] : breathiness[0];
-      const actualHz = Math.max(55, Math.min(900, hz * Math.pow(2, cents / 1200)));
+      this.seed ^= this.seed << 13;
+      this.seed ^= this.seed >>> 17;
+      this.seed ^= this.seed << 5;
+      const random = ((this.seed >>> 0) / 2147483648) - 1;
+      const jitterRange = jitter.length > 1 ? jitter[i] : jitter[0];
+      const jitterLimit = Math.max(0, Math.min(3, jitterRange));
+      const actualHz = Math.max(55, Math.min(900, hz * Math.pow(2, (cents + this.jitter) / 1200)));
       const tablePosition = this.phase * tableLength;
       const index = Math.floor(tablePosition);
       const fraction = tablePosition - index;
       const nextIndex = index + 1 === tableLength ? 0 : index + 1;
       const pulse = table[index] + (table[nextIndex] - table[index]) * fraction;
-      voice[i] = pulse * 0.72;
+      voice[i] = pulse * (0.72 + random * 0.0018);
       this.phase += actualHz / sampleRate;
-      if (this.phase >= 1) this.phase -= Math.floor(this.phase);
-      if (air) {
-        this.seed ^= this.seed << 13;
-        this.seed ^= this.seed >>> 17;
-        this.seed ^= this.seed << 5;
-        const random = ((this.seed >>> 0) / 2147483648) - 1;
-        air[i] = random * Math.max(0, airAmount) * 0.42;
+      if (this.phase >= 1) {
+        this.phase -= Math.floor(this.phase);
+        this.jitter = Math.max(-jitterLimit, Math.min(jitterLimit, this.jitter + random * jitterLimit * 0.12));
       }
+      if (air) air[i] = random * Math.max(0, airAmount) * 0.42;
     }
     return true;
   }
@@ -659,17 +667,30 @@ export function createVocalSingingEngine(options = {}) {
 
       const vibrato = audio.createOscillator();
       const vibratoDepth = audio.createGain();
-      run.nodes.push(vibrato, vibratoDepth);
-      vibrato.frequency.setValueAtTime(4.85, run.startTime);
+      const amplitudeMotion = audio.createOscillator();
+      const amplitudeMotionDepth = audio.createGain();
+      const formantMotionF1 = audio.createGain();
+      const formantMotionF2 = audio.createGain();
+      run.nodes.push(vibrato, vibratoDepth, amplitudeMotion, amplitudeMotionDepth, formantMotionF1, formantMotionF2);
+      vibrato.type = VIBRATO_WAVEFORM;
+      vibrato.frequency.setValueAtTime(5.1, run.startTime);
       vibratoDepth.gain.setValueAtTime(0.0001, run.startTime);
       vibrato.connect(vibratoDepth).connect(detuneParam);
+      vibrato.connect(formantMotionF1).connect(formantFilters[0].filter.frequency);
+      vibrato.connect(formantMotionF2).connect(formantFilters[1].filter.frequency);
+      formantMotionF1.gain.setValueAtTime(0.0001, run.startTime);
+      formantMotionF2.gain.setValueAtTime(0.0001, run.startTime);
+      amplitudeMotion.type = "sine";
+      amplitudeMotion.frequency.setValueAtTime(5.1, run.startTime);
+      amplitudeMotionDepth.gain.setValueAtTime(0.0001, run.startTime);
+      amplitudeMotion.connect(amplitudeMotionDepth).connect(voiceEnvelope.gain);
 
       let cursor = run.startTime;
       let syllableCounter = 0;
       let previousProfile = null;
       let previousFrequency = plan.baseFrequency;
-      const defaultVibratoCents = safeNumber(inputOptions.vibratoCents, 4.2, 0, 10);
-      const defaultVibratoRateHz = safeNumber(inputOptions.vibratoRateHz, 4.85, 3.5, 6.5);
+      const defaultVibratoCents = safeNumber(inputOptions.vibratoCents, 5, 0, 10) * 2.8;
+      const defaultVibratoRateHz = safeNumber(inputOptions.vibratoRateHz, 5.1, 3.5, 6.5);
       if (usingWorklet) {
         const breathinessParam = voiceSource.parameters.get("breathiness");
         if (breathinessParam) breathinessParam.setValueAtTime(plan.voiceQuality.breathiness, run.startTime);
@@ -679,6 +700,9 @@ export function createVocalSingingEngine(options = {}) {
         if (event.type === "pause") {
           voiceEnvelope.gain.setTargetAtTime(0.0001, cursor, 0.014);
           vibratoDepth.gain.setTargetAtTime(0.0001, cursor, 0.02);
+          amplitudeMotionDepth.gain.setTargetAtTime(0.0001, cursor, 0.02);
+          formantMotionF1.gain.setTargetAtTime(0.0001, cursor, 0.02);
+          formantMotionF2.gain.setTargetAtTime(0.0001, cursor, 0.02);
           nasalGain.gain.setTargetAtTime(0.0001, cursor, 0.02);
           cursor += event.duration;
           previousProfile = null;
@@ -743,6 +767,22 @@ export function createVocalSingingEngine(options = {}) {
         vibratoDepth.gain.setValueAtTime(noteVibratoDepth, vibratoEnd);
         vibratoDepth.gain.linearRampToValueAtTime(0.0001, noteEnd);
 
+        // Human singing also varies loudness and resonant colour with vibrato.
+        amplitudeMotion.frequency.setValueAtTime(noteVibratoRate, vowelStart);
+        amplitudeMotionDepth.gain.setValueAtTime(0.0001, vowelStart);
+        amplitudeMotionDepth.gain.linearRampToValueAtTime(event.amplitude * 0.024, vibratoStart);
+        amplitudeMotionDepth.gain.setValueAtTime(event.amplitude * 0.024, vibratoEnd);
+        amplitudeMotionDepth.gain.linearRampToValueAtTime(0.0001, noteEnd);
+        const formantMotionScale = profile.long ? 1 : 0.72;
+        formantMotionF1.gain.setValueAtTime(0.0001, vowelStart);
+        formantMotionF1.gain.linearRampToValueAtTime(3.8 * formantMotionScale, vibratoStart);
+        formantMotionF1.gain.setValueAtTime(3.8 * formantMotionScale, vibratoEnd);
+        formantMotionF1.gain.linearRampToValueAtTime(0.0001, noteEnd);
+        formantMotionF2.gain.setValueAtTime(0.0001, vowelStart);
+        formantMotionF2.gain.linearRampToValueAtTime(10.5 * formantMotionScale, vibratoStart);
+        formantMotionF2.gain.setValueAtTime(10.5 * formantMotionScale, vibratoEnd);
+        formantMotionF2.gain.linearRampToValueAtTime(0.0001, noteEnd);
+
         if (!nextEvent || nextEvent.type === "pause") {
           const releaseStart = Math.max(vowelStart, noteEnd - release);
           voiceEnvelope.gain.setTargetAtTime(0.0001, releaseStart, 0.02);
@@ -787,6 +827,8 @@ export function createVocalSingingEngine(options = {}) {
       }
       vibrato.start(run.startTime);
       vibrato.stop(endTime);
+      amplitudeMotion.start(run.startTime);
+      amplitudeMotion.stop(endTime);
       return promise;
     } catch (error) {
       if (active === run) {
@@ -838,6 +880,7 @@ export function createVocalSingingEngine(options = {}) {
       state,
       ready: !disposed,
       architecture: ENGINE_ARCHITECTURE,
+      performanceModulation: PERFORMANCE_MODULATION,
       glottalSourceModel: "lf-parameterized-differentiated-glottal-flow",
       vocalTractModel: "dynamic-parallel-formant-resonators",
       outputMode: OUTPUT_MODE_COMPAT,
@@ -890,7 +933,7 @@ export function selfTest() {
   add("omkara-vowel-support", simple.some(event => event.type === "syllable" && event.source === "ॐ" && event.vowel === "o"));
   add("visarga-preserved-as-vocal-breath", simple.some(event => event.type === "syllable" && event.visarga));
   add("danda-phrase-pause", simple.some(event => event.type === "pause" && event.reason === "sentence"));
-  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.5.0" &&
+  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.6.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
 
   const lfTable = createLFGlottalTable();
@@ -922,6 +965,8 @@ export function selfTest() {
     continuityPlan.architecture === ENGINE_ARCHITECTURE &&
     continuityPlan.glottalSourceModel === "lf-parameterized-differentiated-glottal-flow" &&
     continuityPlan.sourceOscillators === 1 && continuityPlan.syllableCount >= 4);
+  add("expressive-microvariation-and-vibrato", LF_WORKLET_SOURCE.includes("jitter") &&
+    VIBRATO_WAVEFORM === "triangle" && PERFORMANCE_MODULATION.includes("amplitude"));
   add("voice-only-no-instrument-contract", continuityPlan.accompaniment === false && continuityPlan.modelLoaded === false);
   add("four-parallel-vowel-resonance-profiles", Object.values(VOWEL_PROFILES).every(profile =>
     profile.formants.length === 4 && profile.bandwidths.length === 4 &&
