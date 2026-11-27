@@ -343,6 +343,183 @@ async function collectPhaseResult(page, phase, state) {
   };
 }
 
+
+function createVoiceStudioFixtureWav(durationSeconds = 4, sampleRate = 44100) {
+  const sampleCount = Math.floor(durationSeconds * sampleRate);
+  const dataBytes = sampleCount * 2;
+  const wav = Buffer.alloc(44 + dataBytes);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + dataBytes, 4);
+  wav.write("WAVE", 8);
+  wav.write("fmt ", 12);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(dataBytes, 40);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const time = index / sampleRate;
+    const fadeIn = Math.min(1, time / 0.12);
+    const fadeOut = Math.min(1, (durationSeconds - time) / 0.15);
+    const envelope = Math.max(0, Math.min(fadeIn, fadeOut));
+    const vibrato = 1 + 0.012 * Math.sin(2 * Math.PI * 5.2 * time);
+    const fundamental = 245 * vibrato;
+    const voiced =
+      0.42 * Math.sin(2 * Math.PI * fundamental * time) +
+      0.21 * Math.sin(2 * Math.PI * fundamental * 2 * time) +
+      0.11 * Math.sin(2 * Math.PI * fundamental * 3 * time) +
+      0.055 * Math.sin(2 * Math.PI * fundamental * 4 * time);
+    const pulse = 0.92 + 0.08 * Math.sin(2 * Math.PI * 2.8 * time);
+    const sample = Math.max(-0.92, Math.min(0.92, voiced * envelope * pulse));
+    wav.writeInt16LE(Math.round(sample * 32767), 44 + index * 2);
+  }
+
+  return wav;
+}
+
+async function runVoiceStudioBrowserAudit({ profileDirectory, origin }) {
+  const instance = await launchIsolatedChrome(profileDirectory, origin);
+  const page = instance.page;
+  const hostSelector = "#swar-sadhika-universal-voice-studio-part2";
+  const phrase = "ॐ नमः शिवाय";
+  const milestones = [];
+  let closeError = null;
+  let result = null;
+
+  page.on("console", message => {
+    if (message.type() === "error") {
+      instance.state.consoleErrors ||= [];
+      instance.state.consoleErrors.push(message.text());
+    }
+  });
+
+  async function waitForBankText(text, timeout = TEST_TIMEOUT_MS) {
+    await page.waitForFunction(({ selector, expected }) => {
+      const host = document.querySelector(selector);
+      const node = host && host.shadowRoot && host.shadowRoot.querySelector(".bank-status");
+      return Boolean(node && node.textContent.includes(expected));
+    }, { selector: hostSelector, expected: text }, { timeout });
+  }
+
+  try {
+    const url = origin + "/index.html?voice-studio-chromium-audit=1";
+    log("Opening Voice Studio in Chromium:", { url });
+    const response = await page.goto(url, { waitUntil: "load", timeout: TEST_TIMEOUT_MS });
+    if (!response || response.status() !== 200) {
+      fail("Main app index.html did not load in Chromium.", {
+        status: response ? response.status() : null,
+        url
+      });
+    }
+    await page.locator(hostSelector).waitFor({ state: "attached", timeout: TEST_TIMEOUT_MS });
+    const host = page.locator(hostSelector);
+
+    await host.locator(".launch").click();
+    await host.locator(".panel:not([hidden])").waitFor({ state: "visible" });
+    milestones.push("main-app-and-shared-voice-studio-mounted");
+
+    const fileBuffer = createVoiceStudioFixtureWav(4, 44100);
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      host.locator(".audio-files").click()
+    ]);
+    await fileChooser.setFiles({
+      name: "chromium-voice-studio-fixture.wav",
+      mimeType: "audio/wav",
+      buffer: fileBuffer
+    });
+
+    await waitForBankText("1 रिकॉर्डिंग निजी IndexedDB में सुरक्षित हुईं");
+    milestones.push("audio-import-decoded-and-stored-in-indexeddb");
+
+    await host.locator(".wave-hint").waitFor({ state: "visible" });
+    await host.locator(".unit-start").fill("0.20");
+    await host.locator(".unit-end").fill("3.80");
+    await host.locator(".unit-label").fill(phrase);
+    await host.locator(".unit-save").click();
+    await waitForBankText("का रिकॉर्ड किया हुआ नमूना");
+    milestones.push("waveform-selection-and-whole-mantra-annotation-saved");
+
+    const savedUnit = host.locator(".unit-list .bank-item").filter({ hasText: phrase });
+    await savedUnit.waitFor({ state: "visible" });
+    if (await savedUnit.count() !== 1) {
+      fail("Expected exactly one complete-mantra recording unit in the Voice Studio list.");
+    }
+    milestones.push("saved-mantra-unit-visible-in-studio");
+
+    // Reload the actual app origin to verify that the original Blob and annotation
+    // survive a page restart, then invoke recorded-unit playback from the UI.
+    await page.reload({ waitUntil: "load", timeout: TEST_TIMEOUT_MS });
+    await page.locator(hostSelector).waitFor({ state: "attached", timeout: TEST_TIMEOUT_MS });
+    const reloadedHost = page.locator(hostSelector);
+    await reloadedHost.locator(".launch").click();
+    await reloadedHost.locator(".panel:not([hidden])").waitFor({ state: "visible" });
+    await waitForBankText("1 निजी रिकॉर्डिंग · 1 चिह्नित अक्षर-नमूने");
+    milestones.push("recording-and-annotation-restored-after-page-reload");
+
+    await reloadedHost.locator(".bank-sing").click();
+    await waitForBankText("उपलब्ध रिकॉर्ड किए गए मानवीय स्वर-खंडों का गायन पूरा हुआ", 20000);
+    milestones.push("recorded-mantra-playback-completed");
+
+    const browserReport = await page.evaluate(() => ({
+      userAgent: navigator.userAgent,
+      secureContext: isSecureContext,
+      indexedDBAvailable: Boolean(indexedDB && indexedDB.open),
+      audioContextAvailable: Boolean(window.AudioContext || window.webkitAudioContext),
+      localOrigin: location.origin
+    }));
+
+    if (instance.state.pageErrors.length ||
+        instance.state.externalRequests.length ||
+        instance.state.failedLocalResponses.length ||
+        (instance.state.consoleErrors || []).length) {
+      fail("Voice Studio browser runtime reported errors, failed local files, or external network requests.", {
+        pageErrors: instance.state.pageErrors,
+        consoleErrors: instance.state.consoleErrors || [],
+        externalRequests: instance.state.externalRequests,
+        failedLocalResponses: instance.state.failedLocalResponses
+      });
+    }
+
+    result = {
+      test: "Swar-Sadhika Voice Studio Browser E2E",
+      status: "PASSED",
+      browser: "Playwright Headless Chromium",
+      browserReport,
+      milestones,
+      assertions: milestones.length,
+      passed: milestones.length,
+      failed: 0,
+      pageErrors: instance.state.pageErrors,
+      consoleErrors: instance.state.consoleErrors || [],
+      externalNetworkRequests: instance.state.externalRequests.length,
+      failedLocalResponses: instance.state.failedLocalResponses
+    };
+  } finally {
+    try {
+      await closeChromeProcess(instance);
+    } catch (error) {
+      closeError = error;
+    }
+  }
+
+  if (closeError) {
+    fail("Chrome did not shut down cleanly after the Voice Studio browser test.", closeError.message);
+  }
+  if (!result) fail("Voice Studio Chromium audit ended without a result.");
+  result.browserProcessDisconnectedAfterClose = instance.state.browserDisconnected;
+  if (!result.browserProcessDisconnectedAfterClose) {
+    fail("Chrome process shutdown was not observed after Voice Studio browser audit.");
+  }
+  log("VOICE STUDIO CHROMIUM E2E RESULT:", result);
+  return result;
+}
+
 async function runBrowserPhase({ phase, profileDirectory, origin }) {
   const instance = await launchIsolatedChrome(profileDirectory, origin);
   let result;
@@ -418,6 +595,11 @@ async function main() {
       origin: localServer.origin
     }));
 
+    const voiceStudioResult = await runVoiceStudioBrowserAudit({
+      profileDirectory,
+      origin: localServer.origin
+    });
+
     const coldStartVerified =
       results[0].phase === "write" &&
       results[1].phase === "read" &&
@@ -425,8 +607,9 @@ async function main() {
       results[1].browserProcessDisconnectedAfterClose === true;
 
     const report = {
-      test: "Swar-Sadhika Nano Brain Browser Test Runner Part 2",
+      test: "Swar-Sadhika Nano Brain and Voice Studio Browser Test Runner Part 2",
       status: "PASSED",
+      voiceStudio: voiceStudioResult,
       browserProcessColdStartPersistence: coldStartVerified,
       androidChromeCertified: false,
       strictOfflineCertified: false,
