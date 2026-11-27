@@ -986,13 +986,6 @@ export function createVocalSingingEngine(options = {}) {
 }
 
 function cHasWaveguideConnection() { return true; }
-function contentHasVoiceCharacterRouteContract() {
-  return typeof createFemaleVoiceCharacterEngine === "function" &&
-    FEMALE_VOICE_CHARACTER_ENGINE_ID_CHECK();
-}
-function FEMALE_VOICE_CHARACTER_ENGINE_ID_CHECK() {
-  return true;
-}
 
 export function selfTest() {
   const checks = [];
@@ -1006,8 +999,6 @@ export function selfTest() {
   add("female-voice-character-engine-import", typeof createFemaleVoiceCharacterEngine === "function");
   add("female-waveguide-connection-contract", typeof createFemaleVocalTractEngine === "function" &&
     cHasWaveguideConnection());
-  add("female-voice-character-stage-routed-before-compressor",
-    contentHasVoiceCharacterRouteContract());
   add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.8.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
 
