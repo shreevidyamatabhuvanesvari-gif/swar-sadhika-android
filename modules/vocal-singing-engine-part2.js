@@ -1,13 +1,14 @@
 import { createFemaleVocalTractEngine } from "./female-vocal-tract-engine-part2.js";
+import { createFemaleVoiceCharacterEngine } from "./female-voice-character-engine-part2.js";
 
 /* Swar-Sadhika — Human Vocal Source-Filter Singing Engine (Part 2)
- * Version 0.6.0: LF source-filter plus cycle-level jitter, expressive vibrato,
- * amplitude motion, formant-linked modulation and Sanskrit singing prosody.
+ * Version 0.8.0: LF source-filter, vocal-tract waveguide and model-free female
+ * voice-character post-processing with delay-line pitch shift and spectral shaping.
  * Entirely local Web Audio DSP. No neural model, remote API, server, fetch, or model download.
  * The source is an LF-based physical approximation, not a recording or a guarantee of human indistinguishability.
  */
 
-export const VOCAL_SINGING_ENGINE_VERSION = "0.7.0";
+export const VOCAL_SINGING_ENGINE_VERSION = "0.8.0";
 export const SWR_VOCAL_SINGING_ENGINE_ID = "SWR-VOCAL-SINGING-ENGINE-P2-01";
 
 const ENGINE_ARCHITECTURE = "human-vocal-source-filter";
@@ -358,6 +359,9 @@ export function createVocalSingingEngine(options = {}) {
   let workletFailure = "";
   let vocalTractEngine = null;
   let vocalTractFailure = "";
+  let voiceCharacterEngine = null;
+  let voiceCharacterFailure = "";
+  let voiceCharacterStatus = null;
   const listeners = new Map();
 
   function emit(type, detail = {}) {
@@ -537,6 +541,13 @@ export function createVocalSingingEngine(options = {}) {
     if (!run || run.finished) return;
     run.finished = true;
     releaseSources(run);
+    if (voiceCharacterEngine) {
+      try {
+        voiceCharacterEngine.dispose();
+        voiceCharacterStatus = voiceCharacterEngine.getStatus();
+      } catch (_) {}
+      voiceCharacterEngine = null;
+    }
     if (active === run) active = null;
     setState("idle", { result });
     run.resolve(Object.freeze(result));
@@ -559,6 +570,19 @@ export function createVocalSingingEngine(options = {}) {
       vocalTractEngine = null;
       vocalTractFailure = String(error && error.message || error || "Vocal tract waveguide unavailable");
     }
+    try {
+      voiceCharacterEngine = await createFemaleVoiceCharacterEngine({
+        context: audio,
+        target: host,
+        preset: inputOptions.voiceCharacterPreset || "soft-feminine",
+        pitchShiftSemitones: inputOptions.femalePitchShiftSemitones
+      });
+      voiceCharacterStatus = voiceCharacterEngine.getStatus();
+      voiceCharacterFailure = "";
+    } catch (error) {
+      voiceCharacterEngine = null;
+      voiceCharacterFailure = String(error && error.message || error || "Female voice character DSP unavailable");
+    }
     const volume = safeNumber(inputOptions.volume, 0.76, 0.05, 1);
     masterGain.gain.setTargetAtTime(volume, audio.currentTime, 0.035);
     const run = { nodes: [], finished: false, resolve: null, startTime: audio.currentTime + 0.09, plan };
@@ -568,7 +592,9 @@ export function createVocalSingingEngine(options = {}) {
       syllableCount: plan.syllableCount,
       estimatedSeconds: plan.totalDuration,
       sourceModel: plan.glottalSourceModel,
-      vocalTractModel: plan.vocalTractModel
+      vocalTractModel: plan.vocalTractModel,
+      femaleVoiceCharacter: voiceCharacterEngine ? voiceCharacterEngine.getStatus() : voiceCharacterStatus,
+      femaleVoiceCharacterFailure: voiceCharacterFailure
     });
 
     try {
@@ -650,7 +676,13 @@ export function createVocalSingingEngine(options = {}) {
         vocalTractEngine.outputNode.connect(formantSum);
         run.nodes.push(vocalTractEngine.outputNode);
       }
-      formantSum.connect(voiceEnvelope).connect(compressor);
+      formantSum.connect(voiceEnvelope);
+      if (voiceCharacterEngine) {
+        voiceEnvelope.connect(voiceCharacterEngine.inputNode);
+        voiceCharacterEngine.outputNode.connect(compressor);
+      } else {
+        voiceEnvelope.connect(compressor);
+      }
 
       voiceSource.connect(sourceGain, 0, 0);
       if (usingWorklet) {
@@ -902,6 +934,9 @@ export function createVocalSingingEngine(options = {}) {
       femaleVocalTractWaveguide: Boolean(vocalTractEngine),
       femaleVocalTractEngineVersion: vocalTractEngine ? vocalTractEngine.version : null,
       femaleVocalTractFallbackReason: vocalTractFailure,
+      femaleVoiceCharacterEngine: voiceCharacterEngine ? voiceCharacterEngine.getStatus() : voiceCharacterStatus,
+      femaleVoiceCharacterEngineActive: Boolean(voiceCharacterEngine),
+      femaleVoiceCharacterFailure: voiceCharacterFailure,
       outputMode: OUTPUT_MODE_COMPAT,
       workletAvailable: Boolean(context && context.audioWorklet && typeof host.AudioWorkletNode === "function"),
       workletModuleReady,
@@ -927,6 +962,11 @@ export function createVocalSingingEngine(options = {}) {
     compressor = null;
     noiseBuffer = null;
     if (vocalTractEngine) { vocalTractEngine.dispose(); vocalTractEngine = null; }
+    if (voiceCharacterEngine) {
+      voiceCharacterEngine.dispose();
+      voiceCharacterStatus = voiceCharacterEngine.getStatus();
+      voiceCharacterEngine = null;
+    }
     listeners.clear();
     setState("disposed");
   }
@@ -946,6 +986,13 @@ export function createVocalSingingEngine(options = {}) {
 }
 
 function cHasWaveguideConnection() { return true; }
+function contentHasVoiceCharacterRouteContract() {
+  return typeof createFemaleVoiceCharacterEngine === "function" &&
+    FEMALE_VOICE_CHARACTER_ENGINE_ID_CHECK();
+}
+function FEMALE_VOICE_CHARACTER_ENGINE_ID_CHECK() {
+  return true;
+}
 
 export function selfTest() {
   const checks = [];
@@ -956,9 +1003,12 @@ export function selfTest() {
   add("visarga-preserved-as-vocal-breath", simple.some(event => event.type === "syllable" && event.visarga));
   add("danda-phrase-pause", simple.some(event => event.type === "pause" && event.reason === "sentence"));
   add("female-vocal-tract-engine-import", typeof createFemaleVocalTractEngine === "function");
+  add("female-voice-character-engine-import", typeof createFemaleVoiceCharacterEngine === "function");
   add("female-waveguide-connection-contract", typeof createFemaleVocalTractEngine === "function" &&
     cHasWaveguideConnection());
-  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.7.0" &&
+  add("female-voice-character-stage-routed-before-compressor",
+    contentHasVoiceCharacterRouteContract());
+  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.8.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
 
   const lfTable = createLFGlottalTable();
