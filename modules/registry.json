@@ -17,6 +17,14 @@
       "description": "Shared local Sanskrit speech and melodic singing panel for all HTML entry pages; Ninada neural female speech and model-free Vocal Singing DSP.",
       "enabled": true,
       "status": "active"
+    },
+    {
+      "id": "female-human-sample-bank-engine-part2",
+      "title": "Female Human Singing Sample Bank Engine (Part 2)",
+      "file": "modules/female-human-sample-bank-engine-part2.js",
+      "description": "Private local import and IndexedDB storage of consented human singing recordings; manual Sanskrit akshara annotation and recorded-unit playback, with no pretrained model, remote API, server, or public audio upload.",
+      "enabled": true,
+      "status": "active"
     }
   ]
 }
