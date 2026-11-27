@@ -145,13 +145,15 @@ export function createLocalOmniVoiceEngine(options = {}) {
     const exactTranscript = String(transcript || "").trim();
     if (!exactTranscript) throw new TypeError("चुनी हुई रिकॉर्डिंग के 3–30 सेकंड का सही पाठ लिखना आवश्यक है।");
     const stored = await sampleBank.getRecordingBlob(recordingId);
-    const end = Number.isFinite(endSeconds) ? endSeconds : Math.min(stored.durationSeconds, startSeconds + 20);
-    const duration = end - startSeconds;
-    if (duration < 3 || duration > 30) {
-      throw new RangeError("Voice reference की अवधि 3 से 30 सेकंड के बीच रखें।");
+    const start = Math.max(0, Number(startSeconds) || 0);
+    const requestedEnd = Number.isFinite(endSeconds) ? endSeconds : start + 20;
+    const end = Math.min(stored.durationSeconds, requestedEnd);
+    const duration = end - start;
+    if (start >= stored.durationSeconds || duration < 3 || duration > 30) {
+      throw new RangeError("Voice reference रिकॉर्डिंग के भीतर 3 से 30 सेकंड का होना चाहिए।");
     }
     onProgress({ type: "progress", stage: "reference-audio", detail: "सहेली की रिकॉर्डिंग तैयार की जा रही है…" });
-    const pcm = await decodeAndResample(stored.blob, startSeconds, end);
+    const pcm = await decodeAndResample(stored.blob, start, end);
     encoderWorker?.terminate();
     encoderWorker = new Worker(new URL("./encoder-worker-part2.js", import.meta.url), { type: "module" });
     const id = makeId();
@@ -167,7 +169,7 @@ export function createLocalOmniVoiceEngine(options = {}) {
       recordingId,
       recordingName: stored.name,
       transcript: exactTranscript,
-      startSeconds,
+      startSeconds: start,
       endSeconds: end,
       durationSeconds: encoded.duration,
       tokenCount: encoded.tokenCount,
@@ -264,7 +266,7 @@ export function createLocalOmniVoiceEngine(options = {}) {
       lang: settings.language || "sa",
       refText: profile.transcript,
       refTokens: tokens,
-      instruct: settings.instruct || "A natural, gentle female voice. Clear Sanskrit pronunciation, devotional recitation, warm and calm delivery. Speak naturally; do not add background music.",
+      instruct: settings.instruct || "A gentle female voice chanting with a devotional measured cadence and sustained vowel endings. Clear Sanskrit pronunciation, warm and calm delivery; do not add background music.",
       numStep: Math.max(8, Math.min(32, Math.round(settings.qualitySteps || 24))),
       guidanceScale: 2.0,
       tShift: 0.1,
