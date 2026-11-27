@@ -5,7 +5,7 @@
  * Text coverage depends on the units manually marked in the imported recordings.
  */
 
-export const FEMALE_HUMAN_SAMPLE_BANK_VERSION = "0.2.0";
+export const FEMALE_HUMAN_SAMPLE_BANK_VERSION = "0.3.0";
 export const FEMALE_HUMAN_SAMPLE_BANK_ID = "SWR-FEMALE-HUMAN-SAMPLE-BANK-P2-01";
 
 const DB_NAME = "swar-sadhika-female-human-sample-bank";
@@ -392,14 +392,28 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     return Object.freeze(results);
   }
 
+  async function getRecordingBlob(recordingId) {
+    assertActive();
+    const record = await storeRequest(target, RECORDINGS_STORE, "readonly", "get", String(recordingId || ""));
+    if (!record || !(record.audioBlob instanceof Blob)) {
+      throw new Error("चुनी गई मूल रिकॉर्डिंग निजी Sample Bank में उपलब्ध नहीं है।");
+    }
+    return Object.freeze({
+      id: record.id,
+      name: record.name,
+      mimeType: record.mimeType,
+      durationSeconds: record.durationSeconds,
+      blob: record.audioBlob
+    });
+  }
+
   async function getRecordingBuffer(recordingId) {
     assertActive();
     if (sourceBuffers.has(recordingId)) return sourceBuffers.get(recordingId);
 
-    const record = await storeRequest(target, RECORDINGS_STORE, "readonly", "get", recordingId);
-    if (!record || !record.audioBlob) throw new Error("चुनी गई मूल रिकॉर्डिंग sample bank में उपलब्ध नहीं है।");
+    const stored = await getRecordingBlob(recordingId);
     const audioContext = await getAudioContext();
-    const bytes = await record.audioBlob.arrayBuffer();
+    const bytes = await stored.blob.arrayBuffer();
     const decoded = await audioContext.decodeAudioData(bytes.slice(0));
     sourceBuffers.set(recordingId, decoded);
     return decoded;
@@ -733,6 +747,7 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     createUnit,
     deleteUnit,
     deleteRecording,
+    getRecordingBlob,
     playUnit,
     playRecording,
     resolveUnitSequence,
@@ -758,7 +773,7 @@ export async function selfTest() {
   add("conjunct-akshara-preserved", conjuncts.includes("त्र्य") || conjuncts.includes("त्र्यं"));
   add("unicode-normalization", normalizeAkshara("का") === normalizeAkshara("का"));
   add("no-network-or-model-contract",
-    FEMALE_HUMAN_SAMPLE_BANK_VERSION === "0.2.0" &&
+    FEMALE_HUMAN_SAMPLE_BANK_VERSION === "0.3.0" &&
     DB_NAME === "swar-sadhika-female-human-sample-bank");
   add("local-indexeddb-persistence-contract",
     RECORDINGS_STORE === "recordings" && UNITS_STORE === "units");
