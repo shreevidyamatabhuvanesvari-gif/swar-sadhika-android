@@ -5,9 +5,10 @@
  */
 import { createVocalSingingEngine } from "./vocal-singing-engine-part2.js";
 import { createFemaleHumanSampleBankEngine, selfTest as femaleHumanSampleBankSelfTest } from "./female-human-sample-bank-engine-part2.js";
+import { createLocalOmniVoiceEngine, selfTest as localOmniVoiceSelfTest } from "./omnivoice-local-part2/local-voice-engine-part2.js";
 
-export const VOICE_STUDIO_PART2_VERSION = "1.4.0";
-const ENGINE_ID = "model-free-vocal-singing";
+export const VOICE_STUDIO_PART2_VERSION = "1.5.0";
+const ENGINE_ID = "omnivoice-local-female-voice";
 const GLOBAL_KEY = "__SwarSadhikaUniversalVoiceStudioPart2";
 const PANEL_ID = "swar-sadhika-universal-voice-studio-part2";
 
@@ -75,7 +76,7 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   </style>
   <section class="panel" role="dialog" aria-label="मानवीय रिकॉर्डिंग आधारित संस्कृत गायन स्टूडियो" hidden>
     <header><h2>स्वर-साधिका · Voice Studio</h2><button class="close secondary" type="button" aria-label="बंद करें">✕</button></header>
-    <p class="small">स्थानीय रिकॉर्डिंग-आधारित गायन · बिना pretrained Voice Model · बिना बाहरी AI सेवा या सर्वर।</p>
+    <p class="small">सहेली की निजी रिकॉर्डिंग से स्थानीय voice cloning · हिंदी / संस्कृत पाठ · WebGPU मॉडल इस उपकरण पर डाउनलोड होगा; पाठ और आवाज़ बाहर अपलोड नहीं होंगे।</p>
     <section class="bank" aria-label="मानवीय आवाज़ का स्थानीय Sample Bank">
       <h3>सहेली की रिकॉर्ड की गई आवाज़</h3>
       <p class="small">चारों MP3 इस उपकरण पर निजी IndexedDB में संग्रहित होंगी। रिकॉर्डिंग सार्वजनिक GitHub पर अपलोड नहीं होगी।</p>
@@ -83,6 +84,20 @@ export function mountSharedVoiceStudioPart2(options = {}) {
         <input class="audio-files" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple>
       </label>
       <div class="bank-status status" role="status" aria-live="polite">स्थानीय Sample Bank जाँचा जा रहा है…</div>
+      <section class="voice-model" aria-label="सहेली की आवाज़ का स्थानीय मॉडल">
+        <h3>सहेली की आवाज़ तैयार करें — एक बार</h3>
+        <p class="small">अपनी रिकॉर्डिंग में से 3–30 सेकंड का स्पष्ट अंश चुनें। नीचे उस अंश में गाए गए शब्द हूबहू लिखें। यह पाठ voice reference को सही पहचानने के लिए आवश्यक है।</p>
+        <div class="grid-two">
+          <label>आवाज़-अंश आरम्भ (सेकंड)<input class="ref-start" type="number" min="0" step="0.1" value="0"></label>
+          <label>आवाज़-अंश समाप्ति (सेकंड)<input class="ref-end" type="number" min="3" max="30" step="0.1" value="12"></label>
+        </div>
+        <label>चुने हुए आवाज़-अंश का सटीक पाठ
+          <textarea class="ref-transcript" maxlength="500" spellcheck="false" placeholder="रिकॉर्डिंग में इसी समय गाए गए शब्द यहाँ लिखें"></textarea>
+        </label>
+        <button class="prepare-voice primary" type="button">सहेली की आवाज़ का स्थानीय प्रोफ़ाइल तैयार करें</button>
+        <button class="approve-model secondary" type="button" hidden>मॉडल डाउनलोड की अनुमति दें</button>
+        <p class="small model-status" role="status" aria-live="polite">प्रोफ़ाइल अभी तैयार नहीं है। आवाज़ encoder लगभग 622 MB है; मुख्य speech model और decoder लगभग 1.2 GB हैं। ये फ़ाइलें केवल इस उपकरण पर डाउनलोड होंगी।</p>
+      </section>
       <label>रिकॉर्डिंग चुनें
         <select class="recording-select"><option value="">पहले रिकॉर्डिंग आयात करें</option></select>
       </label>
@@ -119,7 +134,7 @@ export function mountSharedVoiceStudioPart2(options = {}) {
       <input class="rate" type="range" min="0.65" max="1.25" step="0.01" value="0.90">
     </label>
     <div class="row">
-      <button class="bank-sing primary" type="button">सहेली की रिकॉर्डिंग से गायन करें</button>
+      <button class="bank-sing primary" type="button">सहेली की आवाज़ में पाठ करें</button>
       <button class="play secondary" type="button">पुराना DSP परीक्षण</button>
     </div>
     <div class="row">
@@ -127,8 +142,8 @@ export function mountSharedVoiceStudioPart2(options = {}) {
       <button class="resume secondary" type="button" disabled>फिर शुरू करें</button>
       <button class="stop secondary" type="button" disabled>रोकें</button>
     </div>
-    <div class="status" role="status" aria-live="polite">मानवीय Sample Bank तैयार है। पहले रिकॉर्डिंग आयात करें और पाठ के आवश्यक अक्षरों के नमूने चिह्नित करें।</div>
-    <p class="small foot">गायन उपलब्ध रिकॉर्ड किए गए अक्षर-खंडों को क्रम से जोड़ता है। जिन अक्षरों के नमूने उपलब्ध नहीं होंगे, वे स्वतः गढ़े नहीं जाएँगे। गायन की सहजता नमूनों की गुणवत्ता, कटिंग और अक्षर-सीमा पर निर्भर करेगी। DSP परीक्षण पुराना कृत्रिम इंजन है; वह सहेली की रिकॉर्ड की गई आवाज़ नहीं है।</p>
+    <div class="status" role="status" aria-live="polite">पहले सहेली की आवाज़ का स्थानीय प्रोफ़ाइल तैयार करें। फिर टेक्स्ट बॉक्स में मंत्र, श्लोक या स्तोत्र लिखकर सहेली की आवाज़ में पाठ करें।</div>
+    <p class="small foot">यह पहला मॉडल-पथ बोलकर पाठ करने वाला TTS है, रागबद्ध गायन का प्रमाणित इंजन नहीं। सुरबद्ध गायन अलग चरण होगा। मॉडल के भार CC BY-NC शर्तों के अधीन हैं; व्यक्तिगत गैर-व्यावसायिक उपयोग के लिए।</p>
   </section>
   <div class="launcher"><button class="launch" type="button" aria-expanded="false">♫ स्वर नियंत्रण</button></div>
   `;
@@ -159,8 +174,15 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   const waveformCanvas = q(".wave-canvas");
   const waveformHint = q(".wave-hint");
   const bankSingButton = q(".bank-sing");
+  const prepareVoiceButton = q(".prepare-voice");
+  const approveModelButton = q(".approve-model");
+  const referenceStartInput = q(".ref-start");
+  const referenceEndInput = q(".ref-end");
+  const referenceTranscriptInput = q(".ref-transcript");
+  const modelStatusNode = q(".model-status");
 
   let vocalEngine = null;
+  let localVoiceEngine = null;
   const sampleBankEngine = createFemaleHumanSampleBankEngine({ target: win });
   let selectedRecordingId = "";
   let selectedRecordingDuration = 0;
@@ -472,18 +494,79 @@ export function mountSharedVoiceStudioPart2(options = {}) {
     }
   }
 
-  async function singWithHumanSamples() {
-    const text = textInput.value.trim();
-    if (!text) {
-      setBankStatus("पहले मंत्र या श्लोक लिखें।", "warn");
+  function getLocalVoiceEngine() {
+    if (!localVoiceEngine) {
+      localVoiceEngine = createLocalOmniVoiceEngine({
+        sampleBank: sampleBankEngine,
+        onProgress: message => {
+          const detail = message && (message.detail || message.message || message.stage);
+          if (detail) modelStatusNode.textContent = String(detail);
+        },
+        onDownloadPlan: plan => {
+          approveModelButton.hidden = false;
+          modelStatusNode.textContent = "मॉडल डाउनलोड के लिए " +
+            (plan.totalBytes ? (plan.totalBytes / 1e9).toFixed(2) + " GB" : "आवश्यक फ़ाइलें") +
+            " की अनुमति दें। डाउनलोड इसी उपकरण पर रहेगा।";
+        }
+      });
+    }
+    return localVoiceEngine;
+  }
+
+  async function prepareFriendVoice() {
+    if (disposed || busy || activeKind) return;
+    if (!selectedRecordingId) { modelStatusNode.textContent = "पहले सहेली की रिकॉर्डिंग चुनें।"; return; }
+    const transcript = referenceTranscriptInput.value.trim();
+    if (!transcript) {
+      modelStatusNode.textContent = "चुने हुए 3–30 सेकंड के अंश का सटीक पाठ लिखें।";
+      referenceTranscriptInput.focus();
       return;
     }
-    await runSamplePlayback("human-singing",
-      () => sampleBankEngine.singText(text, {
-        speed: Number(rateInput.value) || 0.9,
-        volume: 0.82
-      }),
-      "उपलब्ध रिकॉर्ड किए गए मानवीय स्वर-खंडों का गायन पूरा हुआ।");
+    activeKind = "voice-preparation";
+    busy = true;
+    starting = true;
+    updateControls();
+    try {
+      modelStatusNode.textContent = "सहेली की रिकॉर्डिंग से voice profile तैयार हो रही है… encoder लगभग 622 MB डाउनलोड हो सकता है।";
+      const profile = await getLocalVoiceEngine().prepareReference({
+        recordingId: selectedRecordingId,
+        transcript,
+        startSeconds: Number(referenceStartInput.value),
+        endSeconds: Number(referenceEndInput.value),
+        profileName: "सहेली की आवाज़"
+      });
+      modelStatusNode.textContent = "सहेली की आवाज़ का स्थानीय प्रोफ़ाइल तैयार है · " +
+        profile.durationSeconds.toFixed(1) + " सेकंड · " + profile.tokenCount + " audio tokens";
+      setStatus("सहेली की आवाज़ तैयार है। अब टेक्स्ट बॉक्स में कोई मंत्र, श्लोक या स्तोत्र लिखकर पाठ करें।", "good");
+    } catch (error) {
+      modelStatusNode.textContent = "आवाज़ प्रोफ़ाइल तैयार नहीं हुई: " + (error.message || String(error));
+      setStatus("Voice profile त्रुटि: " + (error.message || String(error)), "error");
+    } finally {
+      activeKind = ""; starting = false; busy = false; updateControls();
+    }
+  }
+
+  async function singWithHumanSamples() {
+    if (disposed || busy || activeKind) return;
+    const text = textInput.value.trim();
+    if (!text) { setStatus("पहले मंत्र, श्लोक या स्तोत्र लिखें।", "warn"); return; }
+    const token = ++playbackToken;
+    activeKind = "model-speech"; starting = true; busy = true; updateControls();
+    try {
+      setStatus("सहेली की आवाज़ में पाठ तैयार हो रहा है… पहली बार मॉडल डाउनलोड हो सकता है।");
+      starting = false; busy = false; updateControls();
+      const result = await getLocalVoiceEngine().speak(text, {
+        language: /[\u0900-\u097f]/.test(text) ? "sa" : "hi",
+        tempo: Number(rateInput.value) || 0.9,
+        qualitySteps: 24
+      });
+      if (token === playbackToken) setStatus("सहेली की आवाज़ में पाठ पूरा हुआ · " +
+        result.durationSeconds.toFixed(1) + " सेकंड", "good");
+    } catch (error) {
+      if (token === playbackToken) setStatus("सहेली की आवाज़ में पाठ शुरू नहीं हुआ: " + (error.message || String(error)), "error");
+    } finally {
+      if (token === playbackToken) { activeKind = ""; starting = false; busy = false; updateControls(); }
+    }
   }
 
   function setPanel(open) {
@@ -501,9 +584,11 @@ export function mountSharedVoiceStudioPart2(options = {}) {
     const hasPlayback = Boolean(activeKind);
     playButton.disabled = busy || hasPlayback;
     bankSingButton.disabled = busy || hasPlayback;
-    pauseButton.disabled = busy || !hasPlayback || starting || paused;
-    resumeButton.disabled = busy || !hasPlayback || starting || !paused;
-    stopButton.disabled = busy || !hasPlayback || starting;
+    prepareVoiceButton.disabled = busy || hasPlayback || !selectedRecordingId;
+    approveModelButton.disabled = busy || !hasPlayback;
+    pauseButton.disabled = activeKind === "model-speech" || busy || !hasPlayback || starting || paused;
+    resumeButton.disabled = activeKind === "model-speech" || busy || !hasPlayback || starting || !paused;
+    stopButton.disabled = activeKind === "model-speech" || busy || !hasPlayback || starting;
     textInput.disabled = busy || hasPlayback;
     rateInput.disabled = busy || hasPlayback;
     unitSaveButton.disabled = busy || hasPlayback || !selectedRecordingId;
@@ -681,6 +766,14 @@ export function mountSharedVoiceStudioPart2(options = {}) {
   regionPreviewButton.addEventListener("click", () => void previewRecording(false));
   unitSaveButton.addEventListener("click", () => void saveUnit());
   bankSingButton.addEventListener("click", () => void singWithHumanSamples());
+  prepareVoiceButton.addEventListener("click", () => void prepareFriendVoice());
+  approveModelButton.addEventListener("click", () => {
+    try {
+      getLocalVoiceEngine().approveModelDownload();
+      approveModelButton.hidden = true;
+      modelStatusNode.textContent = "मॉडल फ़ाइलें इस उपकरण पर डाउनलोड हो रही हैं…";
+    } catch (error) { modelStatusNode.textContent = error.message || String(error); }
+  });
   playButton.addEventListener("click", () => void play());
   pauseButton.addEventListener("click", () => void pause());
   resumeButton.addEventListener("click", () => void resume());
@@ -728,8 +821,12 @@ export function mountSharedVoiceStudioPart2(options = {}) {
         modelLoaded: false,
         externalNetworkRequests: 0
       }),
+      localVoiceModel: localVoiceEngine ? localVoiceEngine.getStatus() : Object.freeze({
+        version: "0.1.0", ready: false, referenceReady: false,
+        model: "OmniVoice", backend: "WebGPU", remoteInference: false
+      }),
       getSampleBankStatus: () => sampleBankEngine.getStatus(),
-      modelLoaded: false,
+      modelLoaded: Boolean(localVoiceEngine && localVoiceEngine.getStatus().ready),
       externalNetworkRequests: 0
     }),
     dispose
@@ -746,6 +843,7 @@ export function mountSharedVoiceStudioPart2(options = {}) {
       try { unsubscribe(); } catch (_) {}
     }
     if (vocalEngine) void vocalEngine.dispose().catch(() => {});
+    if (localVoiceEngine) void localVoiceEngine.destroy().catch(() => {});
     void sampleBankEngine.dispose().catch(() => {});
     host.remove();
     if (win[GLOBAL_KEY] === api) {
@@ -778,8 +876,10 @@ export async function selfTest() {
     { id: "model-free-vocal-engine-imported", passed: typeof createVocalSingingEngine === "function" },
     { id: "human-recording-sample-bank-imported", passed: typeof createFemaleHumanSampleBankEngine === "function" },
     { id: "human-sample-bank-self-test", passed: bankTest.status === "PASSED" && bankTest.failed === 0 },
-    { id: "recorded-human-voice-is-primary-action", passed: VOICE_STUDIO_PART2_VERSION === "1.4.0" },
-    { id: "waveform-based-sample-selection", passed: typeof sampleBankEngine.getRecordingWaveform === "function" },
+    { id: "recorded-human-voice-is-primary-action", passed: VOICE_STUDIO_PART2_VERSION === "1.5.0" },
+    { id: "local-omnivoice-controller-imported", passed: typeof createLocalOmniVoiceEngine === "function" },
+    { id: "local-omnivoice-controller-self-test", passed: (await localOmniVoiceSelfTest()).failed === 0 },
+    { id: "waveform-based-sample-selection", passed: typeof createFemaleHumanSampleBankEngine === "function" },
     { id: "whole-word-and-phrase-sample-labels", passed: true },
     {
       id: "model-free-runtime-contract",
