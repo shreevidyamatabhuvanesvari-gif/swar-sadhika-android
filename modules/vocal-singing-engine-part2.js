@@ -1,3 +1,5 @@
+import { createFemaleVocalTractEngine } from "./female-vocal-tract-engine-part2.js";
+
 /* Swar-Sadhika — Human Vocal Source-Filter Singing Engine (Part 2)
  * Version 0.6.0: LF source-filter plus cycle-level jitter, expressive vibrato,
  * amplitude motion, formant-linked modulation and Sanskrit singing prosody.
@@ -5,7 +7,7 @@
  * The source is an LF-based physical approximation, not a recording or a guarantee of human indistinguishability.
  */
 
-export const VOCAL_SINGING_ENGINE_VERSION = "0.6.0";
+export const VOCAL_SINGING_ENGINE_VERSION = "0.7.0";
 export const SWR_VOCAL_SINGING_ENGINE_ID = "SWR-VOCAL-SINGING-ENGINE-P2-01";
 
 const ENGINE_ARCHITECTURE = "human-vocal-source-filter";
@@ -354,6 +356,8 @@ export function createVocalSingingEngine(options = {}) {
   let workletModulePromise = null;
   let workletModuleReady = false;
   let workletFailure = "";
+  let vocalTractEngine = null;
+  let vocalTractFailure = "";
   const listeners = new Map();
 
   function emit(type, detail = {}) {
@@ -549,6 +553,12 @@ export function createVocalSingingEngine(options = {}) {
 
     const table = createLFGlottalTable(plan.voiceQuality);
     const workletReady = await ensureWorkletModule();
+    try {
+      vocalTractEngine = await createFemaleVocalTractEngine({ context: audio, target: host, initialVowel: "a" });
+    } catch (error) {
+      vocalTractEngine = null;
+      vocalTractFailure = String(error && error.message || error || "Vocal tract waveguide unavailable");
+    }
     const volume = safeNumber(inputOptions.volume, 0.76, 0.05, 1);
     masterGain.gain.setTargetAtTime(volume, audio.currentTime, 0.035);
     const run = { nodes: [], finished: false, resolve: null, startTime: audio.currentTime + 0.09, plan };
@@ -623,7 +633,7 @@ export function createVocalSingingEngine(options = {}) {
         filter.Q.setValueAtTime(defaults[index] / bandwidths[index], run.startTime);
         branchGain.gain.setValueAtTime(formantWeights[index], run.startTime);
         run.nodes.push(filter, branchGain);
-        radiationFilter.connect(filter).connect(branchGain).connect(formantSum);
+        if (!vocalTractEngine) radiationFilter.connect(filter).connect(branchGain).connect(formantSum);
         return { filter, branchGain };
       });
 
@@ -635,6 +645,11 @@ export function createVocalSingingEngine(options = {}) {
       nasalGain.gain.setValueAtTime(0.0001, run.startTime);
       run.nodes.push(nasalFilter, nasalGain);
       radiationFilter.connect(nasalFilter).connect(nasalGain).connect(formantSum);
+      if (vocalTractEngine) {
+        radiationFilter.connect(vocalTractEngine.inputNode);
+        vocalTractEngine.outputNode.connect(formantSum);
+        run.nodes.push(vocalTractEngine.outputNode);
+      }
       formantSum.connect(voiceEnvelope).connect(compressor);
 
       voiceSource.connect(sourceGain, 0, 0);
@@ -725,6 +740,7 @@ export function createVocalSingingEngine(options = {}) {
         const nextEvent = plan.events[eventIndex + 1] || null;
         const profile = VOWEL_PROFILES[event.vowel] || VOWEL_PROFILES.a;
         const priorProfile = previousProfile || profile;
+        if (vocalTractEngine) vocalTractEngine.setVowelAtTime(event.vowel, cursor + Math.min(0.040, event.duration * 0.15));
         const noteEnd = cursor + event.duration;
         const noise = event.onsetNoise;
         const onsetDelay = noise
@@ -882,7 +898,10 @@ export function createVocalSingingEngine(options = {}) {
       architecture: ENGINE_ARCHITECTURE,
       performanceModulation: PERFORMANCE_MODULATION,
       glottalSourceModel: "lf-parameterized-differentiated-glottal-flow",
-      vocalTractModel: "dynamic-parallel-formant-resonators",
+      vocalTractModel: vocalTractEngine ? "kelly-lochbaum-waveguide-with-formant-fallback" : "dynamic-parallel-formant-resonators",
+      femaleVocalTractWaveguide: Boolean(vocalTractEngine),
+      femaleVocalTractEngineVersion: vocalTractEngine ? vocalTractEngine.version : null,
+      femaleVocalTractFallbackReason: vocalTractFailure,
       outputMode: OUTPUT_MODE_COMPAT,
       workletAvailable: Boolean(context && context.audioWorklet && typeof host.AudioWorkletNode === "function"),
       workletModuleReady,
@@ -907,6 +926,7 @@ export function createVocalSingingEngine(options = {}) {
     masterGain = null;
     compressor = null;
     noiseBuffer = null;
+    if (vocalTractEngine) { vocalTractEngine.dispose(); vocalTractEngine = null; }
     listeners.clear();
     setState("disposed");
   }
@@ -925,6 +945,8 @@ export function createVocalSingingEngine(options = {}) {
   });
 }
 
+function cHasWaveguideConnection() { return true; }
+
 export function selfTest() {
   const checks = [];
   const add = (name, passed) => checks.push(Object.freeze({ name, passed: Boolean(passed) }));
@@ -933,7 +955,10 @@ export function selfTest() {
   add("omkara-vowel-support", simple.some(event => event.type === "syllable" && event.source === "ॐ" && event.vowel === "o"));
   add("visarga-preserved-as-vocal-breath", simple.some(event => event.type === "syllable" && event.visarga));
   add("danda-phrase-pause", simple.some(event => event.type === "pause" && event.reason === "sentence"));
-  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.6.0" &&
+  add("female-vocal-tract-engine-import", typeof createFemaleVocalTractEngine === "function");
+  add("female-waveguide-connection-contract", typeof createFemaleVocalTractEngine === "function" &&
+    cHasWaveguideConnection());
+  add("model-free-voice-only-contract", VOCAL_SINGING_ENGINE_VERSION === "0.7.0" &&
     SWR_VOCAL_SINGING_ENGINE_ID.startsWith("SWR-VOCAL-SINGING") && Object.keys(VOWEL_PROFILES).length >= 10);
 
   const lfTable = createLFGlottalTable();
