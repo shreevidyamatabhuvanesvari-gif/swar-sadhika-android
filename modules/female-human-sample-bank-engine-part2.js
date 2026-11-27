@@ -5,7 +5,7 @@
  * Text coverage depends on the units manually marked in the imported recordings.
  */
 
-export const FEMALE_HUMAN_SAMPLE_BANK_VERSION = "0.1.0";
+export const FEMALE_HUMAN_SAMPLE_BANK_VERSION = "0.2.0";
 export const FEMALE_HUMAN_SAMPLE_BANK_ID = "SWR-FEMALE-HUMAN-SAMPLE-BANK-P2-01";
 
 const DB_NAME = "swar-sadhika-female-human-sample-bank";
@@ -375,7 +375,7 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     };
 
     await storeRequest(target, RECORDINGS_STORE, "readwrite", "put", record);
-    sourceBuffers.set(id, decoded);
+    // Release the decoded AudioBuffer after analysis; keep long recordings out of Android RAM.
     cachedRecordings = null;
     return Object.freeze(Object.assign({}, record, {
       audioBlob: undefined,
@@ -414,8 +414,8 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     const tokens = tokenizeSanskritAksharas(akshara);
 
     if (!recordingId) throw new TypeError("Recording ID आवश्यक है।");
-    if (!akshara || tokens.length !== 1 || tokens[0] !== akshara) {
-      throw new TypeError("एक स्पष्ट देवनागरी अक्षर/ध्वनि-इकाई का लेबल दें, जैसे 'का', 'शि' या 'त्रि'।");
+    if (!akshara || akshara.length > 80 || !tokens.length || tokens.length > 32) {
+      throw new TypeError("एक अक्षर, शब्द, पद या अधिकतम 32 अक्षर-इकाइयों वाला वाक्यांश लिखें।");
     }
 
     const records = await listRecordings();
@@ -426,14 +426,17 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
         endSeconds > record.durationSeconds + 0.02) {
       throw new RangeError("ध्वनि-खंड का प्रारम्भ और अंत रिकॉर्डिंग की अवधि के भीतर होना चाहिए।");
     }
-    if (endSeconds - startSeconds < 0.07 || endSeconds - startSeconds > 3.5) {
-      throw new RangeError("एक ध्वनि-इकाई की अवधि 0.07 से 3.5 सेकंड के बीच रखें।");
+    const maximumUnitDuration = tokens.length > 1 ? 20 : 3.5;
+    if (endSeconds - startSeconds < 0.07 || endSeconds - startSeconds > maximumUnitDuration) {
+      throw new RangeError("एक अक्षर-नमूना 0.07–3.5 सेकंड और पूरा शब्द/वाक्यांश अधिकतम 20 सेकंड का रखें।");
     }
 
     const unit = Object.freeze({
       id: makeId("unit", target),
       recordingId,
       akshara,
+      tokenCount: tokens.length,
+      labelType: tokens.length > 1 ? "phrase" : "akshara",
       startSeconds: Number(startSeconds.toFixed(3)),
       endSeconds: Number(endSeconds.toFixed(3)),
       durationSeconds: Number((endSeconds - startSeconds).toFixed(3)),
@@ -475,33 +478,57 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     return true;
   }
 
-  async function resolveUnitSequence(text) {
+  function selectRecordedUnitSequence(text, units) {
     const requested = tokenizeSanskritAksharas(text);
     if (!requested.length) throw new TypeError("गायन के लिए देवनागरी पाठ उपलब्ध नहीं है।");
+    const candidates = (units || []).map(unit => ({
+      unit,
+      tokens: tokenizeSanskritAksharas(unit.akshara)
+    })).filter(item => item.tokens.length > 0);
+    const best = new Array(requested.length + 1);
+    best[requested.length] = { sequence: [], switches: 0, duration: 0 };
 
-    const units = await listUnits(true);
-    const byAkshara = new Map();
-    units.forEach(unit => {
-      const key = normalizeAkshara(unit.akshara);
-      const list = byAkshara.get(key) || [];
-      list.push(unit);
-      byAkshara.set(key, list);
-    });
-
-    const missing = Array.from(new Set(requested.filter(token => !byAkshara.has(token))));
-    if (missing.length) {
-      const preview = missing.slice(0, 12).join("、");
-      throw new Error("इन अक्षर-ध्वनियों के रिकॉर्ड किए गए नमूने अभी sample bank में नहीं हैं: " +
-        preview + (missing.length > 12 ? " …" : "") +
-        ". पहले रिकॉर्डिंग में इन अक्षरों के छोटे स्वर-खंड चिह्नित करें।");
+    for (let position = requested.length - 1; position >= 0; position -= 1) {
+      const matches = candidates.filter(item =>
+        position + item.tokens.length <= requested.length &&
+        item.tokens.every((token, offset) => requested[position + offset] === token)
+      );
+      matches.sort((a, b) =>
+        b.tokens.length - a.tokens.length ||
+        a.unit.durationSeconds - b.unit.durationSeconds
+      );
+      for (const match of matches) {
+        const suffix = best[position + match.tokens.length];
+        if (!suffix) continue;
+        const nextUnit = suffix.sequence[0];
+        const option = {
+          sequence: [match.unit].concat(suffix.sequence),
+          switches: suffix.switches + (nextUnit && nextUnit.recordingId !== match.unit.recordingId ? 1 : 0),
+          duration: suffix.duration + match.unit.durationSeconds
+        };
+        const incumbent = best[position];
+        if (!incumbent ||
+            option.sequence.length < incumbent.sequence.length ||
+            (option.sequence.length === incumbent.sequence.length && option.switches < incumbent.switches) ||
+            (option.sequence.length === incumbent.sequence.length && option.switches === incumbent.switches && option.duration < incumbent.duration)) {
+          best[position] = option;
+        }
+      }
     }
 
-    const sequence = requested.map(token => {
-      const candidates = byAkshara.get(token).slice();
-      candidates.sort((a, b) => a.durationSeconds - b.durationSeconds);
-      return candidates[0];
-    });
-    return Object.freeze(sequence);
+    if (!best[0]) {
+      const singleTokens = new Set(candidates.filter(item => item.tokens.length === 1).map(item => item.tokens[0]));
+      const missing = Array.from(new Set(requested.filter(token => !singleTokens.has(token))));
+      const preview = missing.slice(0, 12).join("、") || "पूरा शब्द/वाक्यांश";
+      throw new Error("सहेली की रिकॉर्डिंग में अभी इन ध्वनि-इकाइयों के चिह्नित नमूने उपलब्ध नहीं हैं: " +
+        preview + (missing.length > 12 ? " …" : "") +
+        "। या तो इनके छोटे नमूने चिह्नित करें, अथवा रिकॉर्डिंग में मौजूद पूरा शब्द/मंत्र एक क्लिप के रूप में चिह्नित करें।");
+    }
+    return Object.freeze(best[0].sequence.slice());
+  }
+
+  async function resolveUnitSequence(text) {
+    return selectRecordedUnitSequence(text, await listUnits(true));
   }
 
   async function playUnit(unitId, options = {}) {
@@ -509,6 +536,38 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     const unit = units.find(item => item.id === unitId);
     if (!unit) throw new Error("चुनी गई स्वर-इकाई उपलब्ध नहीं है।");
     return playSequence([unit], options);
+  }
+
+  async function getRecordingWaveform(recordingId, pointCount = 720) {
+    const record = (await listRecordings()).find(item => item.id === recordingId);
+    if (!record) throw new Error("चुनी गई रिकॉर्डिंग उपलब्ध नहीं है।");
+    const buffer = await getRecordingBuffer(recordingId);
+    const count = Math.max(80, Math.min(1600, Math.round(finite(pointCount, 720))));
+    const channelCount = Math.max(1, buffer.numberOfChannels);
+    const samplesPerBucket = Math.max(1, Math.floor(buffer.length / count));
+    const peaks = new Array(count);
+    for (let bucket = 0; bucket < count; bucket += 1) {
+      const start = bucket * samplesPerBucket;
+      const end = Math.min(buffer.length, start + samplesPerBucket);
+      let minimum = 0;
+      let maximum = 0;
+      for (let frame = start; frame < end; frame += 1) {
+        let sample = 0;
+        for (let channel = 0; channel < channelCount; channel += 1) {
+          sample += buffer.getChannelData(channel)[frame] || 0;
+        }
+        sample /= channelCount;
+        minimum = Math.min(minimum, sample);
+        maximum = Math.max(maximum, sample);
+      }
+      peaks[bucket] = [Number(minimum.toFixed(4)), Number(maximum.toFixed(4))];
+    }
+    return Object.freeze({
+      recordingId,
+      durationSeconds: buffer.duration,
+      sampleRate: buffer.sampleRate,
+      peaks: Object.freeze(peaks.map(pair => Object.freeze(pair)))
+    });
   }
 
   async function playRecording(recordingId, options = {}) {
@@ -536,42 +595,58 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     await stop();
     const audioContext = await getAudioContext();
     const speed = clamp(finite(options.speed, 1), 0.85, 1.15);
-    const masterGain = audioContext.createGain();
-    masterGain.gain.setValueAtTime(clamp(finite(options.volume, 0.8), 0, 1), audioContext.currentTime);
-    masterGain.connect(audioContext.destination);
 
-    const scheduled = [];
-    const gains = [];
-    let cursor = audioContext.currentTime + 0.045;
-    const fadeSeconds = 0.012;
-
+    // Decode every track before scheduling any source. This prevents asynchronous
+    // MP3 decoding from pushing later source.start() calls into the past.
+    const buffersByRecording = new Map();
     for (const unit of sequence) {
-      const buffer = await getRecordingBuffer(unit.recordingId);
-      const duration = unit.endSeconds - unit.startSeconds;
-      if (duration <= 0 || unit.endSeconds > buffer.duration + 0.02) {
+      if (!buffersByRecording.has(unit.recordingId)) {
+        buffersByRecording.set(unit.recordingId, await getRecordingBuffer(unit.recordingId));
+      }
+    }
+    for (const unit of sequence) {
+      const buffer = buffersByRecording.get(unit.recordingId);
+      if (!buffer || unit.startSeconds < 0 ||
+          unit.endSeconds <= unit.startSeconds ||
+          unit.endSeconds > buffer.duration + 0.02) {
         throw new RangeError("Sample unit का समय, मूल रिकॉर्डिंग की अवधि से मेल नहीं खाता।");
       }
+    }
 
+    const startAt = audioContext.currentTime + 0.08;
+    const masterGain = audioContext.createGain();
+    masterGain.gain.setValueAtTime(clamp(finite(options.volume, 0.8), 0, 1), startAt);
+    masterGain.connect(audioContext.destination);
+    const scheduled = [];
+    const gains = [];
+    let cursor = startAt;
+    const fadeSeconds = 0.018;
+    const overlapSeconds = 0.012;
+
+    for (const unit of sequence) {
+      const buffer = buffersByRecording.get(unit.recordingId);
+      const duration = unit.endSeconds - unit.startSeconds;
       const source = audioContext.createBufferSource();
       const gain = audioContext.createGain();
       source.buffer = buffer;
       source.playbackRate.setValueAtTime(speed, cursor);
       source.connect(gain);
       gain.connect(masterGain);
-
       const wallDuration = duration / speed;
-      const fade = Math.min(fadeSeconds, wallDuration * 0.2);
+      const fade = Math.min(fadeSeconds, wallDuration * 0.22);
       gain.gain.setValueAtTime(0, cursor);
       gain.gain.linearRampToValueAtTime(1, cursor + fade);
       gain.gain.setValueAtTime(1, Math.max(cursor + fade, cursor + wallDuration - fade));
       gain.gain.linearRampToValueAtTime(0, cursor + wallDuration);
-
       source.start(cursor, unit.startSeconds, duration);
       scheduled.push(source);
       gains.push(gain);
-      cursor += Math.max(0.025, wallDuration - Math.min(0.008, wallDuration * 0.08));
+      cursor += Math.max(0.025, wallDuration - Math.min(overlapSeconds, wallDuration * 0.15));
     }
 
+    // Release strong engine references after Web Audio nodes have taken ownership.
+    sourceBuffers.clear();
+    buffersByRecording.clear();
     activeSources = scheduled;
     activeGains = [masterGain].concat(gains);
     const completion = Promise.all(scheduled.map(source => new Promise(resolve => {
@@ -666,6 +741,7 @@ export function createFemaleHumanSampleBankEngine(options = {}) {
     stop,
     pause,
     resume,
+    getRecordingWaveform,
     getStatus,
     dispose
   });
@@ -677,20 +753,34 @@ export async function selfTest() {
 
   const aksharas = tokenizeSanskritAksharas("ॐ नमः शिवाय।");
   add("sanskrit-akshara-tokenization",
-    aksharas.includes("ॐ") && aksharas.includes("शि") && aksharas.includes("वा"));
+    aksharas.join("|") === "ॐ|न|मः|शि|वा|य");
   const conjuncts = tokenizeSanskritAksharas("त्र्यम्बकं");
   add("conjunct-akshara-preserved", conjuncts.includes("त्र्य") || conjuncts.includes("त्र्यं"));
   add("unicode-normalization", normalizeAkshara("का") === normalizeAkshara("का"));
   add("no-network-or-model-contract",
-    FEMALE_HUMAN_SAMPLE_BANK_VERSION === "0.1.0" &&
+    FEMALE_HUMAN_SAMPLE_BANK_VERSION === "0.2.0" &&
     DB_NAME === "swar-sadhika-female-human-sample-bank");
   add("local-indexeddb-persistence-contract",
     RECORDINGS_STORE === "recordings" && UNITS_STORE === "units");
   add("recorded-source-selection-contract",
     typeof createFemaleHumanSampleBankEngine === "function");
+  const phraseUnits = [
+    { id: "whole", recordingId: "track-a", akshara: "ॐ नमः शिवाय", durationSeconds: 2.8 },
+    { id: "om", recordingId: "track-a", akshara: "ॐ", durationSeconds: 0.7 },
+    { id: "na", recordingId: "track-a", akshara: "न", durationSeconds: 0.22 },
+    { id: "mah", recordingId: "track-a", akshara: "मः", durationSeconds: 0.34 },
+    { id: "shi", recordingId: "track-a", akshara: "शि", durationSeconds: 0.31 },
+    { id: "vaa", recordingId: "track-a", akshara: "वा", durationSeconds: 0.42 },
+    { id: "ya", recordingId: "track-a", akshara: "य", durationSeconds: 0.24 }
+  ];
+  const wholePhrase = selectRecordedUnitSequence("ॐ नमः शिवाय।", phraseUnits);
+  add("exact-recorded-phrase-preferred",
+    wholePhrase.length === 1 && wholePhrase[0].id === "whole");
+  const fallback = selectRecordedUnitSequence("ॐ नमः शिवाय", phraseUnits.filter(item => item.id !== "whole"));
+  add("phrase-fallback-to-akshara-samples",
+    fallback.length === 6 && fallback.map(item => item.id).join("|") === "om|na|mah|shi|vaa|ya");
   add("unit-selection-never-synthesizes-missing-phonemes",
-    typeof tokenizeSanskritAksharas("शिव") === "object" &&
-    !String(resolveUnitSequence).includes("oscillator"));
+    !String(selectRecordedUnitSequence).includes("oscillator"));
 
   return Object.freeze({
     module: "female-human-sample-bank-engine-part2",
