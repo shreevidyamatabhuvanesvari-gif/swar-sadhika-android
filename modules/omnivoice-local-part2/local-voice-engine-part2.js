@@ -256,7 +256,7 @@ export function createLocalOmniVoiceEngine(options = {}) {
     const worker = ttsWorker;
     const jobId = ++activeJobId;
     const resultPromise = waitForWorker(worker, ["audio"], jobId, onProgress);
-    const tokens = profile.tokens instanceof Int32Array ? profile.tokens : Int32Array.from(profile.tokens);
+    const tokens = Int32Array.from(profile.tokens); // Transfer a fresh copy; retain the stored voice profile for later generations.
     worker.postMessage({
       type: "synthesize",
       jobId,
