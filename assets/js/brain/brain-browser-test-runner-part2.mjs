@@ -462,9 +462,52 @@ async function runVoiceStudioBrowserAudit({ profileDirectory, origin }) {
     await waitForBankText("1 निजी रिकॉर्डिंग · 1 चिह्नित अक्षर-नमूने इस उपकरण में सुरक्षित हैं।");
     milestones.push("recording-and-annotation-restored-after-page-reload");
 
+    const moduleReport = await page.evaluate(async () => {
+      const [voiceEngine, studio] = await Promise.all([
+        import("/modules/omnivoice-local-part2/local-voice-engine-part2.js"),
+        import("/modules/voice-studio-part2.js")
+      ]);
+      const selfTest = await voiceEngine.selfTest();
+      return {
+        controllerImported: typeof voiceEngine.createLocalOmniVoiceEngine === "function",
+        studioImported: typeof studio.mountSharedVoiceStudioPart2 === "function",
+        selfTest
+      };
+    });
+    if (!moduleReport.controllerImported || !moduleReport.studioImported || moduleReport.selfTest.failed) {
+      fail("Local OmniVoice controller or Voice Studio module failed to import/self-test.", moduleReport);
+    }
+    milestones.push("local-omnivoice-controller-and-studio-imported");
+
+    const workerReport = await page.evaluate(async () => {
+      async function checkWorker(url) {
+        return await new Promise((resolve, reject) => {
+          const worker = new Worker(url, { type: "module" });
+          const timer = setTimeout(() => { worker.terminate(); resolve("loaded"); }, 1200);
+          worker.onerror = event => {
+            clearTimeout(timer);
+            worker.terminate();
+            reject(new Error(url + ": " + event.message));
+          };
+        });
+      }
+      return {
+        ttsWorker: await checkWorker("/modules/omnivoice-local-part2/tts-worker-part2.js"),
+        encoderWorker: await checkWorker("/modules/omnivoice-local-part2/encoder-worker-part2.js")
+      };
+    });
+    if (workerReport.ttsWorker !== "loaded" || workerReport.encoderWorker !== "loaded") {
+      fail("A local OmniVoice worker failed to load.", workerReport);
+    }
+    milestones.push("tts-and-reference-encoder-workers-loaded");
+
     await reloadedHost.locator(".bank-sing").click();
-    await waitForBankText("उपलब्ध रिकॉर्ड किए गए मानवीय स्वर-खंडों का गायन पूरा हुआ", 20000);
-    milestones.push("recorded-mantra-playback-completed");
+    await page.waitForFunction(({ selector, expected }) => {
+      const host = document.querySelector(selector);
+      const node = host && host.shadowRoot && host.shadowRoot.querySelector(".status");
+      return Boolean(node && node.textContent.includes(expected));
+    }, { selector: hostSelector, expected: "पहले सहेली की रिकॉर्डिंग से voice profile तैयार करें" }, { timeout: TEST_TIMEOUT_MS });
+    milestones.push("new-text-playback-requires-a-prepared-friend-voice-profile");
 
     const browserReport = await page.evaluate(() => ({
       userAgent: navigator.userAgent,
